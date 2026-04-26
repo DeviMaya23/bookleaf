@@ -1,0 +1,2 @@
+ALTER TABLE users
+ADD COLUMN vision_enabled BOOLEAN NOT NULL DEFAULT false;

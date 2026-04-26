@@ -7,8 +7,9 @@ import (
 )
 
 type User struct {
-	ID        string         `gorm:"type:text;primaryKey"`
-	CreatedAt time.Time      `gorm:"column:created_at"`
-	UpdatedAt time.Time      `gorm:"column:updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index"`
+	ID            string         `gorm:"type:text;primaryKey"`
+	VisionEnabled bool           `gorm:"column:vision_enabled;default:false"`
+	CreatedAt     time.Time      `gorm:"column:created_at"`
+	UpdatedAt     time.Time      `gorm:"column:updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"column:deleted_at;index"`
 }
