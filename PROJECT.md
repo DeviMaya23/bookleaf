@@ -1,6 +1,6 @@
-# CLAUDE.md
+# PROJECT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents working with code in this repository.
 
 ## What is Bookleaf
 
@@ -41,7 +41,7 @@ go test ./internal/... -run TestName
 go mod tidy
 ```
 
-## Architecture
+## Backend Architecture
 
 Clean architecture with strict layer separation. Dependencies flow inward only:
 
