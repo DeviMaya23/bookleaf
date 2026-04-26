@@ -3,7 +3,9 @@
     "allow": [
       "Bash(go mod *)",
       "Bash(go get *)",
-      "Bash(openspec archive *)"
+      "Bash(openspec archive *)",
+      "Bash(openspec status *)",
+      "Bash(openspec instructions *)"
     ]
   }
 }
