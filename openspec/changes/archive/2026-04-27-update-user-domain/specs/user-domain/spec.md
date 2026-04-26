@@ -1,7 +1,5 @@
-## Purpose
-Define the persistent user model keyed by Clerk user ID and the database migrations required for user state.
+## MODIFIED Requirements
 
-## Requirements
 ### Requirement: User GORM Struct
 
 The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user managed by Clerk.
@@ -25,19 +23,7 @@ No UUID field. Clerk owns the identity layer; the DB stores only the Clerk ID as
 - **WHEN** the Go package is compiled
 - **THEN** `User` has a `bool` `VisionEnabled` field tagged with `gorm:"column:vision_enabled;default:false"`
 
-### Requirement: Users DB Migration
-
-The system SHALL include a `golang-migrate` SQL migration that creates the `users` table before `folders` and `images` (both depend on it).
-
-#### Scenario: Migration creates users table
-
-- **WHEN** migrations are applied to a fresh database
-- **THEN** the `users` table exists with `id TEXT PRIMARY KEY`, `created_at`, `updated_at`, and `deleted_at` columns
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `users` table is dropped without error
+## ADDED Requirements
 
 ### Requirement: vision_enabled DB Migration
 
