@@ -33,3 +33,6 @@ go.work.sum
 
 # Local agent settings
 .claude/settings.local.json
+
+# Local make overrides (machine-specific/secrets)
+Makefile.local

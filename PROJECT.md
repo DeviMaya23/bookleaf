@@ -37,7 +37,7 @@ go build ./cmd/server
 go test ./...
 
 # Run a single test
-go test ./internal/... -run TestName
+go test ./backend/internal/... -run TestName
 
 # Tidy dependencies
 go mod tidy
