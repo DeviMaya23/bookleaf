@@ -4,9 +4,9 @@ This file provides guidance to agents working with code in this repository.
 
 ## What is Bookleaf
 
-Web-based image moodboarding app (inspired by Raindrop.io). Key differentiator: **BYOS** — users bring their own Cloudflare R2 bucket for storage, and optionally **BYOV** — their own Google Vision API key for AI auto-categorisation.
+Web-based image moodboarding app (inspired by Raindrop.io). A moodboard app with optional AI organising.
 
-MVP scope: user registration, connect R2 bucket, upload images + thumbnail generation, browse gallery, manual folder management, optional Google Vision auto-categorisation.
+MVP scope: user registration, upload images + thumbnail generation, browse gallery, manual folder management, optional AI-assisted folder suggestions on upload.
 
 ## Stack
 
@@ -15,7 +15,7 @@ MVP scope: user registration, connect R2 bucket, upload images + thumbnail gener
 | Backend | Go + Echo, clean architecture |
 | Frontend | React + Vite + TypeScript + Tailwind + shadcn |
 | Database | PostgreSQL + GORM |
-| Storage | Cloudflare R2 (S3-compatible, user-supplied credentials) |
+| Storage | Cloudflare R2 (S3-compatible, app-provided credentials) |
 | Auth | Clerk (Google + GitHub OAuth) |
 | Background jobs | goroutines (MVP) |
 
@@ -58,12 +58,34 @@ handler → usecase → repository
 
 ## Key Domain Concepts
 
-- **BucketConfig** — per-user Cloudflare R2 credentials (access key, secret, bucket name, endpoint). First-class domain concept; every storage operation is scoped to the authenticated user's own bucket.
-- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels if BYOV enabled). Metadata is stored in PostgreSQL.
+- **User** — authenticated user; holds `vision_enabled` flag to opt into AI organising.
+- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels). Images are stored under `users/{clerkID}/images/` in the app's shared R2 bucket. `AILabels` stores the raw Vision API response and is persisted for future use.
 - **Folder** — user-managed grouping of images, manual hierarchy.
+
+## AI Organising (folder suggestion)
+
+When `vision_enabled` is true, the following happens synchronously on upload:
+
+1. Call Google Vision API → returns labels with confidence scores.
+2. Store labels as `AILabels` on the Image record.
+3. Match labels against the user's existing folder names (case-insensitive).
+   - If a match is found → suggest that folder.
+   - If no match → suggest the highest-scoring label as a new folder name.
+4. Suggestion is shown to the user in the upload UI (ephemeral, not persisted).
+5. If the user accepts:
+   - Existing folder → set `Image.FolderID`.
+   - New folder name → create the folder, then set `Image.FolderID`.
+6. If the user ignores → image remains unorganised.
+
+If the user has no folders yet, step 3 always falls through to suggesting a new folder from the top label.
 
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | HTTP listen port |
+| `R2_ACCESS_KEY_ID` | — | Cloudflare R2 access key |
+| `R2_SECRET_ACCESS_KEY` | — | Cloudflare R2 secret key |
+| `R2_BUCKET_NAME` | — | R2 bucket name |
+| `R2_ENDPOINT_URL` | — | R2 endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`) |
+| `GOOGLE_VISION_API_KEY` | — | Google Vision API key for AI organising |
