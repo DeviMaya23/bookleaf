@@ -21,6 +21,8 @@ MVP scope: user registration, upload images + thumbnail generation, browse galle
 
 ## Commands
 
+Run all commands from the `backend/` directory.
+
 ```bash
 # Run the server (defaults to port 8080)
 go run ./cmd/server
@@ -50,15 +52,15 @@ handler → usecase → repository
                  → domain
 ```
 
-- `internal/domain/` — entities and domain types, no external dependencies
-- `internal/usecase/` — business logic, depends only on domain and repository interfaces
-- `internal/repository/` — GORM implementations of repository interfaces defined in usecase
-- `internal/handler/` — Echo HTTP handlers, calls usecases only
-- `cmd/server/main.go` — entry point, wires everything together
+- `backend/internal/domain/` — entities and domain types, no external dependencies
+- `backend/internal/usecase/` — business logic, depends only on domain and repository interfaces
+- `backend/internal/repository/` — GORM implementations of repository interfaces defined in usecase
+- `backend/internal/handler/` — Echo HTTP handlers, calls usecases only
+- `backend/cmd/server/main.go` — entry point, wires everything together
 
 ## Key Domain Concepts
 
-- **User** — authenticated user; holds `vision_enabled` flag to opt into AI organising.
+- **User** — authenticated user; holds `vision_enabled` flag to opt into AI organising. Defined in `backend/internal/domain/user.go`.
 - **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels). Images are stored under `users/{clerkID}/images/` in the app's shared R2 bucket. `AILabels` stores the raw Vision API response and is persisted for future use.
 - **Folder** — user-managed grouping of images, manual hierarchy.
 
