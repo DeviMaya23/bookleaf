@@ -1,6 +1,6 @@
-# CLAUDE.md
+# PROJECT.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents working with code in this repository.
 
 ## What is Bookleaf
 
@@ -41,7 +41,7 @@ go test ./internal/... -run TestName
 go mod tidy
 ```
 
-## Architecture
+## Backend Architecture
 
 Clean architecture with strict layer separation. Dependencies flow inward only:
 
@@ -59,7 +59,7 @@ handler → usecase → repository
 ## Key Domain Concepts
 
 - **BucketConfig** — per-user Cloudflare R2 credentials (access key, secret, bucket name, endpoint). First-class domain concept; every storage operation is scoped to the authenticated user's own bucket.
-- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels if BYOV enabled).
+- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels if BYOV enabled). Metadata is stored in PostgreSQL.
 - **Folder** — user-managed grouping of images, manual hierarchy.
 
 ## Environment Variables
