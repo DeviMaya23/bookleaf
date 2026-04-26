@@ -4,17 +4,18 @@
 
 The system SHALL define an `Image` GORM struct in `internal/domain/image.go` representing an uploaded asset owned by a user.
 
-Fields:
-- `ID` — UUID primary key
-- `UserID` — FK to users table (owner)
-- `FolderID` — FK to folders table (nullable; nil means root)
-- `Title` — display name, required
-- `SourceURL` — original source URL the image was saved from (nullable)
-- `R2Path` — path of the full-size image within the user's R2 bucket, required
-- `ThumbnailPath` — path of the generated thumbnail within the user's R2 bucket, nullable
-- `MIMEType` — MIME type string (e.g. `image/jpeg`), required
-- `VisionLabels` — JSON-serialised array of labels from Google Vision (nullable, BYOV only)
-- `CreatedAt`, `UpdatedAt` — GORM timestamps
+Fields (all DB columns use snake_case):
+- `ID` — UUID primary key (`id`)
+- `UserID` — FK to users table; will be Clerk's user ID string (`user_id`)
+- `FolderID` — FK to folders table (nullable; nil means root) (`folder_id`)
+- `Title` — display name, required (`title`)
+- `SourceURL` — original source URL the image was saved from (nullable) (`source_url`)
+- `R2Path` — path of the full-size image within the user's R2 bucket, required (`r2_path`)
+- `ThumbnailPath` — path of the generated thumbnail within the user's R2 bucket, nullable (`thumbnail_path`)
+- `MIMEType` — MIME type string (e.g. `image/jpeg`), required (`mime_type`)
+- `AILabels` — JSON-serialised array of AI-generated labels (nullable, BYOV only) (`ai_labels`)
+- `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
+- `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
 #### Scenario: Image struct compiles with GORM tags
 
@@ -31,6 +32,7 @@ The system SHALL include a `golang-migrate` SQL migration that creates the `imag
 - **THEN** the `images` table exists with columns matching the `Image` struct
 - **AND** `user_id` has a NOT NULL FK constraint referencing `users(id)`
 - **AND** `folder_id` has a nullable FK constraint referencing `folders(id)`
+- **AND** `deleted_at` is a nullable timestamp column (soft delete)
 
 #### Scenario: Migration is reversible
 
