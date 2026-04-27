@@ -1,24 +1,24 @@
 ## Purpose
-Define the persistent user model keyed by Clerk user ID and the database migrations required for user state.
+Define the persistent user model keyed by Kinde user ID and the database migrations required for user state.
 
 ## Requirements
 ### Requirement: User GORM Struct
 
-The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user managed by Clerk.
+The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user managed by Kinde.
 
 Fields (all DB columns use snake_case):
-- `ID` — Clerk-generated user ID string, `TEXT` primary key (`id`); e.g. `user_abc123`
+- `ID` — Kinde-generated user ID string, `TEXT` primary key (`id`); e.g. `kp_abc123`
 - `VisionEnabled` — boolean flag indicating whether the user has opted into AI organising (`vision_enabled`); defaults to `false`
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
-No UUID field. Clerk owns the identity layer; the DB stores only the Clerk ID as the natural PK and app-specific state.
+No UUID field. Kinde owns the identity layer; the DB stores only the Kinde user ID as the natural PK and app-specific state.
 
-#### Scenario: User struct uses Clerk ID as primary key
+#### Scenario: User struct uses Kinde ID as primary key
 
 - **WHEN** the Go package is compiled
 - **THEN** `User` has a `string` `ID` field tagged `gorm:"primaryKey"`
-- **AND** there is no separate UUID or `ClerkID` field
+- **AND** there is no separate UUID or `KindeID` field
 
 #### Scenario: User struct includes vision_enabled field
 

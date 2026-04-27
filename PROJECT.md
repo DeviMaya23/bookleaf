@@ -16,7 +16,7 @@ MVP scope: user registration, upload images + thumbnail generation, browse galle
 | Frontend | React + Vite + TypeScript + Tailwind + shadcn |
 | Database | PostgreSQL + GORM |
 | Storage | Cloudflare R2 (S3-compatible, app-provided credentials) |
-| Auth | Clerk (Google + GitHub OAuth) |
+| Auth | Kinde (Google + GitHub OAuth) |
 | Background jobs | goroutines (MVP) |
 
 ## Commands
