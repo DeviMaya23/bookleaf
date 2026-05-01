@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"os"
 
+	"github.com/devi/bookleaf/internal/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/repository"
@@ -20,22 +20,12 @@ func main() {
 	e.Use(echomiddleware.Logger())
 	e.Use(echomiddleware.Recover())
 
-	kindeIssuerURL, err := requireEnv("KINDE_ISSUER_URL")
+	cfg, err := config.Load()
 	if err != nil {
 		e.Logger.Fatal(err)
 	}
 
-	kindeAudience, err := requireEnv("KINDE_AUDIENCE")
-	if err != nil {
-		e.Logger.Fatal(err)
-	}
-
-	databaseURL, err := requireEnv("DATABASE_URL")
-	if err != nil {
-		e.Logger.Fatal(err)
-	}
-
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{})
 	if err != nil {
 		e.Logger.Fatal(fmt.Errorf("open database connection: %w", err))
 	}
@@ -44,7 +34,7 @@ func main() {
 	userUsecase := usecase.NewUserUsecase(userRepository)
 	meHandler := httphandler.NewMeHandler(userUsecase)
 
-	authMiddleware, err := authmiddleware.NewAuthMiddleware(kindeIssuerURL, kindeAudience, userUsecase)
+	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase)
 	if err != nil {
 		e.Logger.Fatal(fmt.Errorf("initialise auth middleware: %w", err))
 	}
@@ -57,18 +47,5 @@ func main() {
 	protected.Use(authMiddleware)
 	protected.GET("/me", meHandler.GetMe)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	e.Logger.Fatal(e.Start(":" + port))
-}
-
-func requireEnv(name string) (string, error) {
-	value := os.Getenv(name)
-	if value == "" {
-		return "", fmt.Errorf("%s is required", name)
-	}
-	return value, nil
+	e.Logger.Fatal(e.Start(":" + cfg.Port))
 }
