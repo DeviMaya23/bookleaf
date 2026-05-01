@@ -1,9 +1,10 @@
 ## 1. Create internal/config package
 
-- [ ] 1.1 Create `backend/internal/config/config.go` with `KindeConfig`, `DBConfig`, and `Config` structs
-- [ ] 1.2 Implement `loadFromEnv()` — reads env vars, applies defaults, returns `(*Config, error)` without touching godotenv
-- [ ] 1.3 Implement `Load()` — calls `godotenv.Load()` (warn on missing file), then delegates to `loadFromEnv()`
-- [ ] 1.4 Move `requireEnv` helper into `internal/config` (unexported, used by `loadFromEnv`)
+- [x] 1.1 Create `backend/internal/config/config.go` with `KindeConfig`, `DBConfig`, and `Config` structs
+- [x] 1.2 Implement `loadFromEnv()` — reads env vars, applies defaults, returns `(*Config, error)` without touching godotenv
+- [x] 1.3 Implement `Load()` — calls `godotenv.Load()` (warn on missing file), then delegates to `loadFromEnv()`
+- [x] 1.4 Move `requireEnv` helper into `internal/config` (unexported, used by `loadFromEnv`)
+- [ ] 1.5 Add `envWithDefault(name, fallback string) string` helper and use it for `PORT` in `loadFromEnv()`
 
 ## 2. Unit tests
 
@@ -12,7 +13,8 @@
 - [ ] 2.3 Test: each required var missing individually → error names the missing var
 - [ ] 2.4 Test: `PORT` unset → `cfg.Port` is `"8080"`
 - [ ] 2.5 Test: `PORT` set → `cfg.Port` reflects the value
-- [ ] 2.6 Run `go test ./internal/config/...` and confirm all pass
+- [ ] 2.6 Test: `PORT` set to empty string → `cfg.Port` is `"8080"` (fallback applies)
+- [ ] 2.7 Run `go test ./internal/config/...` and confirm all pass
 
 ## 3. Wire config into main.go
 

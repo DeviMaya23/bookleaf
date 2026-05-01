@@ -23,7 +23,7 @@ The `internal/config` package SHALL define a `Config` struct grouping related en
 - **THEN** `config.Load()` returns a populated `*Config` and a nil error
 
 ### Requirement: Optional Env Var Defaults
-`config.Load()` SHALL apply defaults for optional env vars when they are unset.
+The `internal/config` package SHALL provide an unexported `envWithDefault(name, fallback string) string` helper for optional env vars. It returns the env var value if set and non-empty, otherwise the fallback string. `loadFromEnv()` SHALL use this helper for all optional vars.
 - `PORT` defaults to `"8080"`
 
 #### Scenario: PORT not set
@@ -33,6 +33,10 @@ The `internal/config` package SHALL define a `Config` struct grouping related en
 #### Scenario: PORT is set
 - **WHEN** `PORT` is set to a non-empty value
 - **THEN** `cfg.Port` reflects that value
+
+#### Scenario: envWithDefault returns fallback when var is empty
+- **WHEN** the named env var is set to an empty string
+- **THEN** `envWithDefault` returns the fallback value
 
 ### Requirement: Local Dev dotenv Loading
 `config.Load()` SHALL attempt to load a `.env` file via godotenv before reading env vars. A missing `.env` file SHALL NOT be treated as an error — it is expected in non-local environments. Vars already set in the environment SHALL NOT be overwritten by the `.env` file.
