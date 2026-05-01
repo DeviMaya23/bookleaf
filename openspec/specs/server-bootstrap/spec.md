@@ -25,16 +25,16 @@ The project SHALL have a clean architecture directory layout present in version 
 
 ### Requirement: Kinde Environment Variables
 
-The server SHALL read `KINDE_ISSUER_URL` and `KINDE_AUDIENCE` from the environment at startup. If either is missing, the server SHALL fail to start with a clear error message.
+The server SHALL load all required configuration via `config.Load()` at startup before any other initialisation. Required env vars are `KINDE_ISSUER_URL`, `KINDE_AUDIENCE`, and `DATABASE_URL`. If any are missing, the server SHALL fail to start with a clear error message naming the missing variable.
 
-#### Scenario: Server starts with Kinde env vars present
+#### Scenario: Server starts with all required env vars present
 
-- **WHEN** `KINDE_ISSUER_URL` and `KINDE_AUDIENCE` are set in the environment
+- **WHEN** `KINDE_ISSUER_URL`, `KINDE_AUDIENCE`, and `DATABASE_URL` are set in the environment
 - **THEN** the server starts successfully
 
-#### Scenario: Server fails without Kinde env vars
+#### Scenario: Server fails without required env vars
 
-- **WHEN** `KINDE_ISSUER_URL` or `KINDE_AUDIENCE` is missing from the environment
+- **WHEN** any of `KINDE_ISSUER_URL`, `KINDE_AUDIENCE`, or `DATABASE_URL` is missing from the environment
 - **THEN** the server exits with a non-zero status code and logs which variable is missing
 
 ### Requirement: Protected Route Group
