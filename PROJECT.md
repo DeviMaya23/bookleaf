@@ -61,7 +61,7 @@ handler → usecase → repository
 ## Key Domain Concepts
 
 - **User** — authenticated user; holds `vision_enabled` flag to opt into AI organising. Defined in `backend/internal/domain/user.go`.
-- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels). Images are stored under `users/{clerkID}/images/` in the app's shared R2 bucket. `AILabels` stores the raw Vision API response and is persisted for future use.
+- **Image** — uploaded asset with metadata (path in R2, thumbnail path, folder, MIME type, Vision labels). Images are stored under `users/{kindeID}/images/` in the app's shared R2 bucket. `AILabels` stores the raw Vision API response and is persisted for future use.
 - **Folder** — user-managed grouping of images, manual hierarchy.
 
 ## AI Organising (folder suggestion)
@@ -91,3 +91,7 @@ If the user has no folders yet, step 3 always falls through to suggesting a new 
 | `R2_BUCKET_NAME` | — | R2 bucket name |
 | `R2_ENDPOINT_URL` | — | R2 endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`) |
 | `GOOGLE_VISION_API_KEY` | — | Google Vision API key for AI organising |
+| `KINDE_ISSUER_URL` | — | Kinde domain (e.g. `https://yourapp.kinde.com`) |
+| `KINDE_CLIENT_ID` | — | Kinde backend application client ID |
+| `KINDE_CLIENT_SECRET` | — | Kinde backend application client secret |
+| `KINDE_AUDIENCE` | — | API audience identifier registered in Kinde |
