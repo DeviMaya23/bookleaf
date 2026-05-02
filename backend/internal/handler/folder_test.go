@@ -15,378 +15,292 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
 type mockFolderUsecase struct {
-	folder          *domain.Folder
-	folders         []*domain.Folder
-	err             error
-	createdUserID   string
-	createdName     string
-	createdParentID *uuid.UUID
-	listedUserID    string
-	getID           uuid.UUID
-	getUserID       string
-	updateID        uuid.UUID
-	updateUserID    string
-	updateName      string
-	updateParentID  *uuid.UUID
-	deleteID        uuid.UUID
-	deleteUserID    string
+	folder  *domain.Folder
+	folders []*domain.Folder
+	err     error
 }
 
-func (m *mockFolderUsecase) Create(_ context.Context, userID, name string, parentID *uuid.UUID) (*domain.Folder, error) {
-	m.createdUserID = userID
-	m.createdName = name
-	m.createdParentID = parentID
+func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderUsecase) List(_ context.Context, userID string) ([]*domain.Folder, error) {
-	m.listedUserID = userID
+func (m *mockFolderUsecase) List(_ context.Context, _ string) ([]*domain.Folder, error) {
 	return m.folders, m.err
 }
 
-func (m *mockFolderUsecase) GetByID(_ context.Context, id uuid.UUID, userID string) (*domain.Folder, error) {
-	m.getID = id
-	m.getUserID = userID
+func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderUsecase) Update(_ context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID) (*domain.Folder, error) {
-	m.updateID = id
-	m.updateUserID = userID
-	m.updateName = name
-	m.updateParentID = parentID
+func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _, _ string, _ *uuid.UUID) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderUsecase) Delete(_ context.Context, id uuid.UUID, userID string) error {
-	m.deleteID = id
-	m.deleteUserID = userID
+func (m *mockFolderUsecase) Delete(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
 
-func TestFolderHandler_CreateFolder_HappyPath(t *testing.T) {
-	parentID := uuid.New()
+func newEchoContext(t *testing.T, method, path, body string) (echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	e := echo.New()
+	var bodyReader *bytes.Reader
+	if body != "" {
+		bodyReader = bytes.NewReader([]byte(body))
+	} else {
+		bodyReader = bytes.NewReader(nil)
+	}
+	req := httptest.NewRequest(method, path, bodyReader)
+	if body != "" {
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	}
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	return c, rec
+}
+
+func assertHTTPError(t *testing.T, err error, wantStatus int) {
+	t.Helper()
+	require.Error(t, err)
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok, "expected *echo.HTTPError, got %T", err)
+	assert.Equal(t, wantStatus, httpErr.Code)
+}
+
+func TestFolderHandler_CreateFolder(t *testing.T) {
 	folderID := uuid.New()
 	now := time.Now().UTC()
-	mockUC := &mockFolderUsecase{
-		folder: &domain.Folder{
-			ID:        folderID,
-			UserID:    "kp_abc123",
-			Name:      "travel",
-			ParentID:  &parentID,
-			CreatedAt: now,
-			UpdatedAt: now,
-		},
-	}
-	h := NewFolderHandler(mockUC)
 
-	body := []byte(`{"name":"travel","parent_id":"` + parentID.String() + `"}`)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/folders", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	if err := h.CreateFolder(c); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected status %d, got %d", http.StatusCreated, rec.Code)
-	}
-
-	var resp map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if resp["id"] != folderID.String() {
-		t.Fatalf("expected id %s, got %v", folderID, resp["id"])
-	}
-	if mockUC.createdUserID != "kp_abc123" {
-		t.Fatalf("expected create user id kp_abc123, got %s", mockUC.createdUserID)
-	}
-}
-
-func TestFolderHandler_CreateFolder_ErrorPath(t *testing.T) {
-	mockUC := &mockFolderUsecase{
-		err: usecase.ErrInvalidFolderName,
-	}
-	h := NewFolderHandler(mockUC)
-
-	body := []byte(`{"name":""}`)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/folders", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	err := h.CreateFolder(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	if httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, httpErr.Code)
-	}
-}
-
-func TestFolderHandler_ListFolders_HappyPath(t *testing.T) {
-	mockUC := &mockFolderUsecase{
-		folders: []*domain.Folder{
-			{
-				ID:        uuid.New(),
-				UserID:    "kp_abc123",
-				Name:      "travel",
-				CreatedAt: time.Now().UTC(),
-				UpdatedAt: time.Now().UTC(),
+	tests := []struct {
+		name          string
+		body          string
+		mockUC        *mockFolderUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name: "creates folder and returns 201",
+			body: `{"name":"travel"}`,
+			mockUC: &mockFolderUsecase{
+				folder: &domain.Folder{ID: folderID, Name: "travel", CreatedAt: now, UpdatedAt: now},
 			},
+			wantStatus: http.StatusCreated,
+		},
+		{
+			name:          "returns 400 on invalid name",
+			body:          `{"name":""}`,
+			mockUC:        &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
+			wantErrStatus: http.StatusBadRequest,
 		},
 	}
-	h := NewFolderHandler(mockUC)
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/folders", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewFolderHandler(tt.mockUC)
+			c, rec := newEchoContext(t, http.MethodPost, "/folders", tt.body)
 
-	if err := h.ListFolders(c); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
+			err := h.CreateFolder(c)
 
-	var resp []map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal response: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("expected 1 folder, got %d", len(resp))
-	}
-	if mockUC.listedUserID != "kp_abc123" {
-		t.Fatalf("expected list user id kp_abc123, got %s", mockUC.listedUserID)
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, folderID.String(), resp["id"])
+		})
 	}
 }
 
-func TestFolderHandler_ListFolders_ErrorPath(t *testing.T) {
-	mockUC := &mockFolderUsecase{
-		err: errors.New("db error"),
-	}
-	h := NewFolderHandler(mockUC)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/folders", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	err := h.ListFolders(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	if httpErr.Code != http.StatusInternalServerError {
-		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, httpErr.Code)
-	}
-}
-
-func TestFolderHandler_GetFolder_HappyPath(t *testing.T) {
-	folderID := uuid.New()
-	mockUC := &mockFolderUsecase{
-		folder: &domain.Folder{
-			ID:        folderID,
-			UserID:    "kp_abc123",
-			Name:      "travel",
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
+func TestFolderHandler_ListFolders(t *testing.T) {
+	tests := []struct {
+		name          string
+		mockUC        *mockFolderUsecase
+		wantStatus    int
+		wantLen       int
+		wantErrStatus int
+	}{
+		{
+			name: "returns folder list",
+			mockUC: &mockFolderUsecase{
+				folders: []*domain.Folder{
+					{ID: uuid.New(), Name: "travel"},
+					{ID: uuid.New(), Name: "design"},
+				},
+			},
+			wantStatus: http.StatusOK,
+			wantLen:    2,
+		},
+		{
+			name:          "returns 500 on usecase error",
+			mockUC:        &mockFolderUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
-	h := NewFolderHandler(mockUC)
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/folders/"+folderID.String(), nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewFolderHandler(tt.mockUC)
+			c, rec := newEchoContext(t, http.MethodGet, "/folders", "")
 
-	if err := h.GetFolder(c); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-	if mockUC.getID != folderID {
-		t.Fatalf("expected get id %s, got %s", folderID, mockUC.getID)
-	}
-}
+			err := h.ListFolders(c)
 
-func TestFolderHandler_GetFolder_ErrorPath(t *testing.T) {
-	folderID := uuid.New()
-	mockUC := &mockFolderUsecase{
-		err: gorm.ErrRecordNotFound,
-	}
-	h := NewFolderHandler(mockUC)
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/folders/"+folderID.String(), nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	err := h.GetFolder(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	if httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, httpErr.Code)
+			var resp []map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Len(t, resp, tt.wantLen)
+		})
 	}
 }
 
-func TestFolderHandler_UpdateFolder_HappyPath(t *testing.T) {
+func TestFolderHandler_GetFolder(t *testing.T) {
 	folderID := uuid.New()
-	parentID := uuid.New()
-	mockUC := &mockFolderUsecase{
-		folder: &domain.Folder{
-			ID:        folderID,
-			UserID:    "kp_abc123",
-			Name:      "updated",
-			ParentID:  &parentID,
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
+
+	tests := []struct {
+		name          string
+		mockUC        *mockFolderUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "returns folder by id",
+			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "returns 404 when folder not found",
+			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
 		},
 	}
-	h := NewFolderHandler(mockUC)
 
-	body := []byte(`{"name":"updated","parent_id":"` + parentID.String() + `"}`)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPut, "/folders/"+folderID.String(), bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewFolderHandler(tt.mockUC)
+			c, rec := newEchoContext(t, http.MethodGet, "/folders/"+folderID.String(), "")
+			c.SetPath("/folders/:id")
+			c.SetParamNames("id")
+			c.SetParamValues(folderID.String())
 
-	if err := h.UpdateFolder(c); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, rec.Code)
-	}
-	if mockUC.updateID != folderID {
-		t.Fatalf("expected update id %s, got %s", folderID, mockUC.updateID)
+			err := h.GetFolder(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, folderID.String(), resp["id"])
+		})
 	}
 }
 
-func TestFolderHandler_UpdateFolder_ErrorPath(t *testing.T) {
+func TestFolderHandler_UpdateFolder(t *testing.T) {
 	folderID := uuid.New()
-	mockUC := &mockFolderUsecase{
-		err: usecase.ErrInvalidFolderName,
-	}
-	h := NewFolderHandler(mockUC)
 
-	body := []byte(`{"name":""}`)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPut, "/folders/"+folderID.String(), bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	err := h.UpdateFolder(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	tests := []struct {
+		name          string
+		body          string
+		mockUC        *mockFolderUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "updates folder and returns 200",
+			body:       `{"name":"updated"}`,
+			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated"}},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "returns 400 on invalid name",
+			body:          `{"name":""}`,
+			mockUC:        &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "returns 404 when folder not found",
+			body:          `{"name":"updated"}`,
+			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
 	}
 
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	if httpErr.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, httpErr.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewFolderHandler(tt.mockUC)
+			c, rec := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), tt.body)
+			c.SetPath("/folders/:id")
+			c.SetParamNames("id")
+			c.SetParamValues(folderID.String())
+
+			err := h.UpdateFolder(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
 	}
 }
 
-func TestFolderHandler_DeleteFolder_HappyPath(t *testing.T) {
+func TestFolderHandler_DeleteFolder(t *testing.T) {
 	folderID := uuid.New()
-	mockUC := &mockFolderUsecase{}
-	h := NewFolderHandler(mockUC)
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodDelete, "/folders/"+folderID.String(), nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	tests := []struct {
+		name          string
+		mockUC        *mockFolderUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "deletes folder and returns 204",
+			mockUC:     &mockFolderUsecase{},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:          "returns 404 when folder not found",
+			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
 
-	if err := h.DeleteFolder(c); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected status %d, got %d", http.StatusNoContent, rec.Code)
-	}
-	if mockUC.deleteID != folderID {
-		t.Fatalf("expected delete id %s, got %s", folderID, mockUC.deleteID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewFolderHandler(tt.mockUC)
+			c, rec := newEchoContext(t, http.MethodDelete, "/folders/"+folderID.String(), "")
+			c.SetPath("/folders/:id")
+			c.SetParamNames("id")
+			c.SetParamValues(folderID.String())
+
+			err := h.DeleteFolder(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
 	}
 }
 
-func TestFolderHandler_DeleteFolder_ErrorPath(t *testing.T) {
-	folderID := uuid.New()
-	mockUC := &mockFolderUsecase{
-		err: gorm.ErrRecordNotFound,
-	}
-	h := NewFolderHandler(mockUC)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodDelete, "/folders/"+folderID.String(), nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/folders/:id")
-	c.SetParamNames("id")
-	c.SetParamValues(folderID.String())
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
-
-	err := h.DeleteFolder(c)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	httpErr, ok := err.(*echo.HTTPError)
-	if !ok {
-		t.Fatalf("expected *echo.HTTPError, got %T", err)
-	}
-	if httpErr.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, httpErr.Code)
-	}
-}

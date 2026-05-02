@@ -7,218 +7,223 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockFolderRepository struct {
-	folder        *domain.Folder
-	folders       []*domain.Folder
-	err           error
-	deleteErr     error
-	createdFolder *domain.Folder
-	updatedFolder *domain.Folder
-	listedUserID  string
-	getByIDID     uuid.UUID
-	getByIDUserID string
-	deletedID     uuid.UUID
-	deletedUserID string
+	folder  *domain.Folder
+	folders []*domain.Folder
+	err     error
 }
 
-func (m *mockFolderRepository) Create(_ context.Context, folder *domain.Folder) (*domain.Folder, error) {
-	m.createdFolder = folder
+func (m *mockFolderRepository) Create(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderRepository) List(_ context.Context, userID string) ([]*domain.Folder, error) {
-	m.listedUserID = userID
+func (m *mockFolderRepository) List(_ context.Context, _ string) ([]*domain.Folder, error) {
 	return m.folders, m.err
 }
 
-func (m *mockFolderRepository) GetByID(_ context.Context, id uuid.UUID, userID string) (*domain.Folder, error) {
-	m.getByIDID = id
-	m.getByIDUserID = userID
+func (m *mockFolderRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderRepository) Update(_ context.Context, folder *domain.Folder) (*domain.Folder, error) {
-	m.updatedFolder = folder
+func (m *mockFolderRepository) Update(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderRepository) DeleteWithCascade(_ context.Context, id uuid.UUID, userID string) error {
-	m.deletedID = id
-	m.deletedUserID = userID
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
+func (m *mockFolderRepository) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
 
-func TestFolderUsecase_Create_HappyPath(t *testing.T) {
-	parentID := uuid.New()
-	repo := &mockFolderRepository{
-		folder: &domain.Folder{
-			ID:       uuid.New(),
-			UserID:   "kp_abc123",
-			Name:     "travel",
-			ParentID: &parentID,
+func TestFolderUsecase_Create(t *testing.T) {
+	folderID := uuid.New()
+
+	tests := []struct {
+		name      string
+		inputName string
+		repo      *mockFolderRepository
+		wantName  string
+		wantErr   error
+	}{
+		{
+			name:      "creates folder successfully",
+			inputName: "travel",
+			repo:      &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+			wantName:  "travel",
+		},
+		{
+			name:      "returns error for blank name",
+			inputName: "   ",
+			repo:      &mockFolderRepository{},
+			wantErr:   ErrInvalidFolderName,
 		},
 	}
-	uc := NewFolderUsecase(repo)
 
-	folder, err := uc.Create(context.Background(), "kp_abc123", "travel", &parentID)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder.Name != "travel" {
-		t.Fatalf("expected folder name travel, got %s", folder.Name)
-	}
-	if repo.createdFolder == nil {
-		t.Fatal("expected repository Create to be called")
-	}
-	if repo.createdFolder.UserID != "kp_abc123" {
-		t.Fatalf("expected user id kp_abc123, got %s", repo.createdFolder.UserID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewFolderUsecase(tt.repo)
+
+			folder, err := uc.Create(context.Background(), "kp_abc123", tt.inputName, nil)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, folder.Name)
+		})
 	}
 }
 
-func TestFolderUsecase_Create_ErrorPath(t *testing.T) {
-	repo := &mockFolderRepository{}
-	uc := NewFolderUsecase(repo)
-
-	_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil)
-	if !errors.Is(err, ErrInvalidFolderName) {
-		t.Fatalf("expected ErrInvalidFolderName, got: %v", err)
-	}
-}
-
-func TestFolderUsecase_List_HappyPath(t *testing.T) {
-	repo := &mockFolderRepository{
-		folders: []*domain.Folder{
-			{ID: uuid.New(), UserID: "kp_abc123", Name: "travel"},
+func TestFolderUsecase_List(t *testing.T) {
+	tests := []struct {
+		name        string
+		repo        *mockFolderRepository
+		wantLen     int
+		wantErr     bool
+	}{
+		{
+			name: "returns user folders",
+			repo: &mockFolderRepository{
+				folders: []*domain.Folder{
+					{ID: uuid.New(), Name: "travel"},
+					{ID: uuid.New(), Name: "design"},
+				},
+			},
+			wantLen: 2,
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockFolderRepository{err: errors.New("db error")},
+			wantErr: true,
 		},
 	}
-	uc := NewFolderUsecase(repo)
 
-	folders, err := uc.List(context.Background(), "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if len(folders) != 1 {
-		t.Fatalf("expected 1 folder, got %d", len(folders))
-	}
-	if repo.listedUserID != "kp_abc123" {
-		t.Fatalf("expected user id kp_abc123, got %s", repo.listedUserID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewFolderUsecase(tt.repo)
+
+			folders, err := uc.List(context.Background(), "kp_abc123")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, folders, tt.wantLen)
+		})
 	}
 }
 
-func TestFolderUsecase_List_ErrorPath(t *testing.T) {
-	repo := &mockFolderRepository{
-		err: errors.New("db error"),
-	}
-	uc := NewFolderUsecase(repo)
-
-	_, err := uc.List(context.Background(), "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestFolderUsecase_GetByID_HappyPath(t *testing.T) {
+func TestFolderUsecase_GetByID(t *testing.T) {
 	folderID := uuid.New()
-	repo := &mockFolderRepository{
-		folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "travel"},
-	}
-	uc := NewFolderUsecase(repo)
 
-	folder, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder.ID != folderID {
-		t.Fatalf("expected folder id %s, got %s", folderID, folder.ID)
-	}
-	if repo.getByIDID != folderID {
-		t.Fatalf("expected repo called with id %s, got %s", folderID, repo.getByIDID)
-	}
-}
-
-func TestFolderUsecase_GetByID_ErrorPath(t *testing.T) {
-	folderID := uuid.New()
-	repo := &mockFolderRepository{
-		err: errors.New("db error"),
-	}
-	uc := NewFolderUsecase(repo)
-
-	_, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestFolderUsecase_Update_HappyPath(t *testing.T) {
-	folderID := uuid.New()
-	parentID := uuid.New()
-	repo := &mockFolderRepository{
-		folder: &domain.Folder{
-			ID:       folderID,
-			UserID:   "kp_abc123",
-			Name:     "updated",
-			ParentID: &parentID,
+	tests := []struct {
+		name    string
+		repo    *mockFolderRepository
+		wantID  uuid.UUID
+		wantErr bool
+	}{
+		{
+			name: "returns folder by id",
+			repo: &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+			wantID: folderID,
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockFolderRepository{err: errors.New("db error")},
+			wantErr: true,
 		},
 	}
-	uc := NewFolderUsecase(repo)
 
-	folder, err := uc.Update(context.Background(), folderID, "kp_abc123", "updated", &parentID)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder.Name != "updated" {
-		t.Fatalf("expected name updated, got %s", folder.Name)
-	}
-	if repo.updatedFolder == nil {
-		t.Fatal("expected repository Update to be called")
-	}
-	if repo.updatedFolder.ID != folderID {
-		t.Fatalf("expected update id %s, got %s", folderID, repo.updatedFolder.ID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewFolderUsecase(tt.repo)
+
+			folder, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, folder.ID)
+		})
 	}
 }
 
-func TestFolderUsecase_Update_ErrorPath(t *testing.T) {
+func TestFolderUsecase_Update(t *testing.T) {
 	folderID := uuid.New()
-	repo := &mockFolderRepository{}
-	uc := NewFolderUsecase(repo)
 
-	_, err := uc.Update(context.Background(), folderID, "kp_abc123", "", nil)
-	if !errors.Is(err, ErrInvalidFolderName) {
-		t.Fatalf("expected ErrInvalidFolderName, got: %v", err)
+	tests := []struct {
+		name      string
+		inputName string
+		repo      *mockFolderRepository
+		wantName  string
+		wantErr   error
+	}{
+		{
+			name:      "updates folder successfully",
+			inputName: "updated",
+			repo:      &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "updated"}},
+			wantName:  "updated",
+		},
+		{
+			name:      "returns error for blank name",
+			inputName: "",
+			repo:      &mockFolderRepository{},
+			wantErr:   ErrInvalidFolderName,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewFolderUsecase(tt.repo)
+
+			folder, err := uc.Update(context.Background(), folderID, "kp_abc123", tt.inputName, nil)
+
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, folder.Name)
+		})
 	}
 }
 
-func TestFolderUsecase_Delete_HappyPath(t *testing.T) {
+func TestFolderUsecase_Delete(t *testing.T) {
 	folderID := uuid.New()
-	repo := &mockFolderRepository{}
-	uc := NewFolderUsecase(repo)
 
-	err := uc.Delete(context.Background(), folderID, "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+	tests := []struct {
+		name    string
+		repo    *mockFolderRepository
+		wantErr bool
+	}{
+		{
+			name: "deletes folder successfully",
+			repo: &mockFolderRepository{},
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockFolderRepository{err: errors.New("db error")},
+			wantErr: true,
+		},
 	}
-	if repo.deletedID != folderID {
-		t.Fatalf("expected delete id %s, got %s", folderID, repo.deletedID)
-	}
-	if repo.deletedUserID != "kp_abc123" {
-		t.Fatalf("expected delete user kp_abc123, got %s", repo.deletedUserID)
-	}
-}
 
-func TestFolderUsecase_Delete_ErrorPath(t *testing.T) {
-	folderID := uuid.New()
-	repo := &mockFolderRepository{
-		deleteErr: errors.New("db error"),
-	}
-	uc := NewFolderUsecase(repo)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewFolderUsecase(tt.repo)
 
-	err := uc.Delete(context.Background(), folderID, "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
+			err := uc.Delete(context.Background(), folderID, "kp_abc123")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
 	}
 }

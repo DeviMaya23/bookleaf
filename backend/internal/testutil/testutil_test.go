@@ -3,35 +3,25 @@ package testutil
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetupPostgresContainer(t *testing.T) {
 	ctx := context.Background()
 
 	container, err := SetupPostgresContainer(ctx)
-	if err != nil {
-		t.Fatalf("SetupPostgresContainer: %v", err)
-	}
+	require.NoError(t, err)
 	defer container.Terminate(ctx)
 
 	db, err := NewTestDB(container)
-	if err != nil {
-		t.Fatalf("NewTestDB: %v", err)
-	}
+	require.NoError(t, err)
 
 	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("db.DB(): %v", err)
-	}
-	if err := sqlDB.Ping(); err != nil {
-		t.Fatalf("ping database: %v", err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Ping())
 
 	tx := NewTestTx(t, db)
-	if tx == nil {
-		t.Fatal("NewTestTx returned nil")
-	}
-	if tx.Error != nil {
-		t.Fatalf("NewTestTx: %v", tx.Error)
-	}
+	require.NotNil(t, tx)
+	require.NoError(t, tx.Error)
 }
