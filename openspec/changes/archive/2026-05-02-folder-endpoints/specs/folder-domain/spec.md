@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Folder GORM Struct
 
@@ -11,7 +11,7 @@ Fields (all DB columns use snake_case):
 - `Name` — display name, required (`name`)
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 
-`DeletedAt` is not present. Folders use hard delete only.
+`DeletedAt` is removed. Folders use hard delete only.
 
 #### Scenario: Folder struct supports nesting
 
@@ -29,11 +29,15 @@ Fields (all DB columns use snake_case):
 - **THEN** `Folder` does NOT have a `DeletedAt` field
 - **AND** GORM does NOT append `deleted_at IS NULL` to queries on `Folder`
 
+---
+
+## MODIFIED Requirements
+
 ### Requirement: Folders DB Migration
 
-The system SHALL include `golang-migrate` SQL migrations that create the `folders` table (migration 000002) and remove soft-delete infrastructure (migration 000005).
+The system SHALL include a `golang-migrate` SQL migration that creates the `folders` table (migration 000002) and a subsequent migration (000005) that removes `deleted_at` from `folders` and changes the `images.folder_id` FK constraint from `ON DELETE SET NULL` to `ON DELETE RESTRICT`.
 
-Migration 000005 (`remove_folders_soft_delete`) removes `deleted_at` from `folders` and changes the `images.folder_id` FK constraint from `ON DELETE SET NULL` to `ON DELETE RESTRICT`.
+Migration 000005 (`remove_folders_soft_delete`) is the authoritative change for both the soft-delete removal and the FK tightening on images.
 
 #### Scenario: Migration creates folders table
 

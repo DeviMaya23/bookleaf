@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/devi/bookleaf/internal/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockUserRepository struct {
@@ -21,56 +23,72 @@ func (m *mockUserRepository) GetByID(context.Context, string) (*domain.User, err
 	return m.user, m.err
 }
 
-func TestUserUsecase_GetOrProvision_HappyPath(t *testing.T) {
-	repo := &mockUserRepository{
-		user: &domain.User{ID: "kp_abc123", VisionEnabled: false},
+func TestUserUsecase_GetOrProvision(t *testing.T) {
+	tests := []struct {
+		name    string
+		repo    *mockUserRepository
+		wantID  string
+		wantErr bool
+	}{
+		{
+			name:   "returns provisioned user",
+			repo:   &mockUserRepository{user: &domain.User{ID: "kp_abc123"}},
+			wantID: "kp_abc123",
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockUserRepository{err: errors.New("db error")},
+			wantErr: true,
+		},
 	}
-	uc := NewUserUsecase(repo)
 
-	user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if user.ID != "kp_abc123" {
-		t.Fatalf("expected user ID kp_abc123, got: %s", user.ID)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewUserUsecase(tt.repo)
+
+			user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, user.ID)
+		})
 	}
 }
 
-func TestUserUsecase_GetOrProvision_ErrorPath(t *testing.T) {
-	repo := &mockUserRepository{
-		err: errors.New("db error"),
+func TestUserUsecase_GetByID(t *testing.T) {
+	tests := []struct {
+		name    string
+		repo    *mockUserRepository
+		wantID  string
+		wantErr bool
+	}{
+		{
+			name:   "returns user by id",
+			repo:   &mockUserRepository{user: &domain.User{ID: "kp_abc123"}},
+			wantID: "kp_abc123",
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockUserRepository{err: errors.New("db error")},
+			wantErr: true,
+		},
 	}
-	uc := NewUserUsecase(repo)
 
-	_, err := uc.GetOrProvision(context.Background(), "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewUserUsecase(tt.repo)
 
-func TestUserUsecase_GetByID_HappyPath(t *testing.T) {
-	repo := &mockUserRepository{
-		user: &domain.User{ID: "kp_abc123", VisionEnabled: false},
-	}
-	uc := NewUserUsecase(repo)
+			user, err := uc.GetByID(context.Background(), "kp_abc123")
 
-	user, err := uc.GetByID(context.Background(), "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if user.ID != "kp_abc123" {
-		t.Fatalf("expected user ID kp_abc123, got: %s", user.ID)
-	}
-}
-
-func TestUserUsecase_GetByID_ErrorPath(t *testing.T) {
-	repo := &mockUserRepository{
-		err: errors.New("db error"),
-	}
-	uc := NewUserUsecase(repo)
-
-	_, err := uc.GetByID(context.Background(), "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, user.ID)
+		})
 	}
 }

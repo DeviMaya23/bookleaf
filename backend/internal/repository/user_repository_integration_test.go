@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/devi/bookleaf/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserRepository_GetOrCreate_Success(t *testing.T) {
@@ -12,33 +14,22 @@ func TestUserRepository_GetOrCreate_Success(t *testing.T) {
 	repo := NewUserRepository(tx)
 
 	user, err := repo.GetOrCreate(context.Background(), "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if user.ID != "kp_abc123" {
-		t.Fatalf("expected user ID kp_abc123, got: %s", user.ID)
-	}
-	if user.VisionEnabled {
-		t.Fatalf("expected vision_enabled false, got true")
-	}
+
+	require.NoError(t, err)
+	assert.Equal(t, "kp_abc123", user.ID)
+	assert.False(t, user.VisionEnabled)
 }
 
 func TestUserRepository_GetOrCreate_DBError(t *testing.T) {
 	db, err := testutil.NewTestDB(testContainer)
-	if err != nil {
-		t.Fatalf("create db handle: %v", err)
-	}
+	require.NoError(t, err)
 
 	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get underlying sql.DB: %v", err)
-	}
+	require.NoError(t, err)
 	sqlDB.Close()
 
 	repo := NewUserRepository(db)
 
 	_, err = repo.GetOrCreate(context.Background(), "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
+	require.Error(t, err)
 }
