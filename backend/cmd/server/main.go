@@ -33,6 +33,9 @@ func main() {
 	userRepository := repository.NewUserRepository(db)
 	userUsecase := usecase.NewUserUsecase(userRepository)
 	meHandler := httphandler.NewMeHandler(userUsecase)
+	folderRepository := repository.NewFolderRepository(db)
+	folderUsecase := usecase.NewFolderUsecase(folderRepository)
+	folderHandler := httphandler.NewFolderHandler(folderUsecase)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase)
 	if err != nil {
@@ -46,6 +49,11 @@ func main() {
 	protected := e.Group("")
 	protected.Use(authMiddleware)
 	protected.GET("/me", meHandler.GetMe)
+	protected.POST("/folders", folderHandler.CreateFolder)
+	protected.GET("/folders", folderHandler.ListFolders)
+	protected.GET("/folders/:id", folderHandler.GetFolder)
+	protected.PUT("/folders/:id", folderHandler.UpdateFolder)
+	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
 
 	e.Logger.Fatal(e.Start(":" + cfg.Port))
 }
