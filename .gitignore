@@ -31,10 +31,11 @@ go.work.sum
 
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
 
 # Local agent settings
 .claude/settings.local.json
 
 # Local make overrides (machine-specific/secrets)
 Makefile.local
+
