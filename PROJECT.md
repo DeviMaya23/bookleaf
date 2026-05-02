@@ -86,10 +86,11 @@ If the user has no folders yet, step 3 always falls through to suggesting a new 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | HTTP listen port |
-| `R2_ACCESS_KEY_ID` | — | Cloudflare R2 access key |
-| `R2_SECRET_ACCESS_KEY` | — | Cloudflare R2 secret key |
+| `R2_ACCOUNT_ID` | — | Cloudflare account ID; used to construct the R2 endpoint |
+| `R2_ACCESS_KEY_ID` | — | R2 API token key ID |
+| `R2_SECRET_ACCESS_KEY` | — | R2 API token secret; only shown once on creation |
 | `R2_BUCKET_NAME` | — | R2 bucket name |
-| `R2_ENDPOINT_URL` | — | R2 endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`) |
+| `R2_PUBLIC_URL` | — | Public bucket URL (e.g. `https://pub-xxxx.r2.dev`); used for thumbnail CDN links — requires public access enabled on the bucket |
 | `GOOGLE_VISION_API_KEY` | — | Google Vision API key for AI organising |
 | `KINDE_ISSUER_URL` | — | Kinde domain (e.g. `https://yourapp.kinde.com`) |
 | `KINDE_CLIENT_ID` | — | Kinde backend application client ID |

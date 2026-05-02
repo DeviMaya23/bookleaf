@@ -1,0 +1,15 @@
+meta {
+  name: Complete Upload
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/images/{{imageId}}/complete
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}

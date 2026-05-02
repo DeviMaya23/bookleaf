@@ -1,0 +1,21 @@
+meta {
+  name: Update Folder
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/folders/{{folderId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "name": "renamed folder"
+  }
+}
