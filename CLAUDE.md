@@ -11,6 +11,6 @@ This file will detail development conventions only.
 ## Unit Testing
 
 - Always plan for unit tests on the service and handler layers
-- Do not write unit tests for SQL repositories (integration tests will be addressed later)
+- Do not write unit tests for SQL repositories, only do integration test
 - Each unit test should cover one success scenario and one failure scenario by default
 - If the spec requires more scenarios, follow the spec
