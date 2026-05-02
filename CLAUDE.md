@@ -7,6 +7,7 @@ This file will detail development conventions only.
 
 - Before starting a new proposal, pull the latest main branch and checkout from there
 - Branch name format: `feat/<spec-name-here>`
+- Generate each artifact during proposal step by step. Confirm with me before moving on to the next one.
 
 ## Unit Testing
 
