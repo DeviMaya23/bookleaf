@@ -1,0 +1,90 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/devi/bookleaf/internal/config"
+)
+
+type r2Storage struct {
+	client    *s3.Client
+	presign   *s3.PresignClient
+	bucket    string
+	publicURL string
+}
+
+func NewR2Storage(cfg config.R2Config) StorageService {
+	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)
+
+	client := s3.New(s3.Options{
+		Region:       "auto",
+		BaseEndpoint: aws.String(endpoint),
+		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+	})
+
+	return &r2Storage{
+		client:    client,
+		presign:   s3.NewPresignClient(client),
+		bucket:    cfg.BucketName,
+		publicURL: cfg.PublicURL,
+	}
+}
+
+func (r *r2Storage) CDNUrl(key string) string {
+	return r.publicURL + "/" + key
+}
+
+func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentType string, ttl time.Duration) (string, error) {
+	resp, err := r.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(r.bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("presign put %s: %w", key, err)
+	}
+	return resp.URL, nil
+}
+
+func (r *r2Storage) GeneratePresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	resp, err := r.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("presign get %s: %w", key, err)
+	}
+	return resp.URL, nil
+}
+
+func (r *r2Storage) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
+	resp, err := r.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get object %s: %w", key, err)
+	}
+	return resp.Body, nil
+}
+
+func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, contentType string) error {
+	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(r.bucket),
+		Key:         aws.String(key),
+		Body:        body,
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return fmt.Errorf("put object %s: %w", key, err)
+	}
+	return nil
+}
+
+var _ StorageService = (*r2Storage)(nil)

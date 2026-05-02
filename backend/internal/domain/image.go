@@ -23,7 +23,7 @@ type Image struct {
 	DeletedAt     gorm.DeletedAt  `gorm:"column:deleted_at;index"`
 
 	User   User    `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
-	Folder *Folder `gorm:"foreignKey:FolderID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
+	Folder *Folder `gorm:"foreignKey:FolderID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
 }
 
 func (i *Image) BeforeCreate(*gorm.DB) error {
