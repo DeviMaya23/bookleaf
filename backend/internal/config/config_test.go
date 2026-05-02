@@ -12,6 +12,11 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Setenv("KINDE_ISSUER_URL", "https://example.kinde.com")
 	t.Setenv("KINDE_AUDIENCE", "bookleaf-api")
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/bookleaf")
+	t.Setenv("R2_ACCOUNT_ID", "account-id")
+	t.Setenv("R2_ACCESS_KEY_ID", "access-key-id")
+	t.Setenv("R2_SECRET_ACCESS_KEY", "secret-access-key")
+	t.Setenv("R2_BUCKET_NAME", "bucket-name")
+	t.Setenv("R2_PUBLIC_URL", "https://assets.bookleaf.app")
 }
 
 func TestLoad_AllRequiredVarsSet(t *testing.T) {
@@ -26,6 +31,11 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.Equal(t, "https://example.kinde.com", cfg.Kinde.IssuerURL)
 	assert.Equal(t, "bookleaf-api", cfg.Kinde.Audience)
 	assert.Equal(t, "postgres://user:pass@localhost:5432/bookleaf", cfg.DB.URL)
+	assert.Equal(t, "account-id", cfg.R2.AccountID)
+	assert.Equal(t, "access-key-id", cfg.R2.AccessKeyID)
+	assert.Equal(t, "secret-access-key", cfg.R2.SecretAccessKey)
+	assert.Equal(t, "bucket-name", cfg.R2.BucketName)
+	assert.Equal(t, "https://assets.bookleaf.app", cfg.R2.PublicURL)
 	assert.Equal(t, "9090", cfg.Port)
 }
 
@@ -37,6 +47,11 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 		{"missing KINDE_ISSUER_URL", "KINDE_ISSUER_URL"},
 		{"missing KINDE_AUDIENCE", "KINDE_AUDIENCE"},
 		{"missing DATABASE_URL", "DATABASE_URL"},
+		{"missing R2_ACCOUNT_ID", "R2_ACCOUNT_ID"},
+		{"missing R2_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID"},
+		{"missing R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"},
+		{"missing R2_BUCKET_NAME", "R2_BUCKET_NAME"},
+		{"missing R2_PUBLIC_URL", "R2_PUBLIC_URL"},
 	}
 
 	for _, tt := range tests {

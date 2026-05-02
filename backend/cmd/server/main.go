@@ -8,6 +8,8 @@ import (
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/repository"
+	"github.com/devi/bookleaf/internal/storage"
+	"github.com/devi/bookleaf/internal/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
@@ -36,6 +38,11 @@ func main() {
 	folderRepository := repository.NewFolderRepository(db)
 	folderUsecase := usecase.NewFolderUsecase(folderRepository)
 	folderHandler := httphandler.NewFolderHandler(folderUsecase)
+	storageService := storage.NewR2Storage(cfg.R2)
+	thumbnailService := thumbnail.NewThumbnailService()
+	imageRepository := repository.NewImageRepository(db)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService)
+	imageHandler := httphandler.NewImageHandler(imageUsecase, storageService)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase)
 	if err != nil {
@@ -54,6 +61,13 @@ func main() {
 	protected.GET("/folders/:id", folderHandler.GetFolder)
 	protected.PUT("/folders/:id", folderHandler.UpdateFolder)
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
+	protected.POST("/images", imageHandler.InitiateUpload)
+	protected.POST("/images/:id/complete", imageHandler.CompleteUpload)
+	protected.GET("/images/trash", imageHandler.ListTrashed)
+	protected.GET("/images", imageHandler.ListImages)
+	protected.GET("/images/:id", imageHandler.GetImage)
+	protected.DELETE("/images/:id", imageHandler.SoftDelete)
+	protected.POST("/images/:id/restore", imageHandler.Restore)
 
 	e.Logger.Fatal(e.Start(":" + cfg.Port))
 }

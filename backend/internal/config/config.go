@@ -18,9 +18,18 @@ type DBConfig struct {
 	URL string
 }
 
+type R2Config struct {
+	AccountID       string
+	AccessKeyID     string
+	SecretAccessKey string
+	BucketName      string
+	PublicURL       string
+}
+
 type Config struct {
 	Kinde KindeConfig
 	DB    DBConfig
+	R2    R2Config
 	Port  string
 }
 
@@ -52,6 +61,31 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
+	r2AccountID, err := requireEnv("R2_ACCOUNT_ID")
+	if err != nil {
+		return nil, err
+	}
+
+	r2AccessKeyID, err := requireEnv("R2_ACCESS_KEY_ID")
+	if err != nil {
+		return nil, err
+	}
+
+	r2SecretAccessKey, err := requireEnv("R2_SECRET_ACCESS_KEY")
+	if err != nil {
+		return nil, err
+	}
+
+	r2BucketName, err := requireEnv("R2_BUCKET_NAME")
+	if err != nil {
+		return nil, err
+	}
+
+	r2PublicURL, err := requireEnv("R2_PUBLIC_URL")
+	if err != nil {
+		return nil, err
+	}
+
 	port := envWithDefault("PORT", "8080")
 
 	return &Config{
@@ -61,6 +95,13 @@ func loadFromEnv() (*Config, error) {
 		},
 		DB: DBConfig{
 			URL: databaseURL,
+		},
+		R2: R2Config{
+			AccountID:       r2AccountID,
+			AccessKeyID:     r2AccessKeyID,
+			SecretAccessKey: r2SecretAccessKey,
+			BucketName:      r2BucketName,
+			PublicURL:       r2PublicURL,
 		},
 		Port: port,
 	}, nil
