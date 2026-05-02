@@ -1,0 +1,27 @@
+meta {
+  name: Create Folder
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/folders
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "name": "my folder"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("folderId", res.body.id);
+  }
+}

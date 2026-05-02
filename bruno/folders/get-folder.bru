@@ -1,0 +1,15 @@
+meta {
+  name: Get Folder
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/folders/{{folderId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
