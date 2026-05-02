@@ -1,0 +1,42 @@
+meta {
+  name: Get Kinde User Token
+  type: http
+  seq: 4
+}
+
+post {
+  url: 
+  body: formUrlEncoded
+  auth: oauth2
+}
+
+headers {
+  Content-Type: application/x-www-form-urlencoded
+}
+
+auth:oauth2 {
+  grant_type: authorization_code
+  callback_url: 
+  authorization_url: {{kindeAuthURL}}
+  access_token_url: {{kindeAccessTokenURL}}
+  refresh_token_url: 
+  client_id: {{kindeClientID}}
+  client_secret: {{kindeClientSecret}}
+  scope: openid profile email
+  state: testingtesting
+  pkce: false
+  credentials_placement: body
+  credentials_id: credentials
+  token_source: access_token
+  token_placement: header
+  token_header_prefix: Bearer
+  auto_fetch_token: true
+  auto_refresh_token: false
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

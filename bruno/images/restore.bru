@@ -1,0 +1,15 @@
+meta {
+  name: Restore Image
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/images/{{imageId}}/restore
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}

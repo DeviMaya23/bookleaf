@@ -1,0 +1,15 @@
+meta {
+  name: Get Image
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/images/{{imageId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}

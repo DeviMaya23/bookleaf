@@ -1,0 +1,15 @@
+meta {
+  name: List Trash
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/images/trash
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
