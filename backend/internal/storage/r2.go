@@ -87,4 +87,14 @@ func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, c
 	return nil
 }
 
+func (r *r2Storage) Ping(ctx context.Context) error {
+	_, err := r.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(r.bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("head bucket %s: %w", r.bucket, err)
+	}
+	return nil
+}
+
 var _ StorageService = (*r2Storage)(nil)

@@ -1,0 +1,36 @@
+services:
+  app:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      OTEL_EXPORTER: jaeger
+      OTEL_METRICS_EXPORTER: prometheus
+      LOG_FORMAT: console
+      OTEL_JAEGER_ENDPOINT: jaeger:4317
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - jaeger
+      - prometheus
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
