@@ -1,35 +1,59 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/devi/bookleaf/internal/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/middleware"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
+	"go.opentelemetry.io/otel"
+	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func main() {
-	e := echo.New()
-	e.Use(echomiddleware.Logger())
-	e.Use(echomiddleware.Recover())
+	ctx := context.Background()
 
 	cfg, err := config.Load()
 	if err != nil {
-		e.Logger.Fatal(err)
+		panic(fmt.Errorf("load config: %w", err))
 	}
+
+	logger, err := observability.NewLogger(cfg.Obs.LogFormat)
+	if err != nil {
+		panic(fmt.Errorf("init logger: %w", err))
+	}
+	defer logger.Sync()
+
+	tp, err := observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
+	if err != nil {
+		logger.Fatal("init tracer provider", zap.Error(err))
+	}
+	defer tp.Shutdown(ctx)
+
+	mp, metricsHandler, err := observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
+	if err != nil {
+		logger.Fatal("init meter provider", zap.Error(err))
+	}
+	defer mp.Shutdown(ctx)
+
+	e := echo.New()
+	e.Use(echomiddleware.Recover())
+	e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
+	e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
 
 	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{})
 	if err != nil {
-		e.Logger.Fatal(fmt.Errorf("open database connection: %w", err))
+		logger.Fatal("open database connection", zap.Error(err))
 	}
 
 	userRepository := repository.NewUserRepository(db)
@@ -46,12 +70,15 @@ func main() {
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase)
 	if err != nil {
-		e.Logger.Fatal(fmt.Errorf("initialise auth middleware: %w", err))
+		logger.Fatal("initialise auth middleware", zap.Error(err))
 	}
 
-	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-	})
+	healthHandler := httphandler.NewHealthHandler(db, storageService)
+	e.GET("/health", healthHandler.GetHealth)
+
+	if metricsHandler != nil {
+		e.GET("/metrics", echo.WrapHandler(metricsHandler))
+	}
 
 	protected := e.Group("")
 	protected.Use(authMiddleware)
@@ -69,5 +96,7 @@ func main() {
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
 
-	e.Logger.Fatal(e.Start(":" + cfg.Port))
+	if err := e.Start(":" + cfg.Port); err != nil {
+		logger.Fatal("server stopped", zap.Error(err))
+	}
 }

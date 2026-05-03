@@ -35,11 +35,22 @@ Methods:
 - `GetObject(ctx, key string) (io.ReadCloser, error)`
 - `PutObject(ctx, key string, body io.Reader, contentType string) error`
 - `CDNUrl(key string) string` — constructs the public CDN URL for a given key (no network call)
+- `Ping(ctx context.Context) error` — verifies R2 connectivity and credential validity; implemented as a `HeadBucket` call; returns `nil` on success or a wrapped error on failure
 
 #### Scenario: Interface is satisfied by R2 implementation
 
 - **WHEN** the Go package is compiled
 - **THEN** `r2Storage` in `internal/storage/` implements `StorageService` without compilation errors
+
+#### Scenario: Ping succeeds when bucket is reachable
+
+- **WHEN** `Ping` is called and R2 is reachable with valid credentials
+- **THEN** it returns `nil`
+
+#### Scenario: Ping fails when R2 is unreachable or credentials are invalid
+
+- **WHEN** `Ping` is called and R2 returns an error (network failure, 403, etc.)
+- **THEN** it returns a non-nil error describing the failure
 
 ---
 

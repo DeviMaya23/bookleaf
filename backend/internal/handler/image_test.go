@@ -73,6 +73,10 @@ func (m *mockImageStorageService) PutObject(_ context.Context, _ string, _ io.Re
 	return nil
 }
 
+func (m *mockImageStorageService) Ping(_ context.Context) error {
+	return nil
+}
+
 func (m *mockImageStorageService) CDNUrl(_ string) string {
 	return "https://cdn.example.com/thumbnail.jpg"
 }

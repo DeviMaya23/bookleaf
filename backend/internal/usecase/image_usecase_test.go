@@ -77,6 +77,10 @@ func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader,
 	return m.err
 }
 
+func (m *mockStorageService) Ping(_ context.Context) error {
+	return m.err
+}
+
 func (m *mockStorageService) CDNUrl(_ string) string {
 	return "https://cdn.example.com/test"
 }
@@ -95,13 +99,13 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
-		name      string
-		title     string
-		mimeType  string
-		repo      *mockImageRepository
-		store     *mockStorageService
-		wantErr   error
-		wantURL   string
+		name     string
+		title    string
+		mimeType string
+		repo     *mockImageRepository
+		store    *mockStorageService
+		wantErr  error
+		wantURL  string
 	}{
 		{
 			name:     "creates image record and returns presigned put url",

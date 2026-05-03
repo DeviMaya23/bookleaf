@@ -26,10 +26,17 @@ type R2Config struct {
 	PublicURL       string
 }
 
+type ObsConfig struct {
+	OTELExporter        string
+	OTELMetricsExporter string
+	LogFormat           string
+}
+
 type Config struct {
 	Kinde KindeConfig
 	DB    DBConfig
 	R2    R2Config
+	Obs   ObsConfig
 	Port  string
 }
 
@@ -86,6 +93,17 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
+	otelExporter, err := requireEnv("OTEL_EXPORTER")
+	if err != nil {
+		return nil, err
+	}
+
+	otelMetricsExporter, err := requireEnv("OTEL_METRICS_EXPORTER")
+	if err != nil {
+		return nil, err
+	}
+
+	logFormat := envWithDefault("LOG_FORMAT", "console")
 	port := envWithDefault("PORT", "8080")
 
 	return &Config{
@@ -102,6 +120,11 @@ func loadFromEnv() (*Config, error) {
 			SecretAccessKey: r2SecretAccessKey,
 			BucketName:      r2BucketName,
 			PublicURL:       r2PublicURL,
+		},
+		Obs: ObsConfig{
+			OTELExporter:        otelExporter,
+			OTELMetricsExporter: otelMetricsExporter,
+			LogFormat:           logFormat,
 		},
 		Port: port,
 	}, nil

@@ -17,6 +17,8 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Setenv("R2_SECRET_ACCESS_KEY", "secret-access-key")
 	t.Setenv("R2_BUCKET_NAME", "bucket-name")
 	t.Setenv("R2_PUBLIC_URL", "https://assets.bookleaf.app")
+	t.Setenv("OTEL_EXPORTER", "jaeger")
+	t.Setenv("OTEL_METRICS_EXPORTER", "prometheus")
 }
 
 func TestLoad_AllRequiredVarsSet(t *testing.T) {
@@ -36,6 +38,8 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.Equal(t, "secret-access-key", cfg.R2.SecretAccessKey)
 	assert.Equal(t, "bucket-name", cfg.R2.BucketName)
 	assert.Equal(t, "https://assets.bookleaf.app", cfg.R2.PublicURL)
+	assert.Equal(t, "jaeger", cfg.Obs.OTELExporter)
+	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
 	assert.Equal(t, "9090", cfg.Port)
 }
 
@@ -52,6 +56,8 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 		{"missing R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"},
 		{"missing R2_BUCKET_NAME", "R2_BUCKET_NAME"},
 		{"missing R2_PUBLIC_URL", "R2_PUBLIC_URL"},
+		{"missing OTEL_EXPORTER", "OTEL_EXPORTER"},
+		{"missing OTEL_METRICS_EXPORTER", "OTEL_METRICS_EXPORTER"},
 	}
 
 	for _, tt := range tests {
@@ -66,6 +72,32 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 			require.Error(t, err)
 			assert.Nil(t, cfg)
 			assert.Contains(t, err.Error(), tt.missingVar)
+		})
+	}
+}
+
+func TestLoad_LogFormat(t *testing.T) {
+	tests := []struct {
+		name       string
+		logFormat  *string
+		wantFormat string
+	}{
+		{"explicit log format", func() *string { s := "json"; return &s }(), "json"},
+		{"unset defaults to console", nil, "console"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			setRequiredEnvVars(t)
+			if tt.logFormat != nil {
+				t.Setenv("LOG_FORMAT", *tt.logFormat)
+			}
+
+			cfg, err := Load()
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantFormat, cfg.Obs.LogFormat)
 		})
 	}
 }
