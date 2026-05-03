@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,12 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Helper()
 	t.Setenv("KINDE_ISSUER_URL", "https://example.kinde.com")
 	t.Setenv("KINDE_AUDIENCE", "bookleaf-api")
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/bookleaf")
+	t.Setenv("DATABASE_HOST", "localhost")
+	t.Setenv("DATABASE_NAME", "bookleaf")
+	t.Setenv("DATABASE_PORT", "5432")
+	t.Setenv("DATABASE_USER", "user")
+	t.Setenv("DATABASE_PASSWORD", "pass")
+	t.Setenv("DATABASE_SSLMODE", "disable")
 	t.Setenv("R2_ACCOUNT_ID", "account-id")
 	t.Setenv("R2_ACCESS_KEY_ID", "access-key-id")
 	t.Setenv("R2_SECRET_ACCESS_KEY", "secret-access-key")
@@ -32,7 +38,13 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.Equal(t, "https://example.kinde.com", cfg.Kinde.IssuerURL)
 	assert.Equal(t, "bookleaf-api", cfg.Kinde.Audience)
-	assert.Equal(t, "postgres://user:pass@localhost:5432/bookleaf", cfg.DB.URL)
+	assert.Equal(t, "postgres://user:pass@localhost:5432/bookleaf?sslmode=disable", cfg.DB.URL)
+	assert.Equal(t, "localhost", cfg.DB.Host)
+	assert.Equal(t, "bookleaf", cfg.DB.Name)
+	assert.Equal(t, "5432", cfg.DB.Port)
+	assert.Equal(t, "user", cfg.DB.User)
+	assert.Equal(t, "pass", cfg.DB.Password)
+	assert.Equal(t, "disable", cfg.DB.SSLMode)
 	assert.Equal(t, "account-id", cfg.R2.AccountID)
 	assert.Equal(t, "access-key-id", cfg.R2.AccessKeyID)
 	assert.Equal(t, "secret-access-key", cfg.R2.SecretAccessKey)
@@ -50,7 +62,12 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 	}{
 		{"missing KINDE_ISSUER_URL", "KINDE_ISSUER_URL"},
 		{"missing KINDE_AUDIENCE", "KINDE_AUDIENCE"},
-		{"missing DATABASE_URL", "DATABASE_URL"},
+		{"missing DATABASE_HOST", "DATABASE_HOST"},
+		{"missing DATABASE_NAME", "DATABASE_NAME"},
+		{"missing DATABASE_PORT", "DATABASE_PORT"},
+		{"missing DATABASE_USER", "DATABASE_USER"},
+		{"missing DATABASE_PASSWORD", "DATABASE_PASSWORD"},
+		{"missing DATABASE_SSLMODE", "DATABASE_SSLMODE"},
 		{"missing R2_ACCOUNT_ID", "R2_ACCOUNT_ID"},
 		{"missing R2_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID"},
 		{"missing R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"},
@@ -129,4 +146,34 @@ func TestLoad_Port(t *testing.T) {
 			assert.Equal(t, tt.wantPort, cfg.Port)
 		})
 	}
+}
+
+func TestLoad_DatabaseOptions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("DATABASE_OPTIONS", "connect_timeout=10&application_name=bookleaf")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	parsed, parseErr := url.Parse(cfg.DB.URL)
+	require.NoError(t, parseErr)
+	query := parsed.Query()
+	assert.Equal(t, "disable", query.Get("sslmode"))
+	assert.Equal(t, "10", query.Get("connect_timeout"))
+	assert.Equal(t, "bookleaf", query.Get("application_name"))
+}
+
+func TestLoad_InvalidDatabaseOptions(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("DATABASE_OPTIONS", "%")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "DATABASE_OPTIONS")
 }
