@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -15,7 +17,13 @@ type KindeConfig struct {
 }
 
 type DBConfig struct {
-	URL string
+	Host     string
+	Name     string
+	Port     string
+	User     string
+	Password string
+	SSLMode  string
+	URL      string
 }
 
 type R2Config struct {
@@ -63,7 +71,45 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	databaseURL, err := requireEnv("DATABASE_URL")
+	databaseHost, err := requireEnv("DATABASE_HOST")
+	if err != nil {
+		return nil, err
+	}
+
+	databaseName, err := requireEnv("DATABASE_NAME")
+	if err != nil {
+		return nil, err
+	}
+
+	databasePort, err := requireEnv("DATABASE_PORT")
+	if err != nil {
+		return nil, err
+	}
+
+	databaseUser, err := requireEnv("DATABASE_USER")
+	if err != nil {
+		return nil, err
+	}
+
+	databasePassword, err := requireEnv("DATABASE_PASSWORD")
+	if err != nil {
+		return nil, err
+	}
+
+	databaseSSLMode, err := requireEnv("DATABASE_SSLMODE")
+	if err != nil {
+		return nil, err
+	}
+
+	databaseOptions := os.Getenv("DATABASE_OPTIONS")
+	databaseURL, err := buildDatabaseURL(DBConfig{
+		Host:     databaseHost,
+		Name:     databaseName,
+		Port:     databasePort,
+		User:     databaseUser,
+		Password: databasePassword,
+		SSLMode:  databaseSSLMode,
+	}, databaseOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +158,13 @@ func loadFromEnv() (*Config, error) {
 			Audience:  kindeAudience,
 		},
 		DB: DBConfig{
-			URL: databaseURL,
+			Host:     databaseHost,
+			Name:     databaseName,
+			Port:     databasePort,
+			User:     databaseUser,
+			Password: databasePassword,
+			SSLMode:  databaseSSLMode,
+			URL:      databaseURL,
 		},
 		R2: R2Config{
 			AccountID:       r2AccountID,
@@ -144,4 +196,22 @@ func envWithDefault(name, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func buildDatabaseURL(cfg DBConfig, optionsRaw string) (string, error) {
+	query, err := url.ParseQuery(optionsRaw)
+	if err != nil {
+		return "", fmt.Errorf("DATABASE_OPTIONS is invalid: %w", err)
+	}
+	query.Set("sslmode", cfg.SSLMode)
+
+	dbURL := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.User, cfg.Password),
+		Host:     net.JoinHostPort(cfg.Host, cfg.Port),
+		Path:     "/" + cfg.Name,
+		RawQuery: query.Encode(),
+	}
+
+	return dbURL.String(), nil
 }
