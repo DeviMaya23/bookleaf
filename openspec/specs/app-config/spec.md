@@ -71,17 +71,17 @@ The `Config` struct SHALL include an `Obs ObsConfig` field. `ObsConfig` SHALL ha
 
 - `OTELExporter string` — loaded from `OTEL_EXPORTER`; **required** (server fails to start if unset)
 - `OTELMetricsExporter string` — loaded from `OTEL_METRICS_EXPORTER`; **required** (server fails to start if unset)
-- `LogFormat string` — loaded from `LOG_FORMAT`; optional, defaults to `"console"`
+- `LogFormat string` — loaded from `LOG_FORMAT`; optional, defaults to `"json"`
 
 #### Scenario: All observability vars are set
 
-- **WHEN** `OTEL_EXPORTER=jaeger`, `OTEL_METRICS_EXPORTER=prometheus`, and `LOG_FORMAT=json` are set
-- **THEN** `cfg.Obs.OTELExporter` is `"jaeger"`, `cfg.Obs.OTELMetricsExporter` is `"prometheus"`, and `cfg.Obs.LogFormat` is `"json"`
+- **WHEN** `OTEL_EXPORTER=tempo`, `OTEL_METRICS_EXPORTER=prometheus`, and `LOG_FORMAT=json` are set
+- **THEN** `cfg.Obs.OTELExporter` is `"tempo"`, `cfg.Obs.OTELMetricsExporter` is `"prometheus"`, and `cfg.Obs.LogFormat` is `"json"`
 
-#### Scenario: LOG_FORMAT defaults to console
+#### Scenario: LOG_FORMAT defaults to json
 
 - **WHEN** `LOG_FORMAT` is not set in the environment
-- **THEN** `cfg.Obs.LogFormat` is `"console"`
+- **THEN** `cfg.Obs.LogFormat` is `"json"`
 
 #### Scenario: OTEL_EXPORTER missing causes startup failure
 
