@@ -12,19 +12,20 @@ type Telemetry struct {
 }
 ```
 
-The package SHALL expose two constructors:
+The package SHALL expose one constructor:
 
-- `NewTelemetry(logger *zap.Logger, tracer trace.Tracer, meter metric.Meter) *Telemetry` — used in `cmd/server/main.go` after providers are initialised
-- `NewNoopTelemetry() *Telemetry` — returns a `*Telemetry` backed by `zap.NewNop()`, `noop.NewTracerProvider().Tracer("")`, and `noop.NewMeterProvider().Meter("")`; used in unit tests to avoid nil panics without requiring real providers
+- `NewTelemetry(logger *zap.Logger, tracer trace.Tracer, meter metric.Meter) *Telemetry` — nil arguments are substituted with noop implementations (`zap.NewNop()`, `noop.NewTracerProvider().Tracer("")`, `noop.NewMeterProvider().Meter("")`), so callers never need to nil-guard and tests can pass `NewTelemetry(nil, nil, nil)`
+
+Application layer constructors SHALL NOT nil-guard `*Telemetry` — they trust that any non-nil `*Telemetry` is safe to use, including one constructed with all-nil arguments.
 
 #### Scenario: Production Telemetry is constructed from live providers
 
 - **WHEN** `NewTelemetry` is called with a configured Zap logger, a real OTel TracerProvider tracer, and a real OTel MeterProvider meter
 - **THEN** the returned `*Telemetry` has non-nil `Logger`, `Tracer`, and `Meter` fields
 
-#### Scenario: Noop Telemetry is safe to use in tests
+#### Scenario: Nil arguments are substituted with noop implementations
 
-- **WHEN** `NewNoopTelemetry()` is called
+- **WHEN** `NewTelemetry(nil, nil, nil)` is called
 - **THEN** the returned `*Telemetry` has non-nil fields that accept calls without panicking or emitting any output
 
 ### Requirement: Telemetry Injection into Application Layers

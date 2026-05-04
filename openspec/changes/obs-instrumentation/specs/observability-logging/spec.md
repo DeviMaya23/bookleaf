@@ -9,23 +9,12 @@ The Kinde auth middleware SHALL emit a WARN log when it rejects an inbound reque
 - `reason`: a short string identifying the rejection cause (e.g. `"missing_header"`, `"invalid_token"`, `"expired_token"`)
 - `trace_id` (via `LoggerFromContext`)
 
-Individual handler methods SHALL emit a WARN log when a valid authenticated user attempts to access a resource owned by a different user. The log SHALL include:
-- `event: "auth.unauthorized_access"`
-- `user_id`: the requesting user's Kinde ID
-- `resource_id`: the ID of the resource that was denied (image ID or folder ID)
-- `trace_id` (via `LoggerFromContext`)
-
 No new user creation event is emitted by the auth middleware. The user usecase emits an INFO log when a new user record is persisted (see Usecase Domain Events below).
 
 #### Scenario: Token rejection is logged at WARN
 
 - **WHEN** the Kinde auth middleware rejects a request due to a missing or invalid token
 - **THEN** a WARN log is emitted with `event: "auth.token_rejected"` and a `reason` field
-
-#### Scenario: Cross-user access attempt is logged at WARN
-
-- **WHEN** a handler detects that the authenticated user's ID does not match the resource owner
-- **THEN** a WARN log is emitted with `event: "auth.unauthorized_access"`, `user_id`, and `resource_id`
 
 ### Requirement: Usecase Domain Event Logging
 
@@ -109,8 +98,7 @@ All structured log entries in application layers SHALL use the following standar
 | `http.response.status_code` | int | HTTP response status code — OTel semconv |
 | `image_count` | int | Number of images (folder deletion) |
 | `operation` | string | Mutation type (e.g. `"edited"`, `"trashed"`) |
-| `reason` | string | Rejection reason (auth events) |
-| `resource_id` | string | ID of denied resource (auth events) |
+| `reason` | string | Rejection reason (auth token rejection) |
 | `error` | string | Error message (failure events only) |
 
 No image binary data, no presigned URL strings, and no raw JWT claims SHALL appear in any log entry.

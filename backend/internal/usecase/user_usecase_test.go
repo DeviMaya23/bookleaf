@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devi/bookleaf/internal/domain"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestUserUsecase_GetOrProvision(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewUserUsecase(tt.repo)
+			uc := NewUserUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
 
 			user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
 
@@ -79,7 +80,7 @@ func TestUserUsecase_GetByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewUserUsecase(tt.repo)
+			uc := NewUserUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
 
 			user, err := uc.GetByID(context.Background(), "kp_abc123")
 

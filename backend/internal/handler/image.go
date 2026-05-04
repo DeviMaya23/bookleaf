@@ -7,16 +7,19 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel/codes"
 	"gorm.io/gorm"
 )
 
 type ImageHandler struct {
 	imageUsecase usecase.ImageUsecase
 	store        storage.StorageService
+	tel          *observability.Telemetry
 }
 
 type initiateImageUploadRequest struct {
@@ -55,14 +58,18 @@ type imageDetailResponse struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
-func NewImageHandler(imageUsecase usecase.ImageUsecase, store storage.StorageService) *ImageHandler {
+func NewImageHandler(imageUsecase usecase.ImageUsecase, store storage.StorageService, tel *observability.Telemetry) *ImageHandler {
 	return &ImageHandler{
 		imageUsecase: imageUsecase,
 		store:        store,
+		tel:          tel,
 	}
 }
 
 func (h *ImageHandler) InitiateUpload(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.InitiateUpload")
+	defer span.End()
+
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
 	if !ok || userID == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
@@ -73,8 +80,10 @@ func (h *ImageHandler) InitiateUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	result, err := h.imageUsecase.InitiateUpload(c.Request().Context(), userID, req.Title, req.MIMEType, req.SourceURL, req.FolderID)
+	result, err := h.imageUsecase.InitiateUpload(ctx, userID, req.Title, req.MIMEType, req.SourceURL, req.FolderID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, usecase.ErrInvalidImageTitle) || errors.Is(err, usecase.ErrInvalidMIMEType) {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
@@ -89,6 +98,9 @@ func (h *ImageHandler) InitiateUpload(c echo.Context) error {
 }
 
 func (h *ImageHandler) CompleteUpload(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.CompleteUpload")
+	defer span.End()
+
 	imageID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
@@ -99,7 +111,9 @@ func (h *ImageHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	if err := h.imageUsecase.CompleteUpload(c.Request().Context(), imageID, userID); err != nil {
+	if err := h.imageUsecase.CompleteUpload(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}
@@ -110,6 +124,9 @@ func (h *ImageHandler) CompleteUpload(c echo.Context) error {
 }
 
 func (h *ImageHandler) ListImages(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListImages")
+	defer span.End()
+
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
 	if !ok || userID == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
@@ -125,8 +142,10 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		folderID = &parsedFolderID
 	}
 
-	images, err := h.imageUsecase.ListImages(c.Request().Context(), userID, folderID)
+	images, err := h.imageUsecase.ListImages(ctx, userID, folderID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list images")
 	}
 
@@ -139,6 +158,9 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 }
 
 func (h *ImageHandler) GetImage(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.GetImage")
+	defer span.End()
+
 	imageID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
@@ -149,29 +171,34 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	result, err := h.imageUsecase.GetImage(c.Request().Context(), imageID, userID)
+	result, err := h.imageUsecase.GetImage(ctx, imageID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get image")
 	}
 
-	imageResponse := h.toImageResponse(result.Image)
+	imageResp := h.toImageResponse(result.Image)
 	return c.JSON(http.StatusOK, imageDetailResponse{
-		ID:           imageResponse.ID,
-		Title:        imageResponse.Title,
-		MIMEType:     imageResponse.MIMEType,
-		SourceURL:    imageResponse.SourceURL,
-		FolderID:     imageResponse.FolderID,
-		ThumbnailURL: imageResponse.ThumbnailURL,
+		ID:           imageResp.ID,
+		Title:        imageResp.Title,
+		MIMEType:     imageResp.MIMEType,
+		SourceURL:    imageResp.SourceURL,
+		FolderID:     imageResp.FolderID,
+		ThumbnailURL: imageResp.ThumbnailURL,
 		ImageURL:     result.ImageURL,
-		CreatedAt:    imageResponse.CreatedAt,
-		UpdatedAt:    imageResponse.UpdatedAt,
+		CreatedAt:    imageResp.CreatedAt,
+		UpdatedAt:    imageResp.UpdatedAt,
 	})
 }
 
 func (h *ImageHandler) SoftDelete(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.SoftDelete")
+	defer span.End()
+
 	imageID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
@@ -182,7 +209,9 @@ func (h *ImageHandler) SoftDelete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	if err := h.imageUsecase.SoftDelete(c.Request().Context(), imageID, userID); err != nil {
+	if err := h.imageUsecase.SoftDelete(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}
@@ -193,13 +222,18 @@ func (h *ImageHandler) SoftDelete(c echo.Context) error {
 }
 
 func (h *ImageHandler) ListTrashed(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListTrashed")
+	defer span.End()
+
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
 	if !ok || userID == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	images, err := h.imageUsecase.ListTrashed(c.Request().Context(), userID)
+	images, err := h.imageUsecase.ListTrashed(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list trashed images")
 	}
 
@@ -212,6 +246,9 @@ func (h *ImageHandler) ListTrashed(c echo.Context) error {
 }
 
 func (h *ImageHandler) Restore(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.Restore")
+	defer span.End()
+
 	imageID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
@@ -222,8 +259,10 @@ func (h *ImageHandler) Restore(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	image, err := h.imageUsecase.Restore(c.Request().Context(), imageID, userID)
+	image, err := h.imageUsecase.Restore(ctx, imageID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}

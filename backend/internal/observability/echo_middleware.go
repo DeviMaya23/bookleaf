@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 )
 
 func TraceMiddleware(tracer trace.Tracer) echo.MiddlewareFunc {
@@ -47,6 +48,41 @@ func TraceMiddleware(tracer trace.Tracer) echo.MiddlewareFunc {
 			}
 
 			span.SetAttributes(attribute.Int("http.status_code", statusCode))
+
+			return err
+		}
+	}
+}
+
+func LoggingMiddleware(tel *Telemetry, userIDFromCtx func(echo.Context) (string, bool)) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			start := time.Now()
+			err := next(c)
+
+			route := c.Path()
+			if route == "" {
+				route = c.Request().URL.Path
+			}
+
+			statusCode := c.Response().Status
+			if err != nil {
+				if he, ok := err.(*echo.HTTPError); ok {
+					statusCode = he.Code
+				} else {
+					statusCode = http.StatusInternalServerError
+				}
+			}
+
+			userID, _ := userIDFromCtx(c)
+			logger := LoggerFromContext(c.Request().Context(), tel.Logger)
+			logger.Info("request",
+				zap.String("user_id", userID),
+				zap.String("http.request.method", c.Request().Method),
+				zap.String("http.route", route),
+				zap.Int("http.response.status_code", statusCode),
+				zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
+			)
 
 			return err
 		}

@@ -62,7 +62,7 @@ Fields: `event: "auth.token_rejected"`, `reason` (e.g., `"invalid_token"`, `"mis
 
 **Why WARN not ERROR?** A rejected token is an expected adversarial or misconfiguration event, not an internal server error.
 
-Unauthorised access (valid token, wrong user's resource) is detected in individual handler methods and logged at WARN with `event: "auth.unauthorized_access"`, `user_id`, and the resource ID that was denied.
+Cross-user resource access cannot be reliably detected at the handler layer because the repo layer returns `gorm.ErrRecordNotFound` for both genuine not-found and ownership mismatches. Logging for this case is deferred to a future spec that introduces a distinct error type.
 
 ### D4 — Per-layer child span convention
 
@@ -109,9 +109,8 @@ No image binary data, no presigned URLs, no raw JWT claims are ever logged.
 
 ### D6 — Domain log events by layer
 
-**Handler layer** (via `LoggingMiddleware` + per-handler auth events):
+**Handler layer** (via `LoggingMiddleware` + auth middleware):
 - `auth.token_rejected` (WARN) — invalid/missing token
-- `auth.unauthorized_access` (WARN) — valid user accessing another user's resource
 
 **Usecase layer:**
 - `r2.upload.started` (INFO) — fields: `image_id`, `user_id`, `mime_type`, `file_size`, `r2_key`
@@ -132,11 +131,11 @@ No image binary data, no presigned URLs, no raw JWT claims are ever logged.
 
 - **Constructor churn** → Every handler and usecase constructor gains a `*Telemetry` param and `main.go` must wire it. This is mechanical but touches many files simultaneously. Mitigated by the fact that `Telemetry` is a single addition rather than three separate params; future primitives don't require further signature changes.
 - **Log volume in production** → INFO logs on every R2 presigned URL generation and every mutation may be high-volume on active accounts. Mitigated by using structured Zap fields (no string interpolation overhead) and the fact that production uses JSON format which can be sampled at the log aggregator layer.
-- **No-op Telemetry in tests** → Unit tests for handlers and usecases must construct a `Telemetry` with no-op implementations. Zap provides `zap.NewNop()`, OTel provides `noop.NewTracerProvider()` and `noop.NewMeterProvider()`. A `NewNoopTelemetry()` constructor in the test package avoids repetition.
+- **No-op Telemetry in tests** → Unit tests pass `observability.NewTelemetry(nil, nil, nil)`; nil fields are substituted with noop implementations inside `NewTelemetry`, so no guard code is needed in constructors or tests.
 
 ## Migration Plan
 
-1. Add `internal/observability/telemetry.go` with `Telemetry` struct and `NewTelemetry` / `NewNoopTelemetry`
+1. Add `internal/observability/telemetry.go` with `Telemetry` struct and `NewTelemetry` (nil-safe)
 2. Update `r2Storage` constructor to accept `*Telemetry`; add log events to `GeneratePresignedPutURL`, `GeneratePresignedGetURL`, `PutObject`
 3. Update usecase constructors to accept `*Telemetry`; add child spans and domain log events
 4. Update handler constructors to accept `*Telemetry`; add child spans and auth event logs

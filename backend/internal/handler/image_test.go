@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -114,7 +115,7 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images", tt.body)
 
 			err := h.InitiateUpload(c)
@@ -157,7 +158,7 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", "")
 			c.SetPath("/images/:id/complete")
 			c.SetParamNames("id")
@@ -203,7 +204,7 @@ func TestImageHandler_ListImages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images", "")
 
 			err := h.ListImages(c)
@@ -251,7 +252,7 @@ func TestImageHandler_GetImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -297,7 +298,7 @@ func TestImageHandler_SoftDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -342,7 +343,7 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
 
 			err := h.ListTrashed(c)
@@ -384,7 +385,7 @@ func TestImageHandler_Restore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{})
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/restore", "")
 			c.SetPath("/images/:id/restore")
 			c.SetParamNames("id")
