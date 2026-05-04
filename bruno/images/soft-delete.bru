@@ -7,9 +7,5 @@ meta {
 delete {
   url: {{baseUrl}}/images/{{imageId}}
   body: none
-  auth: bearer
-}
-
-auth:bearer {
-  token: {{authToken}}
+  auth: inherit
 }

@@ -1,17 +1,5 @@
-meta {
-  name: Get Kinde User Token
-  type: http
-  seq: 4
-}
-
-post {
-  url: 
-  body: formUrlEncoded
-  auth: oauth2
-}
-
-headers {
-  Content-Type: application/x-www-form-urlencoded
+auth {
+  mode: oauth2
 }
 
 auth:oauth2 {
@@ -32,11 +20,4 @@ auth:oauth2 {
   token_header_prefix: Bearer
   auto_fetch_token: true
   auto_refresh_token: false
-}
-
-settings {
-  encodeUrl: false
-  timeout: 0
-  followRedirects: true
-  maxRedirects: 5
 }
