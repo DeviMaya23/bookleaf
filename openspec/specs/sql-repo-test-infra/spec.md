@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Provide test infrastructure and helpers for SQL repository integration tests using testcontainers-go, enabling reliable database testing in both local and CI environments.
+
+## Requirements
 
 ### Requirement: Postgres container setup
 The system SHALL provide a `SetupPostgresContainer(ctx context.Context) (*PostgresContainer, error)` helper in `internal/testutil/` that starts a Postgres container via testcontainers-go and runs all migrations from the `migrations/` folder before returning.
