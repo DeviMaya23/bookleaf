@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -20,6 +22,11 @@ type ImageHandler struct {
 	imageUsecase usecase.ImageUsecase
 	store        storage.StorageService
 	tel          *observability.Telemetry
+}
+
+type updateImageRequest struct {
+	Title    *string         `json:"title"`
+	FolderID json.RawMessage `json:"folder_id"`
 }
 
 type initiateImageUploadRequest struct {
@@ -267,6 +274,60 @@ func (h *ImageHandler) Restore(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to restore image")
+	}
+
+	return c.JSON(http.StatusOK, h.toImageResponse(image))
+}
+
+func (h *ImageHandler) UpdateImage(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateImage")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req updateImageRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "title must not be empty")
+	}
+
+	params := usecase.UpdateImageParams{
+		Title: req.Title,
+	}
+
+	if len(req.FolderID) > 0 {
+		if string(req.FolderID) == "null" {
+			params.FolderID = new(*uuid.UUID)
+		} else {
+			var folderID uuid.UUID
+			if err := json.Unmarshal(req.FolderID, &folderID); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_id")
+			}
+			inner := folderID
+			outer := &inner
+			params.FolderID = &outer
+		}
+	}
+
+	image, err := h.imageUsecase.UpdateImage(ctx, imageID, userID, params)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update image")
 	}
 
 	return c.JSON(http.StatusOK, h.toImageResponse(image))

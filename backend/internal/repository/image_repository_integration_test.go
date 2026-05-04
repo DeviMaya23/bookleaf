@@ -258,3 +258,33 @@ func TestImageRepository_ListTrashed_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, trashed)
 }
+
+func TestImageRepository_Update_SelectiveFieldUpdate(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	img := newTestImage(userID)
+	thumbPath := "users/" + userID + "/thumbnails/test.jpg"
+	img.ThumbnailPath = &thumbPath
+	created, err := repo.Create(context.Background(), img)
+	require.NoError(t, err)
+
+	updated, err := repo.Update(context.Background(), created.ID, userID, map[string]any{
+		"title": "new title",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "new title", updated.Title)
+	require.NotNil(t, updated.ThumbnailPath)
+	assert.Equal(t, thumbPath, *updated.ThumbnailPath)
+}
+
+func TestImageRepository_Update_NotFound(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	_, err := repo.Update(context.Background(), uuid.New(), userID, map[string]any{
+		"title": "ghost",
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}

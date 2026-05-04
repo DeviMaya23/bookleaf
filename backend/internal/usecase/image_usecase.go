@@ -31,6 +31,11 @@ type UploadInitResult struct {
 	UploadURL string
 }
 
+type UpdateImageParams struct {
+	Title    *string
+	FolderID **uuid.UUID
+}
+
 type ImageDetail struct {
 	Image    *domain.Image
 	ImageURL string
@@ -41,6 +46,7 @@ type ImageUsecase interface {
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) error
 	ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
+	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error)
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string) ([]*domain.Image, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
@@ -275,6 +281,55 @@ func (u *imageUsecase) Restore(ctx context.Context, id uuid.UUID, userID string)
 		return nil, err
 	}
 	return image, nil
+}
+
+func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImage")
+	defer span.End()
+
+	existing, err := u.imageRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	fields := make(map[string]any)
+	if params.Title != nil {
+		fields["title"] = *params.Title
+	}
+	if params.FolderID != nil {
+		fields["folder_id"] = *params.FolderID
+	}
+
+	updated, err := u.imageRepo.Update(ctx, id, userID, fields)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if params.FolderID != nil {
+		newFolderID := *params.FolderID
+		oldFolderID := existing.FolderID
+		folderChanged := (newFolderID == nil) != (oldFolderID == nil) ||
+			(newFolderID != nil && oldFolderID != nil && *newFolderID != *oldFolderID)
+		if folderChanged {
+			var folderIDField interface{} = nil
+			if newFolderID != nil {
+				folderIDField = newFolderID.String()
+			}
+			observability.LoggerFromContext(ctx, u.tel.Logger).Info("image mutated",
+				zap.String("event", "image.mutated"),
+				zap.String("image_id", id.String()),
+				zap.String("user_id", userID),
+				zap.String("operation", "moved_to_folder"),
+				zap.Any("folder_id", folderIDField),
+			)
+		}
+	}
+
+	return updated, nil
 }
 
 var _ ImageUsecase = (*imageUsecase)(nil)
