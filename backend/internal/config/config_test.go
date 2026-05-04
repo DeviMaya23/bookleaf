@@ -100,7 +100,7 @@ func TestLoad_LogFormat(t *testing.T) {
 		wantFormat string
 	}{
 		{"explicit log format", func() *string { s := "json"; return &s }(), "json"},
-		{"unset defaults to console", nil, "console"},
+		{"unset defaults to json", nil, "json"},
 	}
 
 	for _, tt := range tests {
