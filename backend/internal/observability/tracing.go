@@ -7,8 +7,10 @@ import (
 
 	cloudtrace "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -17,8 +19,8 @@ func NewTracerProvider(ctx context.Context, exporter string) (*sdktrace.TracerPr
 	var err error
 
 	switch exporter {
-	case "jaeger":
-		endpoint := os.Getenv("OTEL_JAEGER_ENDPOINT")
+	case "tempo":
+		endpoint := os.Getenv("OTEL_TEMPO_ENDPOINT")
 		if endpoint == "" {
 			endpoint = "localhost:4317"
 		}
@@ -27,7 +29,7 @@ func NewTracerProvider(ctx context.Context, exporter string) (*sdktrace.TracerPr
 			otlptracegrpc.WithInsecure(),
 		)
 		if err != nil {
-			return nil, fmt.Errorf("create jaeger otlp exporter: %w", err)
+			return nil, fmt.Errorf("create tempo otlp exporter: %w", err)
 		}
 
 	case "gcp":
@@ -38,11 +40,17 @@ func NewTracerProvider(ctx context.Context, exporter string) (*sdktrace.TracerPr
 		}
 
 	default:
-		return nil, fmt.Errorf("unknown trace exporter %q: must be \"jaeger\" or \"gcp\"", exporter)
+		return nil, fmt.Errorf("unknown trace exporter %q: must be \"tempo\" or \"gcp\"", exporter)
 	}
+
+	res := resource.NewWithAttributes(
+		resource.Default().SchemaURL(),
+		attribute.String("service.name", "bookleaf"),
+	)
 
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
+		sdktrace.WithResource(res),
 	)
 
 	otel.SetTracerProvider(tp)
