@@ -149,7 +149,7 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	logFormat := envWithDefault("LOG_FORMAT", "console")
+	logFormat := envWithDefault("LOG_FORMAT", "json")
 	port := envWithDefault("PORT", "8080")
 
 	return &Config{

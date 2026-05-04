@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 type mockUserUsecase struct {
@@ -63,7 +64,7 @@ func makeSignedToken(t *testing.T, key *rsa.PrivateKey, issuer, audience string)
 func TestAuthMiddleware_ValidToken_SetsUserIDOnContext(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
 	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123"}}
-	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC)
+	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
 
 	e := echo.New()
@@ -86,7 +87,7 @@ func TestAuthMiddleware_ValidToken_SetsUserIDOnContext(t *testing.T) {
 func TestAuthMiddleware_InvalidOrMissingToken_Returns401(t *testing.T) {
 	storage := jwkset.NewMemoryStorage()
 	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123"}}
-	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC)
+	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 
 	tests := []struct {
 		name       string
@@ -123,7 +124,7 @@ func TestAuthMiddleware_InvalidOrMissingToken_Returns401(t *testing.T) {
 func TestAuthMiddleware_ProvisioningFailure_Returns500(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
 	mockUC := &mockUserUsecase{err: assert.AnError}
-	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC)
+	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
 
 	e := echo.New()

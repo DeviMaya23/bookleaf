@@ -7,11 +7,7 @@ meta {
 post {
   url: {{baseUrl}}/folders
   body: json
-  auth: bearer
-}
-
-auth:bearer {
-  token: {{authToken}}
+  auth: inherit
 }
 
 body:json {

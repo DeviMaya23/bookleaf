@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/MicahParks/jwkset"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 type ContextKey string
@@ -22,12 +24,14 @@ type authMiddleware struct {
 	audience    string
 	jwksClient  jwkset.Storage
 	userUsecase usecase.UserUsecase
+	logger      *zap.Logger
 }
 
 func NewAuthMiddleware(
 	issuerURL string,
 	audience string,
 	userUsecase usecase.UserUsecase,
+	logger *zap.Logger,
 ) (echo.MiddlewareFunc, error) {
 	jwksURL := strings.TrimRight(issuerURL, "/") + "/.well-known/jwks"
 
@@ -36,7 +40,7 @@ func NewAuthMiddleware(
 		return nil, fmt.Errorf("initialise jwks client: %w", err)
 	}
 
-	return newAuthMiddlewareWithStorage(issuerURL, audience, jwksClient, userUsecase), nil
+	return newAuthMiddlewareWithStorage(issuerURL, audience, jwksClient, userUsecase, logger), nil
 }
 
 func newAuthMiddlewareWithStorage(
@@ -44,12 +48,18 @@ func newAuthMiddlewareWithStorage(
 	audience string,
 	jwksClient jwkset.Storage,
 	userUsecase usecase.UserUsecase,
+	logger *zap.Logger,
 ) echo.MiddlewareFunc {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	m := &authMiddleware{
 		issuerURL:   issuerURL,
 		audience:    audience,
 		jwksClient:  jwksClient,
 		userUsecase: userUsecase,
+		logger:      logger,
 	}
 
 	return m.handle
@@ -64,6 +74,11 @@ func (m *authMiddleware) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		tokenString, err := extractBearerToken(c.Request().Header.Get(echo.HeaderAuthorization))
 		if err != nil {
+			observability.LoggerFromContext(c.Request().Context(), m.logger).Warn(
+				"auth token rejected",
+				zap.String("event", "auth.token_rejected"),
+				zap.String("reason", "missing_header"),
+			)
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 
@@ -77,10 +92,20 @@ func (m *authMiddleware) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			jwt.WithAudience(m.audience),
 		)
 		if err != nil || !token.Valid {
+			observability.LoggerFromContext(c.Request().Context(), m.logger).Warn(
+				"auth token rejected",
+				zap.String("event", "auth.token_rejected"),
+				zap.String("reason", "invalid_token"),
+			)
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 
 		if claims.Subject == "" {
+			observability.LoggerFromContext(c.Request().Context(), m.logger).Warn(
+				"auth token rejected",
+				zap.String("event", "auth.token_rejected"),
+				zap.String("reason", "missing_subject"),
+			)
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 

@@ -46,6 +46,8 @@ func main() {
 	}
 	defer mp.Shutdown(ctx)
 
+	tel := observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
+
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
 	e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
@@ -57,18 +59,18 @@ func main() {
 	}
 
 	userRepository := repository.NewUserRepository(db)
-	userUsecase := usecase.NewUserUsecase(userRepository)
-	meHandler := httphandler.NewMeHandler(userUsecase)
+	userUsecase := usecase.NewUserUsecase(userRepository, tel)
+	meHandler := httphandler.NewMeHandler(userUsecase, tel)
 	folderRepository := repository.NewFolderRepository(db)
-	folderUsecase := usecase.NewFolderUsecase(folderRepository)
-	folderHandler := httphandler.NewFolderHandler(folderUsecase)
-	storageService := storage.NewR2Storage(cfg.R2)
+	folderUsecase := usecase.NewFolderUsecase(folderRepository, tel)
+	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
+	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
-	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService)
-	imageHandler := httphandler.NewImageHandler(imageUsecase, storageService)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService, tel)
+	imageHandler := httphandler.NewImageHandler(imageUsecase, storageService, tel)
 
-	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase)
+	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
 	if err != nil {
 		logger.Fatal("initialise auth middleware", zap.Error(err))
 	}
@@ -82,6 +84,7 @@ func main() {
 
 	protected := e.Group("")
 	protected.Use(authMiddleware)
+	protected.Use(observability.LoggingMiddleware(tel, authmiddleware.AuthenticatedUserIDFromContext))
 	protected.GET("/me", meHandler.GetMe)
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)

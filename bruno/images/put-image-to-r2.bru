@@ -1,0 +1,22 @@
+meta {
+  name: Put Image
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{uploadUrl}}
+  body: file
+  auth: none
+}
+
+body:file {
+  file: @file(/Users/devi/Downloads/zerg.png) @contentType(image/png)
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}

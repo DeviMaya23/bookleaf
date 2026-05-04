@@ -1,7 +1,7 @@
 # local-dev-stack Specification
 
 ## Purpose
-Defines the Docker Compose local development stack including Jaeger, Prometheus, and Grafana services, along with their configuration and provisioning files.
+Defines the Docker Compose local development stack including Tempo, Loki, Promtail, Prometheus, and Grafana services, along with their configuration and provisioning files.
 
 ## Requirements
 
@@ -9,21 +9,24 @@ Defines the Docker Compose local development stack including Jaeger, Prometheus,
 
 The repository SHALL contain a `docker-compose.yml` at the repo root defining the following services:
 
-- **`app`** — built from `./backend`; depends on `jaeger` and `prometheus`; env vars: `OTEL_EXPORTER=jaeger`, `OTEL_METRICS_EXPORTER=prometheus`, `LOG_FORMAT=console`, `OTEL_JAEGER_ENDPOINT=jaeger:4317`, plus all other required app env vars loaded from a `.env` file; exposes port `8080`; `extra_hosts: ["host.docker.internal:host-gateway"]` for Linux compatibility
-- **`jaeger`** — image `jaegertracing/all-in-one:latest`; exposes `16686` (UI), `4317` (OTLP gRPC)
+- **`app`** — built from `./backend`; depends on `tempo`, `prometheus`, `loki`; env vars: `OTEL_EXPORTER=tempo`, `OTEL_METRICS_EXPORTER=prometheus`, `LOG_FORMAT=json`, `OTEL_TEMPO_ENDPOINT=tempo:4317`, plus all other required app env vars loaded from a `.env` file; exposes port `8080`; `extra_hosts: ["host.docker.internal:host-gateway"]` for Linux compatibility
+- **`tempo`** — image `grafana/tempo:latest`; mounts `./tempo/tempo.yml` as its config; exposes `4317` (OTLP gRPC receiver); runs in single-binary mode
 - **`prometheus`** — image `prom/prometheus:latest`; mounts `./prometheus/prometheus.yml` as its config; scrapes the app's `/metrics` endpoint; exposes port `9090`
-- **`grafana`** — image `grafana/grafana:latest`; exposes port `3000`; provisioned with a Jaeger datasource and a Prometheus datasource
+- **`loki`** — image `grafana/loki:latest`; mounts `./loki/loki.yml` as its config; exposes port `3100`
+- **`promtail`** — image `grafana/promtail:latest`; mounts `./promtail/promtail.yml` as its config and `/var/run/docker.sock` (read-only) for container log discovery; depends on `loki`
+- **`grafana`** — image `grafana/grafana:latest`; exposes port `3000`; provisioned with Tempo, Loki, and Prometheus datasources
 
 The PostgreSQL database SHALL NOT be a Docker service; the `app` container reaches it via `host.docker.internal`.
+
+The `jaeger` service is removed entirely.
 
 #### Scenario: Developer starts the local stack
 
 - **WHEN** `docker compose up` is run from the repo root with a valid `.env` file
-- **THEN** the `app`, `jaeger`, `prometheus`, and `grafana` containers start successfully
+- **THEN** the `app`, `tempo`, `prometheus`, `loki`, `promtail`, and `grafana` containers start successfully
 - **AND** the app is reachable at `http://localhost:8080`
-- **AND** Jaeger UI is reachable at `http://localhost:16686`
-- **AND** Prometheus UI is reachable at `http://localhost:9090`
 - **AND** Grafana UI is reachable at `http://localhost:3000`
+- **AND** Prometheus UI is reachable at `http://localhost:9090`
 
 #### Scenario: App reaches native PostgreSQL
 
@@ -44,12 +47,13 @@ The repository SHALL include `prometheus/prometheus.yml` that configures Prometh
 
 The repository SHALL include Grafana provisioning files under `grafana/provisioning/datasources/`:
 
-- `jaeger.yml` — Jaeger datasource pointing at `http://jaeger:16686`
+- `tempo.yml` — Tempo datasource pointing at `http://tempo:3200`; includes `tracesToLogsV2` config linking to the Loki datasource via `trace_id`
+- `loki.yml` — Loki datasource pointing at `http://loki:3100`; includes `derivedFields` config linking `trace_id` to the Tempo datasource
 - `prometheus.yml` — Prometheus datasource pointing at `http://prometheus:9090`
 
-Both datasources SHALL be available in Grafana without any manual configuration after startup.
+`jaeger.yml` is removed. All three datasources SHALL be available in Grafana without any manual configuration after startup.
 
 #### Scenario: Grafana starts with all datasources pre-configured
 
 - **WHEN** Grafana starts via Docker Compose
-- **THEN** both the Jaeger and Prometheus datasources are available without manual setup
+- **THEN** the Tempo, Loki, and Prometheus datasources are available without manual setup

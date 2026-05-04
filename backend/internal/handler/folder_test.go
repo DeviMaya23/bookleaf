@@ -12,6 +12,7 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	authmw "github.com/devi/bookleaf/internal/middleware"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -102,7 +103,7 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC)
+			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/folders", tt.body)
 
 			err := h.CreateFolder(c)
@@ -149,7 +150,7 @@ func TestFolderHandler_ListFolders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC)
+			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/folders", "")
 
 			err := h.ListFolders(c)
@@ -191,7 +192,7 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC)
+			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/folders/"+folderID.String(), "")
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -245,7 +246,7 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC)
+			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), tt.body)
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -286,7 +287,7 @@ func TestFolderHandler_DeleteFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC)
+			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/folders/"+folderID.String(), "")
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -303,4 +304,3 @@ func TestFolderHandler_DeleteFolder(t *testing.T) {
 		})
 	}
 }
-

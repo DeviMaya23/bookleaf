@@ -5,21 +5,24 @@ services:
       - "8080:8080"
     env_file: .env
     environment:
-      OTEL_EXPORTER: jaeger
+      OTEL_EXPORTER: tempo
       OTEL_METRICS_EXPORTER: prometheus
-      LOG_FORMAT: console
-      OTEL_JAEGER_ENDPOINT: jaeger:4317
+      LOG_FORMAT: json
+      OTEL_TEMPO_ENDPOINT: tempo:4317
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - jaeger
+      - tempo
       - prometheus
+      - loki
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
-      - "16686:16686"
       - "4317:4317"
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
 
   prometheus:
     image: prom/prometheus:latest
@@ -27,6 +30,23 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  loki:
+    image: grafana/loki:latest
+    command: ["-config.file=/etc/loki/loki.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+
+  promtail:
+    image: grafana/promtail:latest
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
 
   grafana:
     image: grafana/grafana:latest

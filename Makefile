@@ -1,6 +1,6 @@
 -include Makefile.local
 
-.PHONY: tidy run test-cover-repository
+.PHONY: tidy run test-cover-repository rebuild
 
 tidy:
 	@cd backend && go mod tidy
@@ -10,3 +10,6 @@ run:
 
 test-cover-repository:
 	@cd backend && go test -covermode=atomic -coverprofile=internal/repository/coverage.out ./internal/repository/...
+
+rebuild:
+	@docker compose build --no-cache app

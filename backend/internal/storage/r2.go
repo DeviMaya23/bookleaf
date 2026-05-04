@@ -10,6 +10,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/devi/bookleaf/internal/config"
+	"github.com/devi/bookleaf/internal/observability"
+	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 )
 
 type r2Storage struct {
@@ -17,9 +20,10 @@ type r2Storage struct {
 	presign   *s3.PresignClient
 	bucket    string
 	publicURL string
+	tel       *observability.Telemetry
 }
 
-func NewR2Storage(cfg config.R2Config) StorageService {
+func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) StorageService {
 	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)
 
 	client := s3.New(s3.Options{
@@ -33,6 +37,7 @@ func NewR2Storage(cfg config.R2Config) StorageService {
 		presign:   s3.NewPresignClient(client),
 		bucket:    cfg.BucketName,
 		publicURL: cfg.PublicURL,
+		tel:       tel,
 	}
 }
 
@@ -41,40 +46,82 @@ func (r *r2Storage) CDNUrl(key string) string {
 }
 
 func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentType string, ttl time.Duration) (string, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.GeneratePresignedPutURL")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+
 	resp, err := r.presign.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
 	}, s3.WithPresignExpires(ttl))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		logger.Error("presigned put URL generation failed",
+			zap.String("event", "r2.presigned_put.failed"),
+			zap.String("r2_key", key),
+			zap.Error(err),
+		)
 		return "", fmt.Errorf("presign put %s: %w", key, err)
 	}
+
+	logger.Info("presigned put URL generated",
+		zap.String("event", "r2.presigned_put.success"),
+		zap.String("r2_key", key),
+	)
 	return resp.URL, nil
 }
 
 func (r *r2Storage) GeneratePresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.GeneratePresignedGetURL")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+
 	resp, err := r.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(ttl))
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		logger.Error("presigned get URL generation failed",
+			zap.String("event", "r2.presigned_get.failed"),
+			zap.String("r2_key", key),
+			zap.Error(err),
+		)
 		return "", fmt.Errorf("presign get %s: %w", key, err)
 	}
+
+	logger.Info("presigned get URL generated",
+		zap.String("event", "r2.presigned_get.success"),
+		zap.String("r2_key", key),
+	)
 	return resp.URL, nil
 }
 
 func (r *r2Storage) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.GetObject")
+	defer span.End()
+
 	resp, err := r.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("get object %s: %w", key, err)
 	}
 	return resp.Body, nil
 }
 
 func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, contentType string) error {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.PutObject")
+	defer span.End()
+
 	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(key),
@@ -82,6 +129,8 @@ func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, c
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("put object %s: %w", key, err)
 	}
 	return nil

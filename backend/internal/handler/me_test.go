@@ -10,6 +10,7 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	authmw "github.com/devi/bookleaf/internal/middleware"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +50,7 @@ func TestMeHandler_GetMe(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewMeHandler(tt.mockUC)
+			h := NewMeHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			e := echo.New()
 			req := httptest.NewRequest(http.MethodGet, "/me", nil)
 			rec := httptest.NewRecorder()

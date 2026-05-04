@@ -70,6 +70,18 @@ func (r *folderRepository) Update(ctx context.Context, folder *domain.Folder) (*
 	return existing, nil
 }
 
+func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID, userID string) (int, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Table("images").
+		Where("folder_id = ? AND user_id = ?", id, userID).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count folder images: %w", err)
+	}
+
+	return int(count), nil
+}
+
 func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, userID string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&domain.Folder{}).

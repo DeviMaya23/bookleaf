@@ -7,14 +7,17 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"go.opentelemetry.io/otel/codes"
 	"gorm.io/gorm"
 )
 
 type FolderHandler struct {
 	folderUsecase usecase.FolderUsecase
+	tel           *observability.Telemetry
 }
 
 type folderRequest struct {
@@ -30,13 +33,17 @@ type folderResponse struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
-func NewFolderHandler(folderUsecase usecase.FolderUsecase) *FolderHandler {
+func NewFolderHandler(folderUsecase usecase.FolderUsecase, tel *observability.Telemetry) *FolderHandler {
 	return &FolderHandler{
 		folderUsecase: folderUsecase,
+		tel:           tel,
 	}
 }
 
 func (h *FolderHandler) CreateFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.CreateFolder")
+	defer span.End()
+
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
 	if !ok || userID == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
@@ -47,8 +54,10 @@ func (h *FolderHandler) CreateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Create(c.Request().Context(), userID, req.Name, req.ParentID)
+	folder, err := h.folderUsecase.Create(ctx, userID, req.Name, req.ParentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, usecase.ErrInvalidFolderName) {
 			return echo.NewHTTPError(http.StatusBadRequest, "folder name is required")
 		}
@@ -59,13 +68,18 @@ func (h *FolderHandler) CreateFolder(c echo.Context) error {
 }
 
 func (h *FolderHandler) ListFolders(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListFolders")
+	defer span.End()
+
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
 	if !ok || userID == "" {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	folders, err := h.folderUsecase.List(c.Request().Context(), userID)
+	folders, err := h.folderUsecase.List(ctx, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list folders")
 	}
 
@@ -78,6 +92,9 @@ func (h *FolderHandler) ListFolders(c echo.Context) error {
 }
 
 func (h *FolderHandler) GetFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.GetFolder")
+	defer span.End()
+
 	folderID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
@@ -88,8 +105,10 @@ func (h *FolderHandler) GetFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	folder, err := h.folderUsecase.GetByID(c.Request().Context(), folderID, userID)
+	folder, err := h.folderUsecase.GetByID(ctx, folderID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
 		}
@@ -100,6 +119,9 @@ func (h *FolderHandler) GetFolder(c echo.Context) error {
 }
 
 func (h *FolderHandler) UpdateFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateFolder")
+	defer span.End()
+
 	folderID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
@@ -115,8 +137,10 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Update(c.Request().Context(), folderID, userID, req.Name, req.ParentID)
+	folder, err := h.folderUsecase.Update(ctx, folderID, userID, req.Name, req.ParentID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, usecase.ErrInvalidFolderName) {
 			return echo.NewHTTPError(http.StatusBadRequest, "folder name is required")
 		}
@@ -130,6 +154,9 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 }
 
 func (h *FolderHandler) DeleteFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteFolder")
+	defer span.End()
+
 	folderID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
@@ -140,8 +167,10 @@ func (h *FolderHandler) DeleteFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	err = h.folderUsecase.Delete(c.Request().Context(), folderID, userID)
+	err = h.folderUsecase.Delete(ctx, folderID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
 		}

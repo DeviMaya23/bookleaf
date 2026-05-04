@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
+	"github.com/devi/bookleaf/internal/observability"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,6 +94,10 @@ func (m *mockThumbnailService) Generate(_ context.Context, _ io.Reader) (io.Read
 	return strings.NewReader(""), m.err
 }
 
+func noopTel() *observability.Telemetry {
+	return observability.NewTelemetry(nil, nil, nil)
+}
+
 // --- tests ---
 
 func TestImageUsecase_InitiateUpload(t *testing.T) {
@@ -127,7 +132,7 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{}, noopTel())
 
 			result, err := uc.InitiateUpload(context.Background(), "kp_abc123", tt.title, tt.mimeType, nil, nil)
 
@@ -163,7 +168,7 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -202,7 +207,7 @@ func TestImageUsecase_ListImages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			images, err := uc.ListImages(context.Background(), "kp_abc123", nil)
 
@@ -242,7 +247,7 @@ func TestImageUsecase_GetImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{}, noopTel())
 
 			detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
 
@@ -278,7 +283,7 @@ func TestImageUsecase_SoftDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			err := uc.SoftDelete(context.Background(), imageID, "kp_abc123")
 
@@ -316,7 +321,7 @@ func TestImageUsecase_ListTrashed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			images, err := uc.ListTrashed(context.Background(), "kp_abc123")
 
@@ -353,7 +358,7 @@ func TestImageUsecase_Restore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{})
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			image, err := uc.Restore(context.Background(), imageID, "kp_abc123")
 
