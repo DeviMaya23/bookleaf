@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	otelgorm "gorm.io/plugin/opentelemetry/tracing"
 )
 
 func main() {
@@ -53,9 +54,14 @@ func main() {
 	e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
 	e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
 
-	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{
+		Logger: repository.NewZapGORMLogger(logger),
+	})
 	if err != nil {
 		logger.Fatal("open database connection", zap.Error(err))
+	}
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		logger.Fatal("register otelgorm plugin", zap.Error(err))
 	}
 
 	userRepository := repository.NewUserRepository(db)
@@ -96,6 +102,7 @@ func main() {
 	protected.GET("/images/trash", imageHandler.ListTrashed)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
+	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
 

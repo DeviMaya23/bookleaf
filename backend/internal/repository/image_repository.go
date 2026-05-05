@@ -84,6 +84,21 @@ func (r *imageRepository) UpdateThumbnailPath(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
+func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(fields)
+	if result.Error != nil {
+		return nil, fmt.Errorf("update image: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("update image: %w", gorm.ErrRecordNotFound)
+	}
+
+	return r.GetByID(ctx, id, userID)
+}
+
 func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).

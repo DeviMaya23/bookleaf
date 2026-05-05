@@ -56,6 +56,10 @@ func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*d
 	return m.image, m.err
 }
 
+func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, _ usecase.UpdateImageParams) (*domain.Image, error) {
+	return m.image, m.err
+}
+
 type mockImageStorageService struct{}
 
 func (m *mockImageStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
@@ -403,6 +407,58 @@ func TestImageHandler_Restore(t *testing.T) {
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
+		})
+	}
+}
+
+func TestImageHandler_UpdateImage(t *testing.T) {
+	imageID := uuid.New()
+	title := "updated title"
+
+	tests := []struct {
+		name          string
+		body          string
+		mockUC        *mockImageUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name: "updates image and returns 200 with updated image",
+			body: `{"title":"updated title"}`,
+			mockUC: &mockImageUsecase{
+				image: &domain.Image{ID: imageID, Title: title},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "returns 404 when image not found",
+			body:          `{"title":"updated title"}`,
+			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), tt.body)
+			c.SetPath("/images/:id")
+			c.SetParamNames("id")
+			c.SetParamValues(imageID.String())
+
+			err := h.UpdateImage(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, imageID.String(), resp["id"])
+			assert.Equal(t, title, resp["title"])
 		})
 	}
 }

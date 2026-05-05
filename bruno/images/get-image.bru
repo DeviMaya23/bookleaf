@@ -5,7 +5,11 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/images/{{imageId}}
+  url: {{baseUrl}}/images/:id
   body: none
   auth: inherit
+}
+
+params:path {
+  id: a215aa2e-05b1-4937-a255-156305886338
 }

@@ -44,6 +44,10 @@ func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID
 	return m.err
 }
 
+func (m *mockImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ map[string]any) (*domain.Image, error) {
+	return m.image, m.err
+}
+
 func (m *mockImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
@@ -361,6 +365,49 @@ func TestImageUsecase_Restore(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
 
 			image, err := uc.Restore(context.Background(), imageID, "kp_abc123")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, image.ID)
+		})
+	}
+}
+
+func TestImageUsecase_UpdateImage(t *testing.T) {
+	imageID := uuid.New()
+	title := "new title"
+
+	tests := []struct {
+		name    string
+		repo    *mockImageRepository
+		params  UpdateImageParams
+		wantID  uuid.UUID
+		wantErr bool
+	}{
+		{
+			name: "returns updated image on success",
+			repo: &mockImageRepository{image: &domain.Image{ID: imageID, Title: title}},
+			params: UpdateImageParams{
+				Title: &title,
+			},
+			wantID: imageID,
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
+			params:  UpdateImageParams{Title: &title},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, noopTel())
+
+			image, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", tt.params)
 
 			if tt.wantErr {
 				require.Error(t, err)
