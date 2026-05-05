@@ -1,12 +1,12 @@
 ## Context
 
-Traces and structured logs are in place across HTTP, DB, and R2 layers. The `Telemetry` struct (`internal/observability/telemetry.go`) carries a `metric.Meter` and is already injected into `r2Storage` and `imageUsecase`, but neither uses it for metric instruments. The Echo `MetricsMiddleware` (`echo_middleware.go`) already instruments request duration and active requests but is missing request count and error counters. The `gorm.io/plugin/opentelemetry` package is not in `go.mod` and is not registered; the custom `gorm_logger.go` logs query durations but does not emit them as OTel metrics.
+Traces and structured logs are in place across HTTP, DB, and R2 layers. The `Telemetry` struct (`internal/observability/telemetry.go`) carries a `metric.Meter` and is already injected into `r2Storage` and `imageUsecase`, but neither uses it for metric instruments. The Echo `MetricsMiddleware` (`echo_middleware.go`) already instruments request duration and active requests but is missing request count and error counters. The `gorm.io/plugin/opentelemetry` package is already in `go.mod` and registered via `db.Use(otelgorm.NewPlugin())` in `main.go` as of the merged `feat/image-edit-repo-telemetry` PR. The custom `gorm_logger.go` zap bridge is also in place.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Add request count counter and 4xx/5xx error counters to `MetricsMiddleware`
-- Register `github.com/go-gorm/opentelemetry` plugin for DB traces and connection pool metrics
+- otelgorm plugin already registered — DB traces and connection pool metrics already in place
 - Add histogram and counter instruments to `r2Storage` for presigned URL generation duration and upload success/failure count
 - Add histogram and counter instruments to `imageUsecase` for thumbnail generation duration and success/failure
 
@@ -57,9 +57,8 @@ This goroutine already calculates `time.Since(start)` for its log line. The hist
 
 ## Migration Plan
 
-1. Add `github.com/go-gorm/opentelemetry` dependency and register `otelgorm.NewPlugin()` in `main.go` — additive, no breaking changes
-2. Extend `MetricsMiddleware` with new instruments — additive, existing instruments unchanged
-3. Add instruments to `r2Storage` and `imageUsecase` constructors and record in relevant methods — additive
+1. Extend `MetricsMiddleware` with new instruments — additive, existing instruments unchanged
+2. Add instruments to `r2Storage` and `imageUsecase` constructors and record in relevant methods — additive
 
 No migration or rollback strategy needed; all changes are purely additive metric instrumentation.
 

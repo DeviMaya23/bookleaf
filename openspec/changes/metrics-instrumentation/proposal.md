@@ -5,7 +5,6 @@ Traces and structured logs are in place across HTTP, DB, and R2 layers, but no O
 ## What Changes
 
 - Add a request count counter and a 4xx/5xx error counter to the existing Echo `MetricsMiddleware` in `internal/observability/echo_middleware.go`
-- Verify whether `otelgorm` v0.1.16 emits query duration histograms automatically; if not, add a custom GORM plugin that emits query duration and error count metrics
 - Add OTel Meter instruments to `internal/storage/r2.go` for presigned URL generation duration and upload success/failure count
 - Add OTel Meter instruments to `internal/usecase/image_usecase.go` for thumbnail generation duration and thumbnail success/failure count
 
@@ -25,5 +24,4 @@ Traces and structured logs are in place across HTTP, DB, and R2 layers, but no O
 - `backend/internal/observability/echo_middleware.go` — two new metric instruments added to existing middleware
 - `backend/internal/storage/r2.go` — histogram and counter instruments added to upload and presigned URL operations
 - `backend/internal/usecase/image_usecase.go` — histogram and counter instruments added to thumbnail operations
-- `backend/cmd/server/main.go` — may need updates if new instruments require initialisation at startup
-- `backend/go.mod` — no new dependencies expected; otelgorm already present
+- `backend/cmd/server/main.go` — no changes needed; otelgorm already registered by merged PR
