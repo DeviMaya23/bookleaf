@@ -1,164 +1,61 @@
-# observability-tracing Specification
+## ADDED Requirements
 
-## Purpose
-Defines OpenTelemetry distributed tracing requirements including TracerProvider initialisation and Echo request tracing middleware.
+### Requirement: GORM SQL Query Tracing via Plugin
 
-## Requirements
+The system SHALL register the `go-gorm/opentelemetry` plugin on the `*gorm.DB` instance once at startup via `db.Use(otelgorm.NewPlugin())` in `cmd/server/main.go`, after `gorm.Open`. All repositories share the same `*gorm.DB` and automatically inherit the plugin without per-file changes.
 
-### Requirement: TracerProvider Initialisation
+The plugin SHALL create child spans named `gorm.{operation}` (e.g. `gorm.Create`, `gorm.Query`) using the global OTel tracer. These spans SHALL be children of whatever span is in the request context at the time of the GORM call, placing them naturally under the calling usecase span in the trace tree.
 
-The system SHALL provide a `NewTracerProvider(ctx context.Context, exporter string) (*sdktrace.TracerProvider, error)` function in `internal/observability/tracing.go`. It SHALL switch on the `exporter` argument:
+No per-repository span creation is required — the plugin handles all SQL-layer spans globally.
 
-- `"tempo"` — creates an OTLP gRPC exporter pointed at `OTEL_TEMPO_ENDPOINT` (default `localhost:4317`)
-- `"gcp"` — creates a GCP Cloud Trace exporter using Application Default Credentials and `GOOGLE_CLOUD_PROJECT` env var
+#### Scenario: SQL query span appears under usecase span
 
-The function SHALL register the constructed provider as the global OTel `TracerProvider` via `otel.SetTracerProvider`. It SHALL also set the global `TextMapPropagator` to W3C TraceContext + Baggage. The caller is responsible for calling `provider.Shutdown(ctx)` on application exit.
+- **WHEN** a usecase method calls a repository method that executes a SQL query
+- **THEN** the trace contains a `gorm.Query` (or similar) child span under the usecase span
+- **AND** the span duration reflects the actual query execution time
 
-The provider SHALL be constructed with a resource that sets `service.name` to `"bookleaf"` so traces are correctly identified in Grafana.
+#### Scenario: GORM plugin is registered at startup and all repositories inherit it
 
-#### Scenario: Tempo exporter selected
+- **WHEN** the server starts and `db.Use(plugin)` is called once
+- **THEN** SQL spans are emitted for all subsequent GORM calls across all repositories without any per-repository instrumentation
 
-- **WHEN** `OTEL_EXPORTER=tempo`
-- **THEN** `NewTracerProvider` returns a provider that exports spans via OTLP gRPC to the configured Tempo endpoint
+#### Scenario: GORM error is recorded on the SQL span
 
-#### Scenario: GCP exporter selected
+- **WHEN** a GORM call returns an error (e.g. record not found, constraint violation)
+- **THEN** the `gorm.*` span is marked as an error span with the error recorded
 
-- **WHEN** `OTEL_EXPORTER=gcp`
-- **THEN** `NewTracerProvider` returns a provider that exports spans to GCP Cloud Trace
+---
 
-#### Scenario: Unknown exporter
+### Requirement: Zap Bridge for GORM Logger
 
-- **WHEN** `OTEL_EXPORTER` is set to an unrecognised value
-- **THEN** `NewTracerProvider` returns an error naming the unrecognised value
+The system SHALL include a zap adapter that implements GORM's `logger.Interface` and delegates log output to the application's `*zap.Logger`. The adapter SHALL be passed to `otelgorm.NewPlugin()` as its logger so that GORM diagnostic output flows through the existing structured log pipeline.
 
-#### Scenario: Service name is set on traces
+Level mapping:
+- GORM `Info` → `zap.Debug` (verbose GORM info is noise at INFO level)
+- GORM `Warn` → `zap.Warn`
+- GORM `Error` → `zap.Error`
+- GORM `Trace` (slow query) → `zap.Warn` with `elapsed_ms`, `rows_affected`, and `sql` (parameterised query string, not values)
+- GORM `Trace` (error) → `zap.Error` with `elapsed_ms`, `rows_affected`, `sql`, and `error`
 
-- **WHEN** `NewTracerProvider` is called
-- **THEN** the provider's resource includes `service.name=bookleaf`
-- **AND** traces appear under the `bookleaf` service in Grafana
+The slow-query threshold (above which `Trace` emits at `Warn`) SHALL default to 200ms and SHALL be configurable.
 
-## Removed Requirements
+Raw SQL parameter values SHALL NOT appear in log output to prevent accidental credential or PII exposure.
 
-### Requirement: Jaeger Exporter
+The `Trace` method receives a `context.Context`. The bridge SHALL call `LoggerFromContext(ctx, base)` before logging slow query and error entries so that those log lines carry a `trace_id` field. This ensures Grafana's trace→log correlation button finds the GORM log lines when navigating from a `gorm.*` span in Tempo.
 
-**Reason:** Jaeger is replaced by Tempo in the local dev stack. Tempo accepts the same OTLP gRPC protocol; there is no functional difference for the exporter code.
+#### Scenario: Slow query emits a Warn log with trace_id
 
-**Migration:** Set `OTEL_EXPORTER=tempo` and `OTEL_TEMPO_ENDPOINT=<host>:4317`. Remove `OTEL_JAEGER_ENDPOINT` from the environment.
+- **WHEN** a GORM query exceeds the slow-query threshold (200ms default)
+- **THEN** a WARN log is emitted with `elapsed_ms`, `rows_affected`, and the parameterised `sql` string
+- **AND** the log entry includes a `trace_id` field matching the active span's trace ID
+- **AND** no parameter values appear in the log entry
 
-### Requirement: Echo Request Tracing Middleware
+#### Scenario: GORM error emits an Error log with trace_id
 
-The system SHALL provide an Echo middleware `TraceMiddleware(tracer trace.Tracer) echo.MiddlewareFunc` in `internal/observability/echo_middleware.go`. The middleware SHALL:
+- **WHEN** GORM encounters a database error during a query
+- **THEN** an ERROR log is emitted with `elapsed_ms`, `rows_affected`, `sql`, `error`, and `trace_id`
 
-1. Extract W3C `traceparent`/`tracestate` headers from the inbound request using the global propagator
-2. Start a new span named after the matched route pattern (e.g., `GET /images/:id`)
-3. Store the span context on the request context so downstream code can access it
-4. End the span after the handler returns, recording the HTTP status code as a span attribute
+#### Scenario: GORM slow query log is findable via trace→log correlation
 
-#### Scenario: Inbound request creates a root span
-
-- **WHEN** an HTTP request arrives without a `traceparent` header
-- **THEN** the middleware creates a new root span
-- **AND** the span name matches the route pattern
-
-#### Scenario: Inbound request continues a remote trace
-
-- **WHEN** an HTTP request arrives with a valid `traceparent` header
-- **THEN** the middleware creates a child span whose parent is the remote trace context
-
-#### Scenario: Span records HTTP status code
-
-- **WHEN** the handler returns a `4xx` or `5xx` response
-- **THEN** the span has an `http.status_code` attribute matching the response code
-### Requirement: Per-Layer Child Span Creation
-
-Every handler method, usecase method, and storage method that performs meaningful work SHALL create a child span at its entry point. The span SHALL be created from the `Tracer` field of the injected `*observability.Telemetry`:
-
-```go
-ctx, span := tel.Tracer.Start(ctx, "package.Function")
-defer span.End()
-```
-
-`span.End()` SHALL always be deferred immediately after `Start` so that early returns and panics do not leak open spans.
-
-The updated `ctx` carrying the child span SHALL be passed to all downstream calls (usecase calls from handlers, repository and storage calls from usecases) so that the trace tree is correctly linked.
-
-Layers in scope:
-- `internal/handler/` — all public handler methods
-- `internal/usecase/` — all public usecase methods
-- `internal/storage/r2.go` — `GeneratePresignedPutURL`, `GeneratePresignedGetURL`, `PutObject`, `GetObject`
-
-SQL repository methods are out of scope for this change.
-
-#### Scenario: Handler creates a child span linked to the HTTP trace
-
-- **WHEN** a handler method is invoked and the request context already carries a span from `TraceMiddleware`
-- **THEN** `tel.Tracer.Start(ctx, ...)` creates a child span whose parent is the HTTP boundary span
-- **AND** the child span appears nested under the route span in Jaeger
-
-#### Scenario: Usecase span is a child of the handler span
-
-- **WHEN** a handler calls a usecase method, passing the span-carrying `ctx`
-- **THEN** the usecase span appears nested under the handler span in the trace
-
-#### Scenario: Deferred End is called on early return
-
-- **WHEN** a handler or usecase method returns early due to a validation error before completing all work
-- **THEN** `span.End()` is still called (via defer)
-- **AND** the span appears in Jaeger with a short duration reflecting the early exit
-
-### Requirement: Span Naming Convention
-
-Spans SHALL be named using the format `package.Function`, where:
-- `package` is the Go package name (e.g. `handler`, `usecase`, `storage`)
-- `Function` is the exported method name on the type (e.g. `InitiateUpload`, `ListImages`)
-
-Examples:
-- `handler.InitiateImageUpload`
-- `usecase.CompleteUpload`
-- `storage.GeneratePresignedPutURL`
-
-Generic names (`"upload"`, `"handler"`, `"db"`) SHALL NOT be used.
-
-#### Scenario: Span name is locatable in source
-
-- **WHEN** a span named `usecase.CompleteUpload` appears in Jaeger
-- **THEN** a developer can locate the span origin by searching for `"usecase.CompleteUpload"` in the codebase
-
-### Requirement: Error Recording on Spans
-
-When a method returns a non-nil error, the span SHALL be marked with the error before returning:
-
-```go
-if err != nil {
-    span.RecordError(err)
-    span.SetStatus(codes.Error, err.Error())
-    return err
-}
-```
-
-Both `RecordError` and `SetStatus` SHALL be called together. Calling only one is not sufficient — `RecordError` adds the error as a span event, while `SetStatus` marks the span as failed in the trace UI.
-
-Business-logic errors (e.g. `ErrNotFound`, `ErrUnauthorized`) SHALL be recorded on the span in the same way as infrastructure errors.
-
-#### Scenario: Infrastructure error is recorded on span
-
-- **WHEN** a usecase calls a repository and the repository returns an error
-- **THEN** `span.RecordError(err)` and `span.SetStatus(codes.Error, err.Error())` are called on the usecase span
-- **AND** the span appears as an error span in Jaeger
-
-#### Scenario: Business logic error is recorded on span
-
-- **WHEN** a handler detects an unauthorised access attempt and returns an error
-- **THEN** the handler span is marked as an error span with the reason recorded
-
-### Requirement: Trace Context Propagation Through Layers
-
-The `ctx` value returned by `tel.Tracer.Start` SHALL be threaded through all downstream calls within the same request. Handlers SHALL pass the span-enriched `ctx` to usecase calls; usecases SHALL pass it to repository and storage calls.
-
-This propagation is additive to the W3C `traceparent` propagation already implemented in `TraceMiddleware` — the middleware seeds the root span, and each layer adds child spans by using the `ctx` it receives.
-
-#### Scenario: Full trace shows all layers for a single request
-
-- **WHEN** `POST /images` is called end-to-end
-- **THEN** the Jaeger trace for that request contains a root HTTP span from `TraceMiddleware`, a child `handler.InitiateImageUpload` span, a child `usecase.InitiateUpload` span, and a child `storage.GeneratePresignedPutURL` span
-- **AND** all spans share the same trace ID
+- **WHEN** a slow GORM query occurs within a traced request
+- **THEN** clicking the Logs button on the `gorm.*` span in Grafana Tempo opens Loki results containing the slow query log line for that trace ID
