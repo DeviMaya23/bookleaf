@@ -1,0 +1,27 @@
+meta {
+  name: Update Image
+  type: http
+  seq: 9
+}
+
+patch {
+  url: {{baseUrl}}/images/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: a215aa2e-05b1-4937-a255-156305886338
+}
+
+body:json {
+  {
+    "title": "new title2",
+    "folder_id": "f3e20650-125d-4e89-b9d0-12a67bb4a8aa"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
