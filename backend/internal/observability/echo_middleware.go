@@ -99,6 +99,14 @@ func MetricsMiddleware(meter metric.Meter) echo.MiddlewareFunc {
 		"http.server.active_requests",
 		metric.WithDescription("Number of in-flight HTTP server requests"),
 	)
+	requestCount, _ := meter.Int64Counter(
+		"http.server.request.count",
+		metric.WithDescription("Total number of HTTP server requests"),
+	)
+	requestErrors, _ := meter.Int64Counter(
+		"http.server.request.errors",
+		metric.WithDescription("Total number of HTTP server requests that resulted in a 4xx or 5xx response"),
+	)
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -121,6 +129,15 @@ func MetricsMiddleware(meter metric.Meter) echo.MiddlewareFunc {
 				attrs := append(baseAttrs, semconv.HTTPResponseStatusCodeKey.Int(statusCode))
 				activeRequests.Add(req.Context(), -1, metric.WithAttributes(baseAttrs...))
 				duration.Record(req.Context(), float64(time.Since(start).Milliseconds()), metric.WithAttributes(attrs...))
+				requestCount.Add(req.Context(), 1, metric.WithAttributes(attrs...))
+				if statusCode >= 400 {
+					statusClass := "4xx"
+					if statusCode >= 500 {
+						statusClass = "5xx"
+					}
+					errorAttrs := append(baseAttrs, attribute.String("http.status_class", statusClass))
+					requestErrors.Add(req.Context(), 1, metric.WithAttributes(errorAttrs...))
+				}
 			}()
 
 			return next(c)
