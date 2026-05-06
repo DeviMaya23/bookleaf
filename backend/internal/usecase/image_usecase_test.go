@@ -13,6 +13,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"gorm.io/gorm"
 )
 
@@ -100,6 +103,33 @@ func (m *mockThumbnailService) Generate(_ context.Context, _ io.Reader) (io.Read
 
 func noopTel() *observability.Telemetry {
 	return observability.NewTelemetry(nil, nil, nil)
+}
+
+func makeMetricsTel(t *testing.T) (*observability.Telemetry, func() metricdata.ResourceMetrics) {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
+	tel := observability.NewTelemetry(nil, nil, mp.Meter("test"))
+	collect := func() metricdata.ResourceMetrics {
+		var rm metricdata.ResourceMetrics
+		require.NoError(t, reader.Collect(context.Background(), &rm))
+		return rm
+	}
+	return tel, collect
+}
+
+func findInt64Sum(rm metricdata.ResourceMetrics, name string) []metricdata.DataPoint[int64] {
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name == name {
+				if data, ok := m.Data.(metricdata.Sum[int64]); ok {
+					return data.DataPoints
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // --- tests ---
@@ -417,4 +447,42 @@ func TestImageUsecase_UpdateImage(t *testing.T) {
 			assert.Equal(t, tt.wantID, image.ID)
 		})
 	}
+}
+
+func TestImageUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
+	imageID := uuid.New()
+	tel, collect := makeMetricsTel(t)
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}}
+
+	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, tel)
+	err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	require.NoError(t, err)
+
+	rm := collect()
+	points := findInt64Sum(rm, "r2.upload.count")
+	require.Len(t, points, 1)
+	assert.Equal(t, int64(1), points[0].Value)
+
+	status, ok := points[0].Attributes.Value(attribute.Key("r2.status"))
+	require.True(t, ok)
+	assert.Equal(t, "success", status.AsString())
+}
+
+func TestImageUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
+	imageID := uuid.New()
+	tel, collect := makeMetricsTel(t)
+	repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
+
+	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, tel)
+	err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	require.Error(t, err)
+
+	rm := collect()
+	points := findInt64Sum(rm, "r2.upload.count")
+	require.Len(t, points, 1)
+	assert.Equal(t, int64(1), points[0].Value)
+
+	status, ok := points[0].Attributes.Value(attribute.Key("r2.status"))
+	require.True(t, ok)
+	assert.Equal(t, "error", status.AsString())
 }

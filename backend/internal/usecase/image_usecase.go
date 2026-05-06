@@ -12,7 +12,9 @@ import (
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/thumbnail"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -53,18 +55,38 @@ type ImageUsecase interface {
 }
 
 type imageUsecase struct {
-	imageRepo  ImageRepository
-	store      storage.StorageService
-	thumbnails thumbnail.ThumbnailService
-	tel        *observability.Telemetry
+	imageRepo         ImageRepository
+	store             storage.StorageService
+	thumbnails        thumbnail.ThumbnailService
+	tel               *observability.Telemetry
+	uploadCount       metric.Int64Counter
+	thumbnailDuration metric.Float64Histogram
+	thumbnailCount    metric.Int64Counter
 }
 
 func NewImageUsecase(imageRepo ImageRepository, store storage.StorageService, thumbnails thumbnail.ThumbnailService, tel *observability.Telemetry) ImageUsecase {
+	uploadCount, _ := tel.Meter.Int64Counter(
+		"r2.upload.count",
+		metric.WithDescription("Total number of upload completion requests"),
+	)
+	thumbnailDuration, _ := tel.Meter.Float64Histogram(
+		"r2.thumbnail.duration",
+		metric.WithUnit("ms"),
+		metric.WithDescription("Duration of thumbnail generation in milliseconds"),
+	)
+	thumbnailCount, _ := tel.Meter.Int64Counter(
+		"r2.thumbnail.count",
+		metric.WithDescription("Total number of thumbnail generation attempts"),
+	)
+
 	return &imageUsecase{
-		imageRepo:  imageRepo,
-		store:      store,
-		thumbnails: thumbnails,
-		tel:        tel,
+		imageRepo:         imageRepo,
+		store:             store,
+		thumbnails:        thumbnails,
+		tel:               tel,
+		uploadCount:       uploadCount,
+		thumbnailDuration: thumbnailDuration,
+		thumbnailCount:    thumbnailCount,
 	}
 }
 
@@ -125,9 +147,11 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
+		u.uploadCount.Add(ctx, 1, metric.WithAttributes(attribute.String("r2.status", "error")))
 		return err
 	}
 
+	u.uploadCount.Add(ctx, 1, metric.WithAttributes(attribute.String("r2.status", "success")))
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("upload completed",
 		zap.String("event", "r2.upload.completed"),
 		zap.String("image_id", id.String()),
@@ -149,12 +173,20 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 	logger.Info("thumbnail job started", zap.String("event", "thumbnail.job.started"))
 	start := time.Now()
 
+	recordMetrics := func(status string) {
+		elapsed := float64(time.Since(start).Milliseconds())
+		attrs := metric.WithAttributes(attribute.String("r2.status", status))
+		u.thumbnailDuration.Record(ctx, elapsed, attrs)
+		u.thumbnailCount.Add(ctx, 1, attrs)
+	}
+
 	src, err := u.store.GetObject(ctx, image.R2Path)
 	if err != nil {
 		logger.Error("thumbnail job failed",
 			zap.String("event", "thumbnail.job.failed"),
 			zap.Error(err),
 		)
+		recordMetrics("error")
 		return
 	}
 	defer src.Close()
@@ -165,6 +197,7 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 			zap.String("event", "thumbnail.job.failed"),
 			zap.Error(err),
 		)
+		recordMetrics("error")
 		return
 	}
 
@@ -175,6 +208,7 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 			zap.String("event", "thumbnail.job.failed"),
 			zap.Error(err),
 		)
+		recordMetrics("error")
 		return
 	}
 
@@ -183,6 +217,7 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 			zap.String("event", "thumbnail.job.failed"),
 			zap.Error(err),
 		)
+		recordMetrics("error")
 		return
 	}
 
@@ -190,6 +225,7 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 		zap.String("event", "thumbnail.job.completed"),
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
+	recordMetrics("success")
 }
 
 func (u *imageUsecase) ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error) {

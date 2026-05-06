@@ -11,16 +11,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/devi/bookleaf/internal/config"
 	"github.com/devi/bookleaf/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
 type r2Storage struct {
-	client    *s3.Client
-	presign   *s3.PresignClient
-	bucket    string
-	publicURL string
-	tel       *observability.Telemetry
+	client             *s3.Client
+	presign            *s3.PresignClient
+	bucket             string
+	publicURL          string
+	tel                *observability.Telemetry
+	presignURLDuration metric.Float64Histogram
 }
 
 func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) StorageService {
@@ -32,12 +35,19 @@ func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) StorageServ
 		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
 	})
 
+	presignURLDuration, _ := tel.Meter.Float64Histogram(
+		"r2.presigned_url.duration",
+		metric.WithUnit("ms"),
+		metric.WithDescription("Duration of R2 presigned URL generation in milliseconds"),
+	)
+
 	return &r2Storage{
-		client:    client,
-		presign:   s3.NewPresignClient(client),
-		bucket:    cfg.BucketName,
-		publicURL: cfg.PublicURL,
-		tel:       tel,
+		client:             client,
+		presign:            s3.NewPresignClient(client),
+		bucket:             cfg.BucketName,
+		publicURL:          cfg.PublicURL,
+		tel:                tel,
+		presignURLDuration: presignURLDuration,
 	}
 }
 
@@ -50,12 +60,25 @@ func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentTyp
 	defer span.End()
 
 	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+	start := time.Now()
 
 	resp, err := r.presign.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
 	}, s3.WithPresignExpires(ttl))
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	r.presignURLDuration.Record(ctx, float64(time.Since(start).Milliseconds()),
+		metric.WithAttributes(
+			attribute.String("r2.operation", "presigned_put"),
+			attribute.String("r2.status", status),
+		),
+	)
+
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -79,11 +102,24 @@ func (r *r2Storage) GeneratePresignedGetURL(ctx context.Context, key string, ttl
 	defer span.End()
 
 	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+	start := time.Now()
 
 	resp, err := r.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(r.bucket),
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(ttl))
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	r.presignURLDuration.Record(ctx, float64(time.Since(start).Milliseconds()),
+		metric.WithAttributes(
+			attribute.String("r2.operation", "presigned_get"),
+			attribute.String("r2.status", status),
+		),
+	)
+
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
