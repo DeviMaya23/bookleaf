@@ -27,9 +27,9 @@ When `OTEL_ENABLED` is unset or `false`, `cmd/server/main.go` SHALL skip all of 
 - **THEN** `db.Use(otelgorm.NewPlugin())` is NOT called
 - **AND** no SQL spans or DB metrics are emitted
 
-#### Scenario: OTel disabled — Telemetry no-ops absorb all instrumentation calls
+#### Scenario: OTel disabled — logger remains active, tracer and meter are no-ops
 
 - **WHEN** `OTEL_ENABLED=false`
-- **AND** a handler, usecase, or storage layer calls `tel.Tracer.Start(...)` or `tel.Meter.Int64Counter(...)`
-- **THEN** the calls complete without error or panic
+- **THEN** `tel.Logger` is the real Zap logger and structured log output is emitted to console as normal
+- **AND** calls to `tel.Tracer.Start(...)` or `tel.Meter.Int64Counter(...)` complete without error or panic
 - **AND** no spans or metrics are exported

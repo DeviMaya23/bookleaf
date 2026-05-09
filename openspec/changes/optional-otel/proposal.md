@@ -6,7 +6,7 @@ OTel instrumentation is currently always-on and requires `OTEL_EXPORTER` and `OT
 
 - `ObsConfig` gains an `OTELEnabled bool` field loaded from `OTEL_ENABLED` (optional, defaults to `false`)
 - `OTEL_EXPORTER` and `OTEL_METRICS_EXPORTER` are only validated as required when `OTEL_ENABLED=true`; they are skipped entirely otherwise
-- `cmd/server/main.go` conditionally initialises `TracerProvider` and `MeterProvider` only when OTel is enabled; when disabled, `NewTelemetry` is called with nil arguments so all instrumentation is routed through no-op providers
+- `cmd/server/main.go` conditionally initialises `TracerProvider` and `MeterProvider` only when OTel is enabled; when disabled, `NewTelemetry` is called with the real logger but nil tracer/meter so structured logs are always emitted to console while tracing and metrics are routed through no-op providers
 - `TraceMiddleware`, `MetricsMiddleware`, and the GORM OTel plugin are only registered when OTel is enabled
 - The `/metrics` Prometheus endpoint is only registered when OTel is enabled
 

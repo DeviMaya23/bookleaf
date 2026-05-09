@@ -30,6 +30,7 @@ func setRequiredEnvVars(t *testing.T) {
 func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	t.Chdir(t.TempDir())
 	setRequiredEnvVars(t)
+	t.Setenv("OTEL_ENABLED", "true")
 	t.Setenv("GOOGLE_VISION_API_KEY", "abc123")
 	t.Setenv("PORT", "9090")
 
@@ -51,6 +52,7 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.Equal(t, "secret-access-key", cfg.R2.SecretAccessKey)
 	assert.Equal(t, "bucket-name", cfg.R2.BucketName)
 	assert.Equal(t, "https://assets.bookleaf.app", cfg.R2.PublicURL)
+	assert.True(t, cfg.Obs.OTELEnabled)
 	assert.Equal(t, "jaeger", cfg.Obs.OTELExporter)
 	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
 	assert.Equal(t, "abc123", cfg.Vision.APIKey)
@@ -86,8 +88,6 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 		{"missing R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"},
 		{"missing R2_BUCKET_NAME", "R2_BUCKET_NAME"},
 		{"missing R2_PUBLIC_URL", "R2_PUBLIC_URL"},
-		{"missing OTEL_EXPORTER", "OTEL_EXPORTER"},
-		{"missing OTEL_METRICS_EXPORTER", "OTEL_METRICS_EXPORTER"},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +104,72 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 			assert.Contains(t, err.Error(), tt.missingVar)
 		})
 	}
+}
+
+func TestLoad_OTELDefaultsDisabledWhenUnset(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.False(t, cfg.Obs.OTELEnabled)
+}
+
+func TestLoad_OTELDisabledAllowsMissingExporter(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("OTEL_ENABLED", "false")
+	t.Setenv("OTEL_EXPORTER", "")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "", cfg.Obs.OTELExporter)
+}
+
+func TestLoad_OTELEnabledRequiresExporter(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("OTEL_ENABLED", "true")
+	t.Setenv("OTEL_EXPORTER", "")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "OTEL_EXPORTER")
+}
+
+func TestLoad_OTELEnabledRequiresMetricsExporter(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("OTEL_ENABLED", "true")
+	t.Setenv("OTEL_METRICS_EXPORTER", "")
+
+	cfg, err := Load()
+
+	require.Error(t, err)
+	assert.Nil(t, cfg)
+	assert.Contains(t, err.Error(), "OTEL_METRICS_EXPORTER")
+}
+
+func TestLoad_OTELEnabledWithExportersSet(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+	t.Setenv("OTEL_ENABLED", "true")
+	t.Setenv("OTEL_EXPORTER", "tempo")
+	t.Setenv("OTEL_METRICS_EXPORTER", "prometheus")
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.True(t, cfg.Obs.OTELEnabled)
+	assert.Equal(t, "tempo", cfg.Obs.OTELExporter)
+	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
 }
 
 func TestLoad_LogFormat(t *testing.T) {

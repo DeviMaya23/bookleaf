@@ -6,7 +6,7 @@ OTel is always initialised at startup. `OTEL_EXPORTER` and `OTEL_METRICS_EXPORTE
 
 **Goals:**
 - `OTEL_ENABLED=true` preserves the current behaviour exactly
-- `OTEL_ENABLED` unset or `false` skips all OTel initialisation and routes all instrumentation through no-op providers at zero cost
+- `OTEL_ENABLED` unset or `false` skips OTel provider initialisation; the real Zap logger is always active so structured logs continue to appear in the console, while tracing and metrics are routed through no-op providers at zero cost
 - OTel-specific env vars (`OTEL_EXPORTER`, `OTEL_METRICS_EXPORTER`) are not validated when OTel is disabled — no startup error if they are absent
 
 **Non-Goals:**
@@ -26,7 +26,7 @@ OTel is always initialised at startup. `OTEL_EXPORTER` and `OTEL_METRICS_EXPORTE
 
 ### Decision 2: Conditional provider init block in `main.go`
 
-`main.go` wraps `NewTracerProvider`, `NewMeterProvider`, `TraceMiddleware`, `MetricsMiddleware`, `db.Use(otelgorm.NewPlugin())`, and the `/metrics` route registration in a single `if cfg.Obs.OTELEnabled { ... }` block. When disabled, `NewTelemetry(nil, nil, nil)` is called directly, which substitutes no-op logger, tracer, and meter internally.
+`main.go` wraps `NewTracerProvider`, `NewMeterProvider`, `TraceMiddleware`, `MetricsMiddleware`, `db.Use(otelgorm.NewPlugin())`, and the `/metrics` route registration in a single `if cfg.Obs.OTELEnabled { ... }` block. When disabled, `NewTelemetry(logger, nil, nil)` is called — the real Zap logger is always passed so console log output is preserved, while tracer and meter are substituted with no-ops internally.
 
 **Alternative considered:** initialise real providers always but point them at a no-op exporter. Rejected — this still requires the exporter env vars and adds unnecessary provider overhead.
 
