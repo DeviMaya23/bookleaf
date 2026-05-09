@@ -12,6 +12,7 @@ import (
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
+	"github.com/devi/bookleaf/internal/vision"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"go.opentelemetry.io/otel"
@@ -73,7 +74,11 @@ func main() {
 	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
-	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService, tel)
+	var visionService vision.VisionService
+	if cfg.Vision.APIKey != "" {
+		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
+	}
+	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, storageService, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)

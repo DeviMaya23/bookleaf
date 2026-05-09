@@ -40,16 +40,16 @@ The system SHALL record an `r2.upload.count` Int64Counter instrument in `imageUs
 
 ### Requirement: Thumbnail Generation Metrics
 
-The system SHALL record a `r2.thumbnail.duration` Float64Histogram instrument (unit: `ms`) and an `r2.thumbnail.count` Int64Counter instrument in `imageUsecase`. Both instruments SHALL be initialised once in `NewImageUsecase` and stored as fields on the struct. They SHALL be recorded in `generateThumbnail` at the point where the goroutine concludes (success or any failure step). The `r2.status` attribute SHALL be `"success"` or `"error"`.
+The system SHALL record a `r2.thumbnail.duration` Float64Histogram instrument (unit: `ms`) and an `r2.thumbnail.count` Int64Counter instrument in `imageUsecase`. Both instruments SHALL be initialised once in `NewImageUsecase` and stored as fields on the struct. They SHALL be recorded in `uploadThumbnail` at the point where the goroutine concludes (success or any failure step). The `r2.status` attribute SHALL be `"success"` or `"error"`.
 
 #### Scenario: Successful thumbnail generation records duration and increments success counter
 
-- **WHEN** `generateThumbnail` completes successfully
+- **WHEN** `uploadThumbnail` completes successfully
 - **THEN** `r2.thumbnail.duration` is recorded with `r2.status="success"`
 - **AND** `r2.thumbnail.count` is incremented with `r2.status="success"`
 
 #### Scenario: Failed thumbnail generation records duration and increments error counter
 
-- **WHEN** `generateThumbnail` fails at any step (fetch, generate, put, or DB update)
+- **WHEN** `uploadThumbnail` fails at any step (fetch, generate, put, or DB update)
 - **THEN** `r2.thumbnail.duration` is recorded with `r2.status="error"`
 - **AND** `r2.thumbnail.count` is incremented with `r2.status="error"`

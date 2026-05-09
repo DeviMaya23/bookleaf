@@ -40,11 +40,16 @@ type ObsConfig struct {
 	LogFormat           string
 }
 
+type VisionConfig struct {
+	APIKey string
+}
+
 type Config struct {
 	Kinde KindeConfig
 	DB    DBConfig
 	R2    R2Config
 	Obs   ObsConfig
+	Vision VisionConfig
 	Port  string
 }
 
@@ -150,6 +155,7 @@ func loadFromEnv() (*Config, error) {
 	}
 
 	logFormat := envWithDefault("LOG_FORMAT", "json")
+	visionAPIKey := envWithDefault("GOOGLE_VISION_API_KEY", "")
 	port := envWithDefault("PORT", "8080")
 
 	return &Config{
@@ -177,6 +183,9 @@ func loadFromEnv() (*Config, error) {
 			OTELExporter:        otelExporter,
 			OTELMetricsExporter: otelMetricsExporter,
 			LogFormat:           logFormat,
+		},
+		Vision: VisionConfig{
+			APIKey: visionAPIKey,
 		},
 		Port: port,
 	}, nil

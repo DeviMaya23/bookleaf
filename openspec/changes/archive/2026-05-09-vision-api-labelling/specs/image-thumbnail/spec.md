@@ -1,43 +1,4 @@
-## ADDED Requirements
-
-### Requirement: ThumbnailService Interface
-
-The system SHALL define a `ThumbnailService` interface in `internal/thumbnail/` with a single `Generate` method. The image usecase SHALL depend on this interface.
-
-Method:
-- `Generate(ctx context.Context, src io.Reader) (io.Reader, error)` — reads the source image, returns a resized JPEG reader
-
-#### Scenario: Interface is satisfied by imaging implementation
-
-- **WHEN** the Go package is compiled
-- **THEN** the concrete thumbnail implementation satisfies `ThumbnailService` without compilation errors
-
----
-
-### Requirement: Thumbnail Generation
-
-The system SHALL implement `ThumbnailService` using the `disintegration/imaging` library. The generated thumbnail SHALL:
-
-- Fit within a 600×600 pixel bounding box while preserving the original aspect ratio (no distortion)
-- Be encoded as JPEG regardless of the source image format
-- Use `imaging.Lanczos` as the resampling filter
-
-#### Scenario: Landscape image is resized to fit 600×600
-
-- **WHEN** a 1200×600 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 600×300
-
-#### Scenario: Portrait image is resized to fit 600×600
-
-- **WHEN** a 600×1200 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 300×600
-
-#### Scenario: Image already within bounds is not upscaled
-
-- **WHEN** a 200×100 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 200×100
-
----
+## MODIFIED Requirements
 
 ### Requirement: Async Thumbnail Storage
 

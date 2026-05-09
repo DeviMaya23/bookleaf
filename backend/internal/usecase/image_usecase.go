@@ -1,9 +1,12 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/thumbnail"
+	"github.com/devi/bookleaf/internal/vision"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -43,9 +47,21 @@ type ImageDetail struct {
 	ImageURL string
 }
 
+type FolderSuggestion struct {
+	FolderID   *uuid.UUID
+	FolderName string
+	IsNew      bool
+}
+
+type CompleteUploadResult struct {
+	ImageID          uuid.UUID
+	FolderSuggestion *FolderSuggestion
+	Warning          string
+}
+
 type ImageUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID) (*UploadInitResult, error)
-	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) error
+	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
 	ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error)
@@ -58,13 +74,24 @@ type imageUsecase struct {
 	imageRepo         ImageRepository
 	store             storage.StorageService
 	thumbnails        thumbnail.ThumbnailService
+	visionService     vision.VisionService
+	folderRepo        FolderRepository
+	userRepo          UserRepository
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
 	thumbnailDuration metric.Float64Histogram
 	thumbnailCount    metric.Int64Counter
 }
 
-func NewImageUsecase(imageRepo ImageRepository, store storage.StorageService, thumbnails thumbnail.ThumbnailService, tel *observability.Telemetry) ImageUsecase {
+func NewImageUsecase(
+	imageRepo ImageRepository,
+	store storage.StorageService,
+	thumbnails thumbnail.ThumbnailService,
+	visionService vision.VisionService,
+	folderRepo FolderRepository,
+	userRepo UserRepository,
+	tel *observability.Telemetry,
+) ImageUsecase {
 	uploadCount, _ := tel.Meter.Int64Counter(
 		"r2.upload.count",
 		metric.WithDescription("Total number of upload completion requests"),
@@ -83,6 +110,9 @@ func NewImageUsecase(imageRepo ImageRepository, store storage.StorageService, th
 		imageRepo:         imageRepo,
 		store:             store,
 		thumbnails:        thumbnails,
+		visionService:     visionService,
+		folderRepo:        folderRepo,
+		userRepo:          userRepo,
 		tel:               tel,
 		uploadCount:       uploadCount,
 		thumbnailDuration: thumbnailDuration,
@@ -137,18 +167,19 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 	return &UploadInitResult{Image: created, UploadURL: uploadURL}, nil
 }
 
-func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string) error {
+func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CompleteUpload")
 	defer span.End()
 
 	start := time.Now()
+	result := &CompleteUploadResult{ImageID: id}
 
 	image, err := u.imageRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		u.uploadCount.Add(ctx, 1, metric.WithAttributes(attribute.String("r2.status", "error")))
-		return err
+		return nil, err
 	}
 
 	u.uploadCount.Add(ctx, 1, metric.WithAttributes(attribute.String("r2.status", "success")))
@@ -159,18 +190,133 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	go u.generateThumbnail(image)
-	return nil
+	thumbnailBytes, err := u.prepareThumbnail(ctx, image)
+	if err != nil {
+		result.Warning = "thumbnail generation failed"
+		return result, nil
+	}
+
+	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", image.UserID, image.ID.String())
+	go u.uploadThumbnail(image, thumbnailKey, thumbnailBytes)
+
+	result.FolderSuggestion, result.Warning = u.runVisionFlow(ctx, id, userID, thumbnailBytes)
+	return result, nil
 }
 
-func (u *imageUsecase) generateThumbnail(image *domain.Image) {
+func (u *imageUsecase) prepareThumbnail(ctx context.Context, image *domain.Image) ([]byte, error) {
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger).With(
+		zap.String("image_id", image.ID.String()),
+		zap.String("user_id", image.UserID),
+	)
+
+	src, err := u.store.GetObject(ctx, image.R2Path)
+	if err != nil {
+		logger.Error("prepare thumbnail failed",
+			zap.String("event", "thumbnail.prepare.failed"),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+	defer src.Close()
+
+	thumb, err := u.thumbnails.Generate(ctx, src)
+	if err != nil {
+		logger.Error("prepare thumbnail failed",
+			zap.String("event", "thumbnail.prepare.failed"),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	thumbnailBytes, err := io.ReadAll(thumb)
+	if err != nil {
+		logger.Error("prepare thumbnail failed",
+			zap.String("event", "thumbnail.prepare.failed"),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	return thumbnailBytes, nil
+}
+
+func (u *imageUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, userID string, thumbnailBytes []byte) (suggestion *FolderSuggestion, warning string) {
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to fetch user",
+			zap.String("event", "vision.user.fetch_failed"),
+			zap.String("image_id", imageID.String()),
+			zap.Error(err),
+		)
+		return nil, "ai labelling skipped: could not fetch user"
+	}
+
+	if !user.VisionEnabled || u.visionService == nil {
+		return nil, ""
+	}
+
+	visionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	labels, err := u.visionService.AnnotateImage(visionCtx, thumbnailBytes)
+	if err != nil {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: annotation failed",
+			zap.String("event", "vision.annotation.failed"),
+			zap.String("image_id", imageID.String()),
+			zap.Error(err),
+		)
+		return nil, "ai labelling failed"
+	}
+
+	if len(labels) == 0 {
+		return nil, ""
+	}
+
+	labelsJSON, err := json.Marshal(labels)
+	if err != nil {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to marshal labels",
+			zap.String("event", "vision.marshal.failed"),
+			zap.String("image_id", imageID.String()),
+			zap.Error(err),
+		)
+		return nil, "ai labelling failed"
+	}
+
+	if err := u.imageRepo.UpdateAILabels(ctx, imageID, labelsJSON); err != nil {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to save labels",
+			zap.String("event", "vision.labels.save_failed"),
+			zap.String("image_id", imageID.String()),
+			zap.Error(err),
+		)
+		return nil, "ai labelling failed"
+	}
+
+	topLabel := labels[0]
+	folder, err := u.folderRepo.FindByName(ctx, userID, topLabel.Description)
+	if err != nil {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: folder lookup failed",
+			zap.String("event", "vision.folder_lookup.failed"),
+			zap.String("image_id", imageID.String()),
+			zap.Error(err),
+		)
+		return nil, "folder suggestion unavailable"
+	}
+
+	s := &FolderSuggestion{FolderName: topLabel.Description, IsNew: folder == nil}
+	if folder != nil {
+		s.FolderID = &folder.ID
+	}
+	return s, ""
+}
+
+func (u *imageUsecase) uploadThumbnail(image *domain.Image, thumbnailKey string, thumbnailBytes []byte) {
 	ctx := context.Background()
 	logger := u.tel.Logger.With(
 		zap.String("image_id", image.ID.String()),
 		zap.String("user_id", image.UserID),
 	)
 
-	logger.Info("thumbnail job started", zap.String("event", "thumbnail.job.started"))
+	logger.Info("upload thumbnail job started", zap.String("event", "upload.thumbnail.job.started"))
 	start := time.Now()
 
 	recordMetrics := func(status string) {
@@ -180,32 +326,9 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 		u.thumbnailCount.Add(ctx, 1, attrs)
 	}
 
-	src, err := u.store.GetObject(ctx, image.R2Path)
-	if err != nil {
-		logger.Error("thumbnail job failed",
-			zap.String("event", "thumbnail.job.failed"),
-			zap.Error(err),
-		)
-		recordMetrics("error")
-		return
-	}
-	defer src.Close()
-
-	thumb, err := u.thumbnails.Generate(ctx, src)
-	if err != nil {
-		logger.Error("thumbnail job failed",
-			zap.String("event", "thumbnail.job.failed"),
-			zap.Error(err),
-		)
-		recordMetrics("error")
-		return
-	}
-
-	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", image.UserID, image.ID.String())
-
-	if err := u.store.PutObject(ctx, thumbnailKey, thumb, "image/jpeg"); err != nil {
-		logger.Error("thumbnail job failed",
-			zap.String("event", "thumbnail.job.failed"),
+	if err := u.store.PutObject(ctx, thumbnailKey, bytes.NewReader(thumbnailBytes), "image/jpeg"); err != nil {
+		logger.Error("upload thumbnail job failed",
+			zap.String("event", "upload.thumbnail.job.failed"),
 			zap.Error(err),
 		)
 		recordMetrics("error")
@@ -213,16 +336,16 @@ func (u *imageUsecase) generateThumbnail(image *domain.Image) {
 	}
 
 	if err := u.imageRepo.UpdateThumbnailPath(ctx, image.ID, thumbnailKey); err != nil {
-		logger.Error("thumbnail job failed",
-			zap.String("event", "thumbnail.job.failed"),
+		logger.Error("upload thumbnail job failed",
+			zap.String("event", "upload.thumbnail.job.failed"),
 			zap.Error(err),
 		)
 		recordMetrics("error")
 		return
 	}
 
-	logger.Info("thumbnail job completed",
-		zap.String("event", "thumbnail.job.completed"),
+	logger.Info("upload thumbnail job completed",
+		zap.String("event", "upload.thumbnail.job.completed"),
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 	recordMetrics("success")

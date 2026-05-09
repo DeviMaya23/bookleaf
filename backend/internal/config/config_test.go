@@ -30,6 +30,7 @@ func setRequiredEnvVars(t *testing.T) {
 func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	t.Chdir(t.TempDir())
 	setRequiredEnvVars(t)
+	t.Setenv("GOOGLE_VISION_API_KEY", "abc123")
 	t.Setenv("PORT", "9090")
 
 	cfg, err := Load()
@@ -52,7 +53,19 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.Equal(t, "https://assets.bookleaf.app", cfg.R2.PublicURL)
 	assert.Equal(t, "jaeger", cfg.Obs.OTELExporter)
 	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
+	assert.Equal(t, "abc123", cfg.Vision.APIKey)
 	assert.Equal(t, "9090", cfg.Port)
+}
+
+func TestLoad_VisionAPIKeyUnset(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "", cfg.Vision.APIKey)
 }
 
 func TestLoad_MissingRequiredVar(t *testing.T) {

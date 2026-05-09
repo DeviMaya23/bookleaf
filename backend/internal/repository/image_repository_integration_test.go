@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -143,6 +144,30 @@ func TestImageRepository_UpdateThumbnailPath_NotFound(t *testing.T) {
 	repo, _ := setupImageTest(t)
 
 	err := repo.UpdateThumbnailPath(context.Background(), uuid.New(), "some/path.jpg")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_UpdateAILabels_Success(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	created, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+
+	labels := json.RawMessage(`[{"description":"Nature","score":0.98}]`)
+	err = repo.UpdateAILabels(context.Background(), created.ID, labels)
+	require.NoError(t, err)
+
+	found, err := repo.GetByID(context.Background(), created.ID, userID)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(labels), string(found.AILabels))
+}
+
+func TestImageRepository_UpdateAILabels_NotFound(t *testing.T) {
+	repo, _ := setupImageTest(t)
+
+	err := repo.UpdateAILabels(context.Background(), uuid.New(), json.RawMessage(`[]`))
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)

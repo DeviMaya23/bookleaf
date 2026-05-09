@@ -27,6 +27,10 @@ func (m *mockFolderRepository) List(_ context.Context, _ string) ([]*domain.Fold
 	return m.folders, m.err
 }
 
+func (m *mockFolderRepository) FindByName(_ context.Context, _, _ string) (*domain.Folder, error) {
+	return m.folder, m.err
+}
+
 func (m *mockFolderRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
 	return m.folder, m.err
 }

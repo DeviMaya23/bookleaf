@@ -46,14 +46,14 @@ The actual file transfer is a direct client-to-R2 presigned PUT that never passe
 
 `GeneratePresignedPutURL` and `GeneratePresignedGetURL` are the canonical locations for this latency — they make the actual AWS SDK call. Measuring at the usecase layer would include unrelated logic.
 
-### 6. Thumbnail metrics in `imageUsecase.generateThumbnail`
+### 6. Thumbnail metrics in `imageUsecase.uploadThumbnail`
 
 This goroutine already calculates `time.Since(start)` for its log line. The histogram record and success/failure counter increment will replace/accompany the existing log — no new timing logic required.
 
 ## Risks / Trade-offs
 
 - **Query duration/error not in metrics** — query duration and error counts are observable only via traces, not dashboards or alerting rules that query metric instruments. Accepted trade-off for this change.
-- **Goroutine context loss for thumbnail metrics** — `generateThumbnail` uses `context.Background()` rather than the request context, so thumbnail metrics will not carry trace context. This is pre-existing behaviour; do not change it here.
+- **Goroutine context loss for thumbnail metrics** — `uploadThumbnail` uses `context.Background()` rather than the request context, so thumbnail metrics will not carry trace context. This is pre-existing behaviour; do not change it here.
 
 ## Migration Plan
 

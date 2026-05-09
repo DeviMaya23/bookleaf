@@ -65,6 +65,18 @@ type imageDetailResponse struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
+type completeUploadFolderSuggestionResponse struct {
+	FolderID   *uuid.UUID `json:"folder_id"`
+	FolderName string     `json:"folder_name"`
+	IsNew      bool       `json:"is_new"`
+}
+
+type completeUploadResponse struct {
+	ImageID          uuid.UUID                               `json:"image_id"`
+	FolderSuggestion *completeUploadFolderSuggestionResponse `json:"folder_suggestion"`
+	Warning          string                                  `json:"warning,omitempty"`
+}
+
 func NewImageHandler(imageUsecase usecase.ImageUsecase, store storage.StorageService, tel *observability.Telemetry) *ImageHandler {
 	return &ImageHandler{
 		imageUsecase: imageUsecase,
@@ -118,7 +130,8 @@ func (h *ImageHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	if err := h.imageUsecase.CompleteUpload(ctx, imageID, userID); err != nil {
+	result, err := h.imageUsecase.CompleteUpload(ctx, imageID, userID)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -127,7 +140,20 @@ func (h *ImageHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete image upload")
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	var folderSuggestion *completeUploadFolderSuggestionResponse
+	if result.FolderSuggestion != nil {
+		folderSuggestion = &completeUploadFolderSuggestionResponse{
+			FolderID:   result.FolderSuggestion.FolderID,
+			FolderName: result.FolderSuggestion.FolderName,
+			IsNew:      result.FolderSuggestion.IsNew,
+		}
+	}
+
+	return c.JSON(http.StatusOK, completeUploadResponse{
+		ImageID:          result.ImageID,
+		FolderSuggestion: folderSuggestion,
+		Warning:          result.Warning,
+	})
 }
 
 func (h *ImageHandler) ListImages(c echo.Context) error {
