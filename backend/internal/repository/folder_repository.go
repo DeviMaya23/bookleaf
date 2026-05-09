@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/usecase"
@@ -38,6 +39,20 @@ func (r *folderRepository) List(ctx context.Context, userID string) ([]*domain.F
 	}
 
 	return folders, nil
+}
+
+func (r *folderRepository) FindByName(ctx context.Context, userID, name string) (*domain.Folder, error) {
+	var folder domain.Folder
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND name ILIKE ?", userID, strings.TrimSpace(name)).
+		First(&folder).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("select folder by name: %w", err)
+	}
+
+	return &folder, nil
 }
 
 func (r *folderRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error) {

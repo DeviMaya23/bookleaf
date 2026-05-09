@@ -21,19 +21,20 @@ import (
 // --- mocks ---
 
 type mockImageUsecase struct {
-	uploadResult *usecase.UploadInitResult
-	imageDetail  *usecase.ImageDetail
-	image        *domain.Image
-	images       []*domain.Image
-	err          error
+	uploadResult   *usecase.UploadInitResult
+	completeResult *usecase.CompleteUploadResult
+	imageDetail    *usecase.ImageDetail
+	image          *domain.Image
+	images         []*domain.Image
+	err            error
 }
 
 func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID) (*usecase.UploadInitResult, error) {
 	return m.uploadResult, m.err
 }
 
-func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
+func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) (*usecase.CompleteUploadResult, error) {
+	return m.completeResult, m.err
 }
 
 func (m *mockImageUsecase) ListImages(_ context.Context, _ string, _ *uuid.UUID) ([]*domain.Image, error) {
@@ -146,12 +147,37 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 		name          string
 		mockUC        *mockImageUsecase
 		wantStatus    int
+		wantImageID   string
+		wantWarning   string
+		wantIsNew     *bool
 		wantErrStatus int
 	}{
 		{
-			name:       "completes upload and returns 204",
-			mockUC:     &mockImageUsecase{},
-			wantStatus: http.StatusNoContent,
+			name: "completes upload and returns 200 response",
+			mockUC: &mockImageUsecase{
+				completeResult: &usecase.CompleteUploadResult{
+					ImageID: imageID,
+					FolderSuggestion: &usecase.FolderSuggestion{
+						FolderName: "Nature",
+						IsNew:      true,
+					},
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantImageID: imageID.String(),
+			wantIsNew:   func() *bool { v := true; return &v }(),
+		},
+		{
+			name: "completes upload with warning",
+			mockUC: &mockImageUsecase{
+				completeResult: &usecase.CompleteUploadResult{
+					ImageID: imageID,
+					Warning: "ai labelling failed",
+				},
+			},
+			wantStatus:  http.StatusOK,
+			wantImageID: imageID.String(),
+			wantWarning: "ai labelling failed",
 		},
 		{
 			name:          "returns 404 when image not found",
@@ -176,6 +202,21 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, tt.wantImageID, resp["image_id"])
+			if tt.wantWarning != "" {
+				assert.Equal(t, tt.wantWarning, resp["warning"])
+			} else {
+				_, exists := resp["warning"]
+				assert.False(t, exists)
+			}
+			if tt.wantIsNew != nil {
+				suggestion, ok := resp["folder_suggestion"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, *tt.wantIsNew, suggestion["is_new"])
+			}
 		})
 	}
 }

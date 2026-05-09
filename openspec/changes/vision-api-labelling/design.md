@@ -91,7 +91,18 @@ type CompleteUploadResult struct {
 
 ---
 
-### 6. `GOOGLE_VISION_API_KEY` is optional in config
+### 6. `CompleteUpload` delegates to two private helpers
+
+**Decision:** The synchronous work inside `CompleteUpload` is split into two private methods on `imageUsecase`:
+
+- `prepareThumbnail(ctx, image) ([]byte, error)` — fetches the original from R2 and generates thumbnail bytes
+- `runVisionFlow(ctx, imageID, userID, thumbnailBytes) (suggestion *FolderSuggestion, warning string)` — checks `VisionEnabled`, calls Vision API, persists labels, resolves folder suggestion; returns no error (always fails open)
+
+**Rationale:** Keeps `CompleteUpload` readable as an orchestration method. `runVisionFlow` in particular is isolated so that a v2 iteration (e.g. swapping Vision provider, adding async queuing, or changing the suggestion logic) has a clear, contained seam to cut against without touching thumbnail or upload logic.
+
+---
+
+### 7. `GOOGLE_VISION_API_KEY` is optional in config
 
 **Decision:** Add a `VisionConfig` sub-struct to `Config` with a single `APIKey string` field, loaded via `envWithDefault("GOOGLE_VISION_API_KEY", "")`. Not required — `config.Load()` does not return an error if it is absent.
 

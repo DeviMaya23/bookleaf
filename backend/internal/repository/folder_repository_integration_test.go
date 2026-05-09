@@ -80,6 +80,38 @@ func TestFolderRepository_List_Failure(t *testing.T) {
 	}
 }
 
+func TestFolderRepository_FindByName_Success(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_abc123")
+	existing := createFolder(t, tx, "kp_abc123", "Nature", nil)
+	repo := NewFolderRepository(tx)
+
+	folder, err := repo.FindByName(context.Background(), "kp_abc123", "nature")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if folder == nil {
+		t.Fatal("expected folder, got nil")
+	}
+	if folder.ID != existing.ID {
+		t.Fatalf("expected id %s, got %s", existing.ID, folder.ID)
+	}
+}
+
+func TestFolderRepository_FindByName_NotFound(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_abc123")
+	repo := NewFolderRepository(tx)
+
+	folder, err := repo.FindByName(context.Background(), "kp_abc123", "missing-folder")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if folder != nil {
+		t.Fatalf("expected nil folder, got: %+v", folder)
+	}
+}
+
 func TestFolderRepository_GetByID_Success(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")

@@ -27,7 +27,7 @@ The `ai_labels` field on `Image` exists but is never populated. Integrating Goog
 
 - `internal/vision/` — new package (interface + Google Vision HTTP client)
 - `internal/config/config.go` — new `VisionConfig` sub-struct and `GOOGLE_VISION_API_KEY` optional env var
-- `internal/usecase/image_usecase.go` — `CompleteUpload` and `generateThumbnail` restructured; `VisionService` and `FolderRepository` dependencies added for label lookup and folder name matching
+- `internal/usecase/image_usecase.go` — `CompleteUpload` and `uploadThumbnail` restructured; `VisionService` and `FolderRepository` dependencies added for label lookup and folder name matching
 - `internal/handler/image.go` — `CompleteUpload` handler response type changed
 - `internal/domain/image.go` — no change (AILabels field already exists)
 - `internal/domain/user.go` — no change (VisionEnabled field already exists)

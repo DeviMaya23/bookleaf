@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
@@ -13,6 +14,7 @@ type ImageRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	GetDeletedByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error
+	UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error
 	Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	Restore(ctx context.Context, id uuid.UUID, userID string) error

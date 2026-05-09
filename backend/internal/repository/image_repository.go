@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -79,6 +80,21 @@ func (r *imageRepository) UpdateThumbnailPath(ctx context.Context, id uuid.UUID,
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("update image thumbnail_path: %w", gorm.ErrRecordNotFound)
+	}
+
+	return nil
+}
+
+func (r *imageRepository) UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("id = ?", id).
+		Update("ai_labels", labels)
+	if result.Error != nil {
+		return fmt.Errorf("update image ai_labels: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update image ai_labels: %w", gorm.ErrRecordNotFound)
 	}
 
 	return nil
