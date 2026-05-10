@@ -34,9 +34,12 @@ Subdirectories (`hooks/`, `components/`, `pages/`, `lib/`, `types/`) will be cre
 **`components.json` at repo root of `frontend/`**
 shadcn's CLI expects `components.json` at the package root. Placing it there keeps `npx shadcn add <component>` working without flags.
 
+**Tailwind v4 + shadcn v4**
+shadcn v4 (current stable) requires Tailwind v4 — the two are coupled. Tailwind v4 drops `tailwind.config.ts` in favour of CSS-based configuration; content paths are auto-detected. shadcn's init generates all required CSS variables and base layer rules directly into `src/index.css`. No `tailwind.config.ts` is needed for the scaffold.
+
 ## Risks / Trade-offs
 
-[Tailwind v4 vs v3 API differences] → Pin to Tailwind v3 for now; shadcn's stable config tooling targets v3. Upgrade path is documented when shadcn ships full v4 support.
+[Tailwind v4 CSS-based config] → No `tailwind.config.ts` theme extension at scaffold time; custom tokens are added via CSS variables in `index.css` instead. This is the idiomatic v4 approach and is fully supported by shadcn v4.
 
 [Node version drift] → Add `.nvmrc` / `engines` field in `package.json` pinned to Node 20 LTS to keep CI and local environments aligned.
 

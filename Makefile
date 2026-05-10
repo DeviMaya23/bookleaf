@@ -1,6 +1,6 @@
 -include Makefile.local
 
-.PHONY: tidy run test-cover-repository rebuild
+.PHONY: tidy run test-cover-repository rebuild fe-install fe-dev
 
 tidy:
 	@cd backend && go mod tidy
@@ -13,3 +13,9 @@ test-cover-repository:
 
 rebuild:
 	@docker compose build --no-cache app
+
+fe-install:
+	@cd frontend && npm install
+
+fe-dev:
+	@cd frontend && npm run dev
