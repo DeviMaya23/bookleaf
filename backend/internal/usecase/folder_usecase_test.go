@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -47,193 +48,166 @@ func (m *mockFolderRepository) DeleteWithCascade(_ context.Context, _ uuid.UUID,
 	return m.err
 }
 
+type mockFolderImageRepository struct {
+	count int64
+	err   error
+}
+
+func (m *mockFolderImageRepository) Create(_ context.Context, _ *domain.Image) (*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID) ([]*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+func (m *mockFolderImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ json.RawMessage) error {
+	return m.err
+}
+func (m *mockFolderImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ map[string]any) (*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+func (m *mockFolderImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+func (m *mockFolderImageRepository) ListTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockFolderImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
+	return m.count, m.err
+}
+
+func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) FolderUsecase {
+	return NewFolderUsecase(folderRepo, imageRepo, observability.NewTelemetry(nil, nil, nil))
+}
+
 func TestFolderUsecase_Create(t *testing.T) {
 	folderID := uuid.New()
+	desc := "desc"
 
-	tests := []struct {
-		name      string
-		inputName string
-		repo      *mockFolderRepository
-		wantName  string
-		wantErr   error
-	}{
-		{
-			name:      "creates folder successfully",
-			inputName: "travel",
-			repo:      &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
-			wantName:  "travel",
-		},
-		{
-			name:      "returns error for blank name",
-			inputName: "   ",
-			repo:      &mockFolderRepository{},
-			wantErr:   ErrInvalidFolderName,
-		},
-	}
+	t.Run("creates folder successfully", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(
+			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel", Description: &desc}},
+			&mockFolderImageRepository{},
+		)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewFolderUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+		folder, err := uc.Create(context.Background(), "kp_abc123", "travel", nil, &desc)
 
-			folder, err := uc.Create(context.Background(), "kp_abc123", tt.inputName, nil)
+		require.NoError(t, err)
+		assert.Equal(t, folderID, folder.ID)
+		require.NotNil(t, folder.Description)
+		assert.Equal(t, desc, *folder.Description)
+	})
 
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantName, folder.Name)
-		})
-	}
+	t.Run("returns error for blank name", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
+
+		_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil, nil)
+
+		require.ErrorIs(t, err, ErrInvalidFolderName)
+	})
 }
 
 func TestFolderUsecase_List(t *testing.T) {
-	tests := []struct {
-		name    string
-		repo    *mockFolderRepository
-		wantLen int
-		wantErr bool
-	}{
-		{
-			name: "returns user folders",
-			repo: &mockFolderRepository{
-				folders: []*domain.Folder{
-					{ID: uuid.New(), Name: "travel"},
-					{ID: uuid.New(), Name: "design"},
-				},
-			},
-			wantLen: 2,
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockFolderRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
-	}
+	t.Run("returns user folders", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(
+			&mockFolderRepository{folders: []*domain.Folder{{ID: uuid.New()}, {ID: uuid.New()}}},
+			&mockFolderImageRepository{},
+		)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewFolderUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+		folders, err := uc.List(context.Background(), "kp_abc123")
 
-			folders, err := uc.List(context.Background(), "kp_abc123")
+		require.NoError(t, err)
+		assert.Len(t, folders, 2)
+	})
 
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Len(t, folders, tt.wantLen)
-		})
-	}
+	t.Run("propagates repository error", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
+
+		_, err := uc.List(context.Background(), "kp_abc123")
+
+		require.Error(t, err)
+	})
 }
 
 func TestFolderUsecase_GetByID(t *testing.T) {
 	folderID := uuid.New()
 
-	tests := []struct {
-		name    string
-		repo    *mockFolderRepository
-		wantID  uuid.UUID
-		wantErr bool
-	}{
-		{
-			name:   "returns folder by id",
-			repo:   &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
-			wantID: folderID,
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockFolderRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
-	}
+	t.Run("returns folder detail with image count", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(
+			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+			&mockFolderImageRepository{count: 3},
+		)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewFolderUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+		detail, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
 
-			folder, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
+		require.NoError(t, err)
+		assert.Equal(t, folderID, detail.Folder.ID)
+		assert.EqualValues(t, 3, detail.ImageCount)
+	})
 
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, folder.ID)
-		})
-	}
+	t.Run("propagates repository error", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
+
+		_, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
+
+		require.Error(t, err)
+	})
 }
 
 func TestFolderUsecase_Update(t *testing.T) {
 	folderID := uuid.New()
+	desc := "new desc"
 
-	tests := []struct {
-		name      string
-		inputName string
-		repo      *mockFolderRepository
-		wantName  string
-		wantErr   error
-	}{
-		{
-			name:      "updates folder successfully",
-			inputName: "updated",
-			repo:      &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "updated"}},
-			wantName:  "updated",
-		},
-		{
-			name:      "returns error for blank name",
-			inputName: "",
-			repo:      &mockFolderRepository{},
-			wantErr:   ErrInvalidFolderName,
-		},
-	}
+	t.Run("updates folder successfully", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(
+			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "updated", Description: &desc}},
+			&mockFolderImageRepository{},
+		)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewFolderUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+		folder, err := uc.Update(context.Background(), folderID, "kp_abc123", "updated", nil, &desc)
 
-			folder, err := uc.Update(context.Background(), folderID, "kp_abc123", tt.inputName, nil)
+		require.NoError(t, err)
+		assert.Equal(t, folderID, folder.ID)
+		require.NotNil(t, folder.Description)
+		assert.Equal(t, desc, *folder.Description)
+	})
 
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantName, folder.Name)
-		})
-	}
+	t.Run("returns error for blank name", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
+
+		_, err := uc.Update(context.Background(), folderID, "kp_abc123", "", nil, nil)
+
+		require.ErrorIs(t, err, ErrInvalidFolderName)
+	})
 }
 
 func TestFolderUsecase_Delete(t *testing.T) {
 	folderID := uuid.New()
 
-	tests := []struct {
-		name    string
-		repo    *mockFolderRepository
-		wantErr bool
-	}{
-		{
-			name: "deletes folder successfully",
-			repo: &mockFolderRepository{},
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockFolderRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
-	}
+	t.Run("deletes folder successfully", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewFolderUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+		err := uc.Delete(context.Background(), folderID, "kp_abc123")
 
-			err := uc.Delete(context.Background(), folderID, "kp_abc123")
+		require.NoError(t, err)
+	})
 
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
+	t.Run("propagates repository error", func(t *testing.T) {
+		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
+
+		err := uc.Delete(context.Background(), folderID, "kp_abc123")
+
+		require.Error(t, err)
+	})
 }

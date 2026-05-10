@@ -1,9 +1,13 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"strings"
 	"testing"
@@ -24,12 +28,16 @@ import (
 // --- mocks ---
 
 type mockImageRepository struct {
-	image  *domain.Image
-	images []*domain.Image
-	err    error
+	image        *domain.Image
+	images       []*domain.Image
+	err          error
+	count        int64
+	updateFields map[string]any
+	createdImage *domain.Image
 }
 
-func (m *mockImageRepository) Create(_ context.Context, _ *domain.Image) (*domain.Image, error) {
+func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
+	m.createdImage = image
 	return m.image, m.err
 }
 
@@ -53,7 +61,8 @@ func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ j
 	return m.err
 }
 
-func (m *mockImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ map[string]any) (*domain.Image, error) {
+func (m *mockImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, fields map[string]any) (*domain.Image, error) {
+	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
 }
 
@@ -69,12 +78,41 @@ func (m *mockImageRepository) ListTrashed(_ context.Context, _ string) ([]*domai
 	return m.images, m.err
 }
 
+func (m *mockImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
+	return m.count, m.err
+}
+
+func _mapCopy(fields map[string]any) map[string]any {
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for k, v := range fields {
+		out[k] = v
+	}
+	return out
+}
+
+func generateTestPNGBytes(t *testing.T, width, height int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
 type mockStorageService struct {
 	putURL       string
 	getURL       string
 	err          error
 	getObjectErr error
 	putObjectErr error
+	objectBytes  []byte
 	getCalls     int
 	putCalls     int
 }
@@ -91,6 +129,9 @@ func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadClos
 	m.getCalls++
 	if m.getObjectErr != nil {
 		return nil, m.getObjectErr
+	}
+	if m.objectBytes != nil {
+		return io.NopCloser(bytes.NewReader(m.objectBytes)), m.err
 	}
 	return io.NopCloser(strings.NewReader("")), m.err
 }
@@ -159,7 +200,6 @@ func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]vision
 	return out, nil
 }
 
-
 func noopTel() *observability.Telemetry {
 	return observability.NewTelemetry(nil, nil, nil)
 }
@@ -227,7 +267,7 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
-			result, err := uc.InitiateUpload(context.Background(), "kp_abc123", tt.title, tt.mimeType, nil, nil)
+			result, err := uc.InitiateUpload(context.Background(), "kp_abc123", tt.title, tt.mimeType, nil, nil, nil)
 
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
@@ -238,6 +278,21 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 			assert.Equal(t, imageID, result.Image.ID)
 		})
 	}
+}
+
+func TestImageUsecase_InitiateUpload_WithDescription(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := NewImageUsecase(repo, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	description := "cover image"
+
+	result, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, nil, &description)
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.createdImage)
+	require.NotNil(t, repo.createdImage.Description)
+	assert.Equal(t, description, *repo.createdImage.Description)
+	assert.Equal(t, imageID, result.Image.ID)
 }
 
 func TestImageUsecase_CompleteUpload(t *testing.T) {
@@ -298,6 +353,40 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImageUsecase_CompleteUpload_PersistsMetadata(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{
+		image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.png"},
+	}
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.updateFields)
+	assert.EqualValues(t, len(store.objectBytes), repo.updateFields["file_size"])
+	assert.Equal(t, 8, repo.updateFields["width"])
+	assert.Equal(t, 6, repo.updateFields["height"])
+}
+
+func TestImageUsecase_CompleteUpload_DecodeFailureStillPersistsFileSize(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{
+		image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.bin"},
+	}
+	store := &mockStorageService{objectBytes: []byte("not-an-image")}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.updateFields)
+	assert.EqualValues(t, len(store.objectBytes), repo.updateFields["file_size"])
+	assert.Nil(t, repo.updateFields["width"])
+	assert.Nil(t, repo.updateFields["height"])
 }
 
 func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
@@ -598,6 +687,21 @@ func TestImageUsecase_UpdateImage(t *testing.T) {
 			assert.Equal(t, tt.wantID, image.ID)
 		})
 	}
+}
+
+func TestImageUsecase_UpdateImage_WithDescription(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	description := "new description"
+
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+		Description: &description,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.updateFields)
+	assert.Equal(t, description, repo.updateFields["description"])
 }
 
 func TestImageUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {

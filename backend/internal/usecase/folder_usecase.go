@@ -15,26 +15,33 @@ import (
 var ErrInvalidFolderName = errors.New("folder name is required")
 
 type FolderUsecase interface {
-	Create(ctx context.Context, userID, name string, parentID *uuid.UUID) (*domain.Folder, error)
+	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
 	List(ctx context.Context, userID string) ([]*domain.Folder, error)
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error)
-	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID) (*domain.Folder, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID string) (*FolderDetail, error)
+	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
 	Delete(ctx context.Context, id uuid.UUID, userID string) error
+}
+
+type FolderDetail struct {
+	Folder     *domain.Folder
+	ImageCount int64
 }
 
 type folderUsecase struct {
 	folderRepo FolderRepository
+	imageRepo  ImageRepository
 	tel        *observability.Telemetry
 }
 
-func NewFolderUsecase(folderRepo FolderRepository, tel *observability.Telemetry) FolderUsecase {
+func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageRepository, tel *observability.Telemetry) FolderUsecase {
 	return &folderUsecase{
 		folderRepo: folderRepo,
+		imageRepo:  imageRepo,
 		tel:        tel,
 	}
 }
 
-func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentID *uuid.UUID) (*domain.Folder, error) {
+func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CreateFolder")
 	defer span.End()
 
@@ -45,9 +52,10 @@ func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentI
 	}
 
 	folder, err := u.folderRepo.Create(ctx, &domain.Folder{
-		UserID:   userID,
-		Name:     name,
-		ParentID: parentID,
+		UserID:      userID,
+		Name:        name,
+		ParentID:    parentID,
+		Description: description,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -71,7 +79,7 @@ func (u *folderUsecase) List(ctx context.Context, userID string) ([]*domain.Fold
 	return folders, nil
 }
 
-func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error) {
+func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string) (*FolderDetail, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetFolder")
 	defer span.End()
 
@@ -81,10 +89,21 @@ func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	return folder, nil
+
+	count, err := u.imageRepo.CountByFolderID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	return &FolderDetail{
+		Folder:     folder,
+		ImageCount: count,
+	}, nil
 }
 
-func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID) (*domain.Folder, error) {
+func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateFolder")
 	defer span.End()
 
@@ -95,10 +114,11 @@ func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID, name s
 	}
 
 	folder, err := u.folderRepo.Update(ctx, &domain.Folder{
-		ID:       id,
-		UserID:   userID,
-		Name:     name,
-		ParentID: parentID,
+		ID:          id,
+		UserID:      userID,
+		Name:        name,
+		ParentID:    parentID,
+		Description: description,
 	})
 	if err != nil {
 		span.RecordError(err)

@@ -17,8 +17,9 @@ func TestFolderRepository_Create_Success(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	folder, err := repo.Create(context.Background(), &domain.Folder{
-		UserID: "kp_abc123",
-		Name:   "travel",
+		UserID:      "kp_abc123",
+		Name:        "travel",
+		Description: func() *string { v := "trip board"; return &v }(),
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -28,6 +29,9 @@ func TestFolderRepository_Create_Success(t *testing.T) {
 	}
 	if folder.Name != "travel" {
 		t.Fatalf("expected folder name travel, got: %s", folder.Name)
+	}
+	if folder.Description == nil || *folder.Description != "trip board" {
+		t.Fatalf("expected folder description trip board, got: %v", folder.Description)
 	}
 }
 
@@ -145,10 +149,11 @@ func TestFolderRepository_Update_Success(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	updated, err := repo.Update(context.Background(), &domain.Folder{
-		ID:       existing.ID,
-		UserID:   "kp_abc123",
-		Name:     "updated",
-		ParentID: &parent.ID,
+		ID:          existing.ID,
+		UserID:      "kp_abc123",
+		Name:        "updated",
+		ParentID:    &parent.ID,
+		Description: func() *string { v := "updated description"; return &v }(),
 	})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -158,6 +163,9 @@ func TestFolderRepository_Update_Success(t *testing.T) {
 	}
 	if updated.ParentID == nil || *updated.ParentID != parent.ID {
 		t.Fatalf("expected parent_id %s, got %v", parent.ID, updated.ParentID)
+	}
+	if updated.Description == nil || *updated.Description != "updated description" {
+		t.Fatalf("expected description updated description, got %v", updated.Description)
 	}
 }
 

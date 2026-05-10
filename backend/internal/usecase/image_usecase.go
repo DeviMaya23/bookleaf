@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	stdimage "image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"strings"
 	"time"
@@ -38,8 +41,9 @@ type UploadInitResult struct {
 }
 
 type UpdateImageParams struct {
-	Title    *string
-	FolderID **uuid.UUID
+	Title       *string
+	FolderID    **uuid.UUID
+	Description *string
 }
 
 type ImageDetail struct {
@@ -60,7 +64,7 @@ type CompleteUploadResult struct {
 }
 
 type ImageUsecase interface {
-	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID) (*UploadInitResult, error)
+	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
 	ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
@@ -120,7 +124,7 @@ func NewImageUsecase(
 	}
 }
 
-func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID) (*UploadInitResult, error) {
+func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.InitiateUpload")
 	defer span.End()
 
@@ -135,13 +139,14 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 	r2Path := fmt.Sprintf("users/%s/images/%s%s", userID, id.String(), storage.MimeTypeToExt(mimeType))
 
 	created, err := u.imageRepo.Create(ctx, &domain.Image{
-		ID:        id,
-		UserID:    userID,
-		Title:     title,
-		MIMEType:  mimeType,
-		SourceURL: sourceURL,
-		FolderID:  folderID,
-		R2Path:    r2Path,
+		ID:          id,
+		UserID:      userID,
+		Title:       title,
+		Description: description,
+		MIMEType:    mimeType,
+		SourceURL:   sourceURL,
+		FolderID:    folderID,
+		R2Path:      r2Path,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -190,10 +195,27 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	thumbnailBytes, err := u.prepareThumbnail(ctx, image)
+	thumbnailBytes, width, height, fileSize, err := u.prepareThumbnail(ctx, image)
 	if err != nil {
 		result.Warning = "thumbnail generation failed"
 		return result, nil
+	}
+
+	updateFields := map[string]any{
+		"file_size": fileSize,
+		"width":     nil,
+		"height":    nil,
+	}
+	if width > 0 {
+		updateFields["width"] = width
+	}
+	if height > 0 {
+		updateFields["height"] = height
+	}
+	if _, err := u.imageRepo.Update(ctx, id, userID, updateFields); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", image.UserID, image.ID.String())
@@ -203,29 +225,49 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 	return result, nil
 }
 
-func (u *imageUsecase) prepareThumbnail(ctx context.Context, image *domain.Image) ([]byte, error) {
+func (u *imageUsecase) prepareThumbnail(ctx context.Context, img *domain.Image) ([]byte, int, int, int64, error) {
 	logger := observability.LoggerFromContext(ctx, u.tel.Logger).With(
-		zap.String("image_id", image.ID.String()),
-		zap.String("user_id", image.UserID),
+		zap.String("image_id", img.ID.String()),
+		zap.String("user_id", img.UserID),
 	)
 
-	src, err := u.store.GetObject(ctx, image.R2Path)
+	src, err := u.store.GetObject(ctx, img.R2Path)
 	if err != nil {
 		logger.Error("prepare thumbnail failed",
 			zap.String("event", "thumbnail.prepare.failed"),
 			zap.Error(err),
 		)
-		return nil, err
+		return nil, 0, 0, 0, err
 	}
 	defer src.Close()
 
-	thumb, err := u.thumbnails.Generate(ctx, src)
+	rawBytes, err := io.ReadAll(src)
 	if err != nil {
 		logger.Error("prepare thumbnail failed",
 			zap.String("event", "thumbnail.prepare.failed"),
 			zap.Error(err),
 		)
-		return nil, err
+		return nil, 0, 0, 0, err
+	}
+
+	width, height := 0, 0
+	if cfg, _, decodeErr := stdimage.DecodeConfig(bytes.NewReader(rawBytes)); decodeErr != nil {
+		logger.Warn("prepare thumbnail metadata decode failed",
+			zap.String("event", "thumbnail.metadata.decode_failed"),
+			zap.Error(decodeErr),
+		)
+	} else {
+		width = cfg.Width
+		height = cfg.Height
+	}
+
+	thumb, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes))
+	if err != nil {
+		logger.Error("prepare thumbnail failed",
+			zap.String("event", "thumbnail.prepare.failed"),
+			zap.Error(err),
+		)
+		return nil, 0, 0, 0, err
 	}
 
 	thumbnailBytes, err := io.ReadAll(thumb)
@@ -234,10 +276,10 @@ func (u *imageUsecase) prepareThumbnail(ctx context.Context, image *domain.Image
 			zap.String("event", "thumbnail.prepare.failed"),
 			zap.Error(err),
 		)
-		return nil, err
+		return nil, 0, 0, 0, err
 	}
 
-	return thumbnailBytes, nil
+	return thumbnailBytes, width, height, int64(len(rawBytes)), nil
 }
 
 func (u *imageUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, userID string, thumbnailBytes []byte) (suggestion *FolderSuggestion, warning string) {
@@ -459,6 +501,9 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	}
 	if params.FolderID != nil {
 		fields["folder_id"] = *params.FolderID
+	}
+	if params.Description != nil {
+		fields["description"] = *params.Description
 	}
 
 	updated, err := u.imageRepo.Update(ctx, id, userID, fields)

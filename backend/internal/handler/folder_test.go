@@ -23,11 +23,12 @@ import (
 
 type mockFolderUsecase struct {
 	folder  *domain.Folder
+	detail  *usecase.FolderDetail
 	folders []*domain.Folder
 	err     error
 }
 
-func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID, _ *string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
@@ -35,11 +36,11 @@ func (m *mockFolderUsecase) List(_ context.Context, _ string) ([]*domain.Folder,
 	return m.folders, m.err
 }
 
-func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
-	return m.folder, m.err
+func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ string) (*usecase.FolderDetail, error) {
+	return m.detail, m.err
 }
 
-func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _, _ string, _ *uuid.UUID) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _, _ string, _ *uuid.UUID, _ *string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
@@ -87,9 +88,15 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 	}{
 		{
 			name: "creates folder and returns 201",
-			body: `{"name":"travel"}`,
+			body: `{"name":"travel","description":"trip board"}`,
 			mockUC: &mockFolderUsecase{
-				folder: &domain.Folder{ID: folderID, Name: "travel", CreatedAt: now, UpdatedAt: now},
+				folder: &domain.Folder{
+					ID:          folderID,
+					Name:        "travel",
+					Description: func() *string { v := "trip board"; return &v }(),
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				},
 			},
 			wantStatus: http.StatusCreated,
 		},
@@ -118,6 +125,8 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, folderID.String(), resp["id"])
+			_, hasDescription := resp["description"]
+			assert.True(t, hasDescription)
 		})
 	}
 }
@@ -134,7 +143,7 @@ func TestFolderHandler_ListFolders(t *testing.T) {
 			name: "returns folder list",
 			mockUC: &mockFolderUsecase{
 				folders: []*domain.Folder{
-					{ID: uuid.New(), Name: "travel"},
+					{ID: uuid.New(), Name: "travel", Description: func() *string { v := "trip"; return &v }()},
 					{ID: uuid.New(), Name: "design"},
 				},
 			},
@@ -165,6 +174,10 @@ func TestFolderHandler_ListFolders(t *testing.T) {
 			var resp []map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Len(t, resp, tt.wantLen)
+			if tt.wantLen > 0 {
+				_, hasDescription := resp[0]["description"]
+				assert.True(t, hasDescription)
+			}
 		})
 	}
 }
@@ -179,8 +192,13 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 		wantErrStatus int
 	}{
 		{
-			name:       "returns folder by id",
-			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+			name: "returns folder by id",
+			mockUC: &mockFolderUsecase{
+				detail: &usecase.FolderDetail{
+					Folder:     &domain.Folder{ID: folderID, Name: "travel", Description: func() *string { v := "trip"; return &v }()},
+					ImageCount: 3,
+				},
+			},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -210,6 +228,9 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, folderID.String(), resp["id"])
+			assert.EqualValues(t, 3, resp["image_count"])
+			_, hasDescription := resp["description"]
+			assert.True(t, hasDescription)
 		})
 	}
 }
@@ -226,8 +247,8 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 	}{
 		{
 			name:       "updates folder and returns 200",
-			body:       `{"name":"updated"}`,
-			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated"}},
+			body:       `{"name":"updated","description":"new desc"}`,
+			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated", Description: func() *string { v := "new desc"; return &v }()}},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -260,6 +281,12 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus == http.StatusOK {
+				var resp map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				_, hasDescription := resp["description"]
+				assert.True(t, hasDescription)
+			}
 		})
 	}
 }

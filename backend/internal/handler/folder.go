@@ -21,16 +21,23 @@ type FolderHandler struct {
 }
 
 type folderRequest struct {
-	Name     string     `json:"name"`
-	ParentID *uuid.UUID `json:"parent_id"`
+	Name        string     `json:"name"`
+	ParentID    *uuid.UUID `json:"parent_id"`
+	Description *string    `json:"description"`
 }
 
 type folderResponse struct {
-	ID        uuid.UUID  `json:"id"`
-	Name      string     `json:"name"`
-	ParentID  *uuid.UUID `json:"parent_id"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	ParentID    *uuid.UUID `json:"parent_id"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type folderDetailResponse struct {
+	folderResponse
+	ImageCount int64 `json:"image_count"`
 }
 
 func NewFolderHandler(folderUsecase usecase.FolderUsecase, tel *observability.Telemetry) *FolderHandler {
@@ -54,7 +61,7 @@ func (h *FolderHandler) CreateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Create(ctx, userID, req.Name, req.ParentID)
+	folder, err := h.folderUsecase.Create(ctx, userID, req.Name, req.ParentID, req.Description)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -105,7 +112,7 @@ func (h *FolderHandler) GetFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	folder, err := h.folderUsecase.GetByID(ctx, folderID, userID)
+	folderDetail, err := h.folderUsecase.GetByID(ctx, folderID, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -115,7 +122,7 @@ func (h *FolderHandler) GetFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get folder")
 	}
 
-	return c.JSON(http.StatusOK, toFolderResponse(folder))
+	return c.JSON(http.StatusOK, toFolderDetailResponse(folderDetail))
 }
 
 func (h *FolderHandler) UpdateFolder(c echo.Context) error {
@@ -137,7 +144,7 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Update(ctx, folderID, userID, req.Name, req.ParentID)
+	folder, err := h.folderUsecase.Update(ctx, folderID, userID, req.Name, req.ParentID, req.Description)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -182,10 +189,18 @@ func (h *FolderHandler) DeleteFolder(c echo.Context) error {
 
 func toFolderResponse(folder *domain.Folder) folderResponse {
 	return folderResponse{
-		ID:        folder.ID,
-		Name:      folder.Name,
-		ParentID:  folder.ParentID,
-		CreatedAt: folder.CreatedAt,
-		UpdatedAt: folder.UpdatedAt,
+		ID:          folder.ID,
+		Name:        folder.Name,
+		Description: folder.Description,
+		ParentID:    folder.ParentID,
+		CreatedAt:   folder.CreatedAt,
+		UpdatedAt:   folder.UpdatedAt,
+	}
+}
+
+func toFolderDetailResponse(folderDetail *usecase.FolderDetail) folderDetailResponse {
+	return folderDetailResponse{
+		folderResponse: toFolderResponse(folderDetail.Folder),
+		ImageCount:     folderDetail.ImageCount,
 	}
 }
