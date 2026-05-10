@@ -36,24 +36,32 @@ func main() {
 	}
 	defer logger.Sync()
 
-	tp, err := observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
-	if err != nil {
-		logger.Fatal("init tracer provider", zap.Error(err))
-	}
-	defer tp.Shutdown(ctx)
-
-	mp, metricsHandler, err := observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
-	if err != nil {
-		logger.Fatal("init meter provider", zap.Error(err))
-	}
-	defer mp.Shutdown(ctx)
-
-	tel := observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
-
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
-	e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
-	e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
+
+	var tel *observability.Telemetry
+	if cfg.Obs.OTELEnabled {
+		tp, tracerProviderErr := observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
+		if tracerProviderErr != nil {
+			logger.Fatal("init tracer provider", zap.Error(tracerProviderErr))
+		}
+		defer tp.Shutdown(ctx)
+
+		mp, metricsHandler, meterProviderErr := observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
+		if meterProviderErr != nil {
+			logger.Fatal("init meter provider", zap.Error(meterProviderErr))
+		}
+		defer mp.Shutdown(ctx)
+
+		tel = observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
+		e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
+		e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
+		if metricsHandler != nil {
+			e.GET("/metrics", echo.WrapHandler(metricsHandler))
+		}
+	} else {
+		tel = observability.NewTelemetry(logger, nil, nil)
+	}
 
 	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{
 		Logger: repository.NewZapGORMLogger(logger),
@@ -61,8 +69,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("open database connection", zap.Error(err))
 	}
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		logger.Fatal("register otelgorm plugin", zap.Error(err))
+	if cfg.Obs.OTELEnabled {
+		if err := db.Use(otelgorm.NewPlugin()); err != nil {
+			logger.Fatal("register otelgorm plugin", zap.Error(err))
+		}
 	}
 
 	userRepository := repository.NewUserRepository(db)
@@ -88,10 +98,6 @@ func main() {
 
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 	e.GET("/health", healthHandler.GetHealth)
-
-	if metricsHandler != nil {
-		e.GET("/metrics", echo.WrapHandler(metricsHandler))
-	}
 
 	protected := e.Group("")
 	protected.Use(authMiddleware)

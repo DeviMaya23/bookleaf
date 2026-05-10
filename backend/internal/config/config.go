@@ -35,6 +35,7 @@ type R2Config struct {
 }
 
 type ObsConfig struct {
+	OTELEnabled         bool
 	OTELExporter        string
 	OTELMetricsExporter string
 	LogFormat           string
@@ -45,12 +46,12 @@ type VisionConfig struct {
 }
 
 type Config struct {
-	Kinde KindeConfig
-	DB    DBConfig
-	R2    R2Config
-	Obs   ObsConfig
+	Kinde  KindeConfig
+	DB     DBConfig
+	R2     R2Config
+	Obs    ObsConfig
 	Vision VisionConfig
-	Port  string
+	Port   string
 }
 
 func Load() (*Config, error) {
@@ -144,14 +145,14 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	otelExporter, err := requireEnv("OTEL_EXPORTER")
-	if err != nil {
-		return nil, err
+	otelEnabled := envWithDefault("OTEL_ENABLED", "false") == "true"
+	otelExporter := envWithDefault("OTEL_EXPORTER", "")
+	otelMetricsExporter := envWithDefault("OTEL_METRICS_EXPORTER", "")
+	if otelEnabled && otelExporter == "" {
+		return nil, fmt.Errorf("OTEL_EXPORTER is required when OTEL_ENABLED=true")
 	}
-
-	otelMetricsExporter, err := requireEnv("OTEL_METRICS_EXPORTER")
-	if err != nil {
-		return nil, err
+	if otelEnabled && otelMetricsExporter == "" {
+		return nil, fmt.Errorf("OTEL_METRICS_EXPORTER is required when OTEL_ENABLED=true")
 	}
 
 	logFormat := envWithDefault("LOG_FORMAT", "json")
@@ -180,6 +181,7 @@ func loadFromEnv() (*Config, error) {
 			PublicURL:       r2PublicURL,
 		},
 		Obs: ObsConfig{
+			OTELEnabled:         otelEnabled,
 			OTELExporter:        otelExporter,
 			OTELMetricsExporter: otelMetricsExporter,
 			LogFormat:           logFormat,
