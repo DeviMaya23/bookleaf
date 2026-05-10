@@ -13,10 +13,14 @@ type Image struct {
 	UserID        string          `gorm:"column:user_id;type:text;not null;index"`
 	FolderID      *uuid.UUID      `gorm:"column:folder_id;type:uuid;index"`
 	Title         string          `gorm:"column:title;not null"`
+	Description   *string         `gorm:"column:description"`
 	SourceURL     *string         `gorm:"column:source_url"`
 	R2Path        string          `gorm:"column:r2_path;not null"`
 	ThumbnailPath *string         `gorm:"column:thumbnail_path"`
 	MIMEType      string          `gorm:"column:mime_type;not null"`
+	Width         *int            `gorm:"column:width"`
+	Height        *int            `gorm:"column:height"`
+	FileSize      *int64          `gorm:"column:file_size"`
 	AILabels      json.RawMessage `gorm:"column:ai_labels;type:jsonb"`
 	CreatedAt     time.Time       `gorm:"column:created_at"`
 	UpdatedAt     time.Time       `gorm:"column:updated_at"`

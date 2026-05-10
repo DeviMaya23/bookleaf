@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Folder GORM Struct
 
@@ -13,11 +13,6 @@ Fields (all DB columns use snake_case):
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 
 `DeletedAt` is not present. Folders use hard delete only.
-
-#### Scenario: Folder struct supports nesting
-
-- **WHEN** the Go package is compiled
-- **THEN** `Folder` has a nullable `ParentID` UUID field referencing the same `folders` table
 
 #### Scenario: Folder struct includes description field
 
@@ -35,31 +30,7 @@ Fields (all DB columns use snake_case):
 - **THEN** `Folder` does NOT have a `DeletedAt` field
 - **AND** GORM does NOT append `deleted_at IS NULL` to queries on `Folder`
 
-### Requirement: Folders DB Migration
-
-The system SHALL include `golang-migrate` SQL migrations that create the `folders` table (migration 000002) and remove soft-delete infrastructure (migration 000005).
-
-Migration 000005 (`remove_folders_soft_delete`) removes `deleted_at` from `folders` and changes the `images.folder_id` FK constraint from `ON DELETE SET NULL` to `ON DELETE RESTRICT`.
-
-#### Scenario: Migration creates folders table
-
-- **WHEN** all migrations are applied to a fresh database
-- **THEN** the `folders` table exists with columns: `id`, `user_id`, `parent_id`, `name`, `created_at`, `updated_at`
-- **AND** `user_id` has a NOT NULL FK constraint referencing `users(id)`
-- **AND** `parent_id` has a nullable self-referencing FK constraint on `folders(id)` with `ON DELETE RESTRICT`
-- **AND** the `deleted_at` column does NOT exist
-
-#### Scenario: Migration 000005 removes deleted_at and tightens images FK
-
-- **WHEN** migration 000005 up is applied
-- **THEN** `deleted_at` column and `idx_folders_deleted_at` index are dropped from `folders`
-- **AND** the `fk_images_folder` constraint on `images.folder_id` is changed to `ON DELETE RESTRICT`
-
-#### Scenario: Migration 000005 is reversible
-
-- **WHEN** migration 000005 down is applied
-- **THEN** `deleted_at` column and `idx_folders_deleted_at` index are restored to `folders`
-- **AND** the `fk_images_folder` constraint is restored to `ON DELETE SET NULL`
+## ADDED Requirements
 
 ### Requirement: Folder Description Migration
 

@@ -19,4 +19,5 @@ type ImageRepository interface {
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	Restore(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string) ([]*domain.Image, error)
+	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
 }

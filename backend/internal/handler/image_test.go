@@ -21,15 +21,18 @@ import (
 // --- mocks ---
 
 type mockImageUsecase struct {
-	uploadResult   *usecase.UploadInitResult
-	completeResult *usecase.CompleteUploadResult
-	imageDetail    *usecase.ImageDetail
-	image          *domain.Image
-	images         []*domain.Image
-	err            error
+	uploadResult     *usecase.UploadInitResult
+	completeResult   *usecase.CompleteUploadResult
+	imageDetail      *usecase.ImageDetail
+	image            *domain.Image
+	images           []*domain.Image
+	err              error
+	lastDescription  *string
+	lastUpdateParams usecase.UpdateImageParams
 }
 
-func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID) (*usecase.UploadInitResult, error) {
+func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
+	m.lastDescription = description
 	return m.uploadResult, m.err
 }
 
@@ -57,7 +60,8 @@ func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*d
 	return m.image, m.err
 }
 
-func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, _ usecase.UpdateImageParams) (*domain.Image, error) {
+func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*domain.Image, error) {
+	m.lastUpdateParams = params
 	return m.image, m.err
 }
 
@@ -101,7 +105,7 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 	}{
 		{
 			name: "creates image and returns 201 with upload url",
-			body: `{"title":"sunset","mime_type":"image/jpeg"}`,
+			body: `{"title":"sunset","mime_type":"image/jpeg","description":"cover"}`,
 			mockUC: &mockImageUsecase{
 				uploadResult: &usecase.UploadInitResult{
 					Image:     &domain.Image{ID: imageID, Title: "sunset"},
@@ -136,6 +140,10 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/upload", resp["upload_url"])
+			if tt.name == "creates image and returns 201 with upload url" {
+				require.NotNil(t, tt.mockUC.lastDescription)
+				assert.Equal(t, "cover", *tt.mockUC.lastDescription)
+			}
 		})
 	}
 }
@@ -233,7 +241,14 @@ func TestImageHandler_ListImages(t *testing.T) {
 			name: "returns image list",
 			mockUC: &mockImageUsecase{
 				images: []*domain.Image{
-					{ID: uuid.New(), Title: "photo 1"},
+					{
+						ID:          uuid.New(),
+						Title:       "photo 1",
+						Description: func() *string { v := "desc"; return &v }(),
+						Width:       func() *int { v := 640; return &v }(),
+						Height:      func() *int { v := 480; return &v }(),
+						FileSize:    func() *int64 { v := int64(1024); return &v }(),
+					},
 					{ID: uuid.New(), Title: "photo 2"},
 				},
 			},
@@ -264,6 +279,16 @@ func TestImageHandler_ListImages(t *testing.T) {
 			var resp []map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Len(t, resp, tt.wantLen)
+			if tt.wantLen > 0 {
+				_, hasDescription := resp[0]["description"]
+				_, hasWidth := resp[0]["width"]
+				_, hasHeight := resp[0]["height"]
+				_, hasFileSize := resp[0]["file_size"]
+				assert.True(t, hasDescription)
+				assert.True(t, hasWidth)
+				assert.True(t, hasHeight)
+				assert.True(t, hasFileSize)
+			}
 		})
 	}
 }
@@ -282,7 +307,17 @@ func TestImageHandler_GetImage(t *testing.T) {
 			name: "returns image detail with signed url",
 			mockUC: &mockImageUsecase{
 				imageDetail: &usecase.ImageDetail{
-					Image:    &domain.Image{ID: imageID, Title: "photo", MIMEType: "image/jpeg", CreatedAt: now, UpdatedAt: now},
+					Image: &domain.Image{
+						ID:          imageID,
+						Title:       "photo",
+						Description: func() *string { v := "desc"; return &v }(),
+						MIMEType:    "image/jpeg",
+						Width:       func() *int { v := 640; return &v }(),
+						Height:      func() *int { v := 480; return &v }(),
+						FileSize:    func() *int64 { v := int64(1024); return &v }(),
+						CreatedAt:   now,
+						UpdatedAt:   now,
+					},
 					ImageURL: "https://r2.example.com/view",
 				},
 			},
@@ -316,6 +351,14 @@ func TestImageHandler_GetImage(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/view", resp["image_url"])
+			_, hasDescription := resp["description"]
+			_, hasWidth := resp["width"]
+			_, hasHeight := resp["height"]
+			_, hasFileSize := resp["file_size"]
+			assert.True(t, hasDescription)
+			assert.True(t, hasWidth)
+			assert.True(t, hasHeight)
+			assert.True(t, hasFileSize)
 		})
 	}
 }
@@ -465,7 +508,7 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 	}{
 		{
 			name: "updates image and returns 200 with updated image",
-			body: `{"title":"updated title"}`,
+			body: `{"title":"updated title","description":"new desc"}`,
 			mockUC: &mockImageUsecase{
 				image: &domain.Image{ID: imageID, Title: title},
 			},
@@ -500,6 +543,10 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, title, resp["title"])
+			if tt.name == "updates image and returns 200 with updated image" {
+				require.NotNil(t, tt.mockUC.lastUpdateParams.Description)
+				assert.Equal(t, "new desc", *tt.mockUC.lastUpdateParams.Description)
+			}
 		})
 	}
 }

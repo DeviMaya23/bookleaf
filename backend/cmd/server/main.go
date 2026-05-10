@@ -79,11 +79,11 @@ func main() {
 	userUsecase := usecase.NewUserUsecase(userRepository, tel)
 	meHandler := httphandler.NewMeHandler(userUsecase, tel)
 	folderRepository := repository.NewFolderRepository(db)
-	folderUsecase := usecase.NewFolderUsecase(folderRepository, tel)
-	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
+	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
+	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	var visionService vision.VisionService
 	if cfg.Vision.APIKey != "" {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)

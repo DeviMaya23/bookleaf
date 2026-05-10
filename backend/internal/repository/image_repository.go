@@ -158,4 +158,16 @@ func (r *imageRepository) ListTrashed(ctx context.Context, userID string) ([]*do
 	return images, nil
 }
 
+func (r *imageRepository) CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("folder_id = ?", folderID).
+		Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count images by folder: %w", err)
+	}
+
+	return count, nil
+}
+
 var _ usecase.ImageRepository = (*imageRepository)(nil)

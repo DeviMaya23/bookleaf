@@ -25,15 +25,17 @@ type ImageHandler struct {
 }
 
 type updateImageRequest struct {
-	Title    *string         `json:"title"`
-	FolderID json.RawMessage `json:"folder_id"`
+	Title       *string         `json:"title"`
+	Description *string         `json:"description"`
+	FolderID    json.RawMessage `json:"folder_id"`
 }
 
 type initiateImageUploadRequest struct {
-	Title     string     `json:"title"`
-	MIMEType  string     `json:"mime_type"`
-	SourceURL *string    `json:"source_url"`
-	FolderID  *uuid.UUID `json:"folder_id"`
+	Title       string     `json:"title"`
+	MIMEType    string     `json:"mime_type"`
+	SourceURL   *string    `json:"source_url"`
+	FolderID    *uuid.UUID `json:"folder_id"`
+	Description *string    `json:"description"`
 }
 
 type initiateImageUploadResponse struct {
@@ -45,10 +47,14 @@ type initiateImageUploadResponse struct {
 type imageResponse struct {
 	ID           uuid.UUID  `json:"id"`
 	Title        string     `json:"title"`
+	Description  *string    `json:"description"`
 	MIMEType     string     `json:"mime_type"`
 	SourceURL    *string    `json:"source_url"`
 	FolderID     *uuid.UUID `json:"folder_id"`
 	ThumbnailURL *string    `json:"thumbnail_url"`
+	Width        *int       `json:"width"`
+	Height       *int       `json:"height"`
+	FileSize     *int64     `json:"file_size"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
@@ -56,10 +62,14 @@ type imageResponse struct {
 type imageDetailResponse struct {
 	ID           uuid.UUID  `json:"id"`
 	Title        string     `json:"title"`
+	Description  *string    `json:"description"`
 	MIMEType     string     `json:"mime_type"`
 	SourceURL    *string    `json:"source_url"`
 	FolderID     *uuid.UUID `json:"folder_id"`
 	ThumbnailURL *string    `json:"thumbnail_url"`
+	Width        *int       `json:"width"`
+	Height       *int       `json:"height"`
+	FileSize     *int64     `json:"file_size"`
 	ImageURL     string     `json:"image_url"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -99,7 +109,7 @@ func (h *ImageHandler) InitiateUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	result, err := h.imageUsecase.InitiateUpload(ctx, userID, req.Title, req.MIMEType, req.SourceURL, req.FolderID)
+	result, err := h.imageUsecase.InitiateUpload(ctx, userID, req.Title, req.MIMEType, req.SourceURL, req.FolderID, req.Description)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -218,10 +228,14 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 	return c.JSON(http.StatusOK, imageDetailResponse{
 		ID:           imageResp.ID,
 		Title:        imageResp.Title,
+		Description:  imageResp.Description,
 		MIMEType:     imageResp.MIMEType,
 		SourceURL:    imageResp.SourceURL,
 		FolderID:     imageResp.FolderID,
 		ThumbnailURL: imageResp.ThumbnailURL,
+		Width:        imageResp.Width,
+		Height:       imageResp.Height,
+		FileSize:     imageResp.FileSize,
 		ImageURL:     result.ImageURL,
 		CreatedAt:    imageResp.CreatedAt,
 		UpdatedAt:    imageResp.UpdatedAt,
@@ -329,7 +343,8 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 	}
 
 	params := usecase.UpdateImageParams{
-		Title: req.Title,
+		Title:       req.Title,
+		Description: req.Description,
 	}
 
 	if len(req.FolderID) > 0 {
@@ -369,10 +384,14 @@ func (h *ImageHandler) toImageResponse(image *domain.Image) imageResponse {
 	return imageResponse{
 		ID:           image.ID,
 		Title:        image.Title,
+		Description:  image.Description,
 		MIMEType:     image.MIMEType,
 		SourceURL:    image.SourceURL,
 		FolderID:     image.FolderID,
 		ThumbnailURL: thumbnailURL,
+		Width:        image.Width,
+		Height:       image.Height,
+		FileSize:     image.FileSize,
 		CreatedAt:    image.CreatedAt,
 		UpdatedAt:    image.UpdatedAt,
 	}

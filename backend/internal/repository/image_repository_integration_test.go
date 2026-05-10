@@ -313,3 +313,40 @@ func TestImageRepository_Update_NotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
+
+func TestImageRepository_CountByFolderID(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_imgcount")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "count-target"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img1 := newTestImage(user.ID)
+	img1.FolderID = &folder.ID
+	_, err = repo.Create(context.Background(), img1)
+	require.NoError(t, err)
+
+	img2 := newTestImage(user.ID)
+	img2.FolderID = &folder.ID
+	_, err = repo.Create(context.Background(), img2)
+	require.NoError(t, err)
+
+	otherFolder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "other"})
+	require.NoError(t, err)
+	img3 := newTestImage(user.ID)
+	img3.FolderID = &otherFolder.ID
+	_, err = repo.Create(context.Background(), img3)
+	require.NoError(t, err)
+
+	err = repo.SoftDelete(context.Background(), img2.ID, user.ID)
+	require.NoError(t, err)
+
+	count, err := repo.CountByFolderID(context.Background(), folder.ID)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, count)
+}

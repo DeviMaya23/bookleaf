@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Image GORM Struct
 
@@ -21,32 +21,12 @@ Fields (all DB columns use snake_case):
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
-#### Scenario: Image struct compiles with GORM tags
-
-- **WHEN** the Go package is compiled
-- **THEN** `Image` has a `gorm:"primaryKey"` UUID field and FK references to `users` and `folders`
-
 #### Scenario: Image struct compiles with all metadata fields
 
 - **WHEN** the Go package is compiled
 - **THEN** `Image` has nullable pointer fields `Description *string`, `Width *int`, `Height *int`, and `FileSize *int64` with correct GORM column tags
 
-### Requirement: Images DB Migration
-
-The system SHALL include a `golang-migrate` SQL migration that creates the `images` table with all required columns and constraints.
-
-#### Scenario: Migration creates images table
-
-- **WHEN** migrations are applied to a fresh database
-- **THEN** the `images` table exists with columns matching the `Image` struct
-- **AND** `user_id` has a NOT NULL FK constraint referencing `users(id)`
-- **AND** `folder_id` has a nullable FK constraint referencing `folders(id)`
-- **AND** `deleted_at` is a nullable timestamp column (soft delete)
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `images` table is dropped without error
+## ADDED Requirements
 
 ### Requirement: Image Metadata Migration
 

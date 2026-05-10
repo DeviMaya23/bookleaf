@@ -74,10 +74,11 @@ func (r *folderRepository) Update(ctx context.Context, folder *domain.Folder) (*
 
 	existing.Name = folder.Name
 	existing.ParentID = folder.ParentID
+	existing.Description = folder.Description
 
 	if err := r.db.WithContext(ctx).
 		Model(existing).
-		Select("name", "parent_id").
+		Select("name", "parent_id", "description").
 		Updates(existing).Error; err != nil {
 		return nil, fmt.Errorf("update folder: %w", err)
 	}
