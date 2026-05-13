@@ -66,11 +66,11 @@ type CompleteUploadResult struct {
 type ImageUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
-	ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error)
+	ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error)
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
-	ListTrashed(ctx context.Context, userID string) ([]*domain.Image, error)
+	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 }
 
@@ -393,17 +393,32 @@ func (u *imageUsecase) uploadThumbnail(image *domain.Image, thumbnailKey string,
 	recordMetrics("success")
 }
 
-func (u *imageUsecase) ListImages(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error) {
+func (u *imageUsecase) ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
 
-	images, err := u.imageRepo.List(ctx, userID, folderID)
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 200 {
+		limit = 200
+	}
+
+	images, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	return images, nil
+
+	var nextCursor *ImageCursor
+	if len(images) > limit {
+		images = images[:limit]
+		last := images[limit-1]
+		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+
+	return &ListImagesResult{Images: images, NextCursor: nextCursor}, nil
 }
 
 func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error) {
@@ -446,17 +461,32 @@ func (u *imageUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (u *imageUsecase) ListTrashed(ctx context.Context, userID string) ([]*domain.Image, error) {
+func (u *imageUsecase) ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListTrashed")
 	defer span.End()
 
-	images, err := u.imageRepo.ListTrashed(ctx, userID)
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 200 {
+		limit = 200
+	}
+
+	images, err := u.imageRepo.ListTrashed(ctx, userID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	return images, nil
+
+	var nextCursor *ImageCursor
+	if len(images) > limit {
+		images = images[:limit]
+		last := images[limit-1]
+		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+
+	return &ListTrashedResult{Images: images, NextCursor: nextCursor}, nil
 }
 
 func (u *imageUsecase) Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {

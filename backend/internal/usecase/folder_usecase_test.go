@@ -56,7 +56,7 @@ type mockFolderImageRepository struct {
 func (m *mockFolderImageRepository) Create(_ context.Context, _ *domain.Image) (*domain.Image, error) {
 	return nil, m.err
 }
-func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID) ([]*domain.Image, error) {
+func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return nil, m.err
 }
 func (m *mockFolderImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -80,7 +80,7 @@ func (m *mockFolderImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _
 func (m *mockFolderImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockFolderImageRepository) ListTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
+func (m *mockFolderImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return nil, m.err
 }
 func (m *mockFolderImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {

@@ -6,7 +6,7 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/` th
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx, userID string, folderID *uuid.UUID) ([]*domain.Image, error)` — returns non-deleted images; `folderID` nil means no filter
+- `List(ctx context.Context, userID string, folderID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows so the caller can detect next-page existence; `folderID` nil means no filter; `cursor` nil means first page
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only
 - `GetDeletedByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns soft-deleted images only
 - `UpdateThumbnailPath(ctx, id uuid.UUID, thumbnailPath string) error` — updates `thumbnail_path`; no ownership check (called internally by goroutine)
@@ -14,7 +14,7 @@ Methods:
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied fields for the image owned by `userID`
 - `SoftDelete(ctx, id uuid.UUID, userID string) error`
 - `Restore(ctx, id uuid.UUID, userID string) error`
-- `ListTrashed(ctx, userID string) ([]*domain.Image, error)`
+- `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` nil means first page
 - `CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)` — counts non-deleted images belonging to the given folder
 
 #### Scenario: Repository interface is satisfied by SQL implementation
@@ -85,6 +85,15 @@ type CompleteUploadResult struct {
 }
 ```
 
+`ListImages` and `ListTrashed` SHALL use the paginated signatures:
+
+```go
+ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
+ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
+```
+
+All other method signatures are unchanged.
+
 #### Scenario: Usecase interface is satisfied by concrete implementation
 
 - **WHEN** the Go package is compiled
@@ -125,9 +134,8 @@ Response body (201): `id`, `upload_url`, `r2_path`.
 
 ### Requirement: GET /images and GET /images/:id — Response Shape
 
-Image list and detail responses SHALL include `description`, `width`, `height`, and `file_size`.
+The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pagination` spec). The per-item `imageResponse` shape is unchanged:
 
-Updated `imageResponse` (list) shape:
 ```json
 {
   "id": "uuid",
@@ -145,17 +153,37 @@ Updated `imageResponse` (list) shape:
 }
 ```
 
-`imageDetailResponse` (single) includes the same fields plus `image_url`.
+`GET /images/:id` response (`imageDetailResponse`) is unchanged.
 
-#### Scenario: Image list response includes new fields
+#### Scenario: Image list response returns paginated envelope
 
 - **WHEN** an authenticated `GET /images` request is made
-- **THEN** each image object in the response includes `description`, `width`, `height`, and `file_size` (null when not yet populated)
+- **THEN** the response is an object with an `images` array and a `next_cursor` field
+- **AND** each item in `images` includes all existing fields (`description`, `width`, `height`, `file_size`, etc.)
 
-#### Scenario: Image detail response includes new fields
+#### Scenario: Image detail response is unchanged
 
 - **WHEN** an authenticated `GET /images/:id` request is made for an existing image
-- **THEN** the response includes `description`, `width`, `height`, and `file_size`
+- **THEN** the response shape is identical to the pre-pagination `imageDetailResponse`
+
+---
+
+### Requirement: GET /images/trash — Response Shape
+
+The `GET /images/trash` endpoint SHALL return a paginated envelope using the same `imageResponse` shape as `GET /images`:
+
+```json
+{
+  "images": [ /* array of imageResponse objects */ ],
+  "next_cursor": "<opaque string | null>"
+}
+```
+
+#### Scenario: Trash list response returns paginated envelope
+
+- **WHEN** an authenticated `GET /images/trash` request is made
+- **THEN** the response is an object with an `images` array and a `next_cursor` field
+- **AND** each item in `images` has the same shape as items returned by `GET /images`
 
 ---
 

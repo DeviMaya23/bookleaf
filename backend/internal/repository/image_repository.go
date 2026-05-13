@@ -29,15 +29,20 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
-		Order("created_at DESC")
+		Order("created_at DESC, id DESC").
+		Limit(limit + 1)
 
 	if folderID != nil {
 		query = query.Where("folder_id = ?", *folderID)
+	}
+
+	if cursor != nil {
+		query = query.Where("(created_at, id) < (?, ?)", cursor.CreatedAt, cursor.ID)
 	}
 
 	if err := query.Find(&images).Error; err != nil {
@@ -145,13 +150,20 @@ func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (r *imageRepository) ListTrashed(ctx context.Context, userID string) ([]*domain.Image, error) {
+func (r *imageRepository) ListTrashed(ctx context.Context, userID string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
-	if err := r.db.WithContext(ctx).
+
+	query := r.db.WithContext(ctx).
 		Unscoped().
 		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
-		Order("deleted_at DESC").
-		Find(&images).Error; err != nil {
+		Order("created_at DESC, id DESC").
+		Limit(limit + 1)
+
+	if cursor != nil {
+		query = query.Where("(created_at, id) < (?, ?)", cursor.CreatedAt, cursor.ID)
+	}
+
+	if err := query.Find(&images).Error; err != nil {
 		return nil, fmt.Errorf("list trashed images: %w", err)
 	}
 
