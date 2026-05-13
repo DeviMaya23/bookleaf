@@ -2,8 +2,11 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { KindeProvider } from '@kinde-oss/kinde-auth-react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
+
+const queryClient = new QueryClient()
 
 const kindeVars = {
   VITE_KINDE_CLIENT_ID: import.meta.env.VITE_KINDE_CLIENT_ID,
@@ -24,9 +27,11 @@ createRoot(document.getElementById('root')!).render(
       redirectUri={kindeVars.VITE_KINDE_REDIRECT_URL}
       logoutUri={kindeVars.VITE_KINDE_LOGOUT_REDIRECT_URL}
     >
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
     </KindeProvider>
   </StrictMode>,
 )
