@@ -9,3 +9,17 @@ get {
   body: none
   auth: inherit
 }
+
+params:query {
+  ~cursor: {{trashCursor}}
+  ~limit: 2
+}
+
+script:post-response {
+  const cursor = res.body.next_cursor;
+  if (cursor) {
+    bru.setVar("trashCursor", cursor);
+  } else {
+    bru.setVar("trashCursor", "");
+  }
+}
