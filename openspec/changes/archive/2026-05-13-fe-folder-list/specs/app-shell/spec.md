@@ -1,13 +1,4 @@
-### Requirement: Two-panel application shell
-The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width.
-
-#### Scenario: Layout renders on load
-- **WHEN** the application root is mounted
-- **THEN** the sidebar and main content area are both visible on screen simultaneously
-
-#### Scenario: Sidebar does not scroll with content
-- **WHEN** the main content area is scrolled
-- **THEN** the sidebar remains fixed in place and does not move
+## MODIFIED Requirements
 
 ### Requirement: Folder list in sidebar
 The system SHALL fetch the folder list from `GET /folders` and display it in the sidebar. An "Unsorted" entry SHALL be pinned permanently at the top of the list, visually separated from the API-sourced folders by a horizontal divider. The "+ New folder" affordance SHALL remain visible below the folder list.
@@ -31,6 +22,8 @@ The system SHALL fetch the folder list from `GET /folders` and display it in the
 #### Scenario: Empty API folder list
 - **WHEN** the application shell is rendered and `GET /folders` returns an empty list
 - **THEN** only the "Unsorted" entry is shown, with the divider and "+ New folder" button still present
+
+## MODIFIED Requirements
 
 ### Requirement: Empty image grid in main area
 The system SHALL render an empty image grid placeholder in the main content area. No real image data is required — the grid shell (container and spacing) SHALL be present.
