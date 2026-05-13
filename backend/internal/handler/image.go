@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,11 @@ type imageDetailResponse struct {
 	ImageURL     string     `json:"image_url"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+type listImagesResponse struct {
+	Images     []imageResponse `json:"images"`
+	NextCursor *string         `json:"next_cursor"`
 }
 
 type completeUploadFolderSuggestionResponse struct {
@@ -176,8 +182,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	var folderID *uuid.UUID
-	folderIDParam := c.QueryParam("folder_id")
-	if folderIDParam != "" {
+	if folderIDParam := c.QueryParam("folder_id"); folderIDParam != "" {
 		parsedFolderID, err := uuid.Parse(folderIDParam)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
@@ -185,19 +190,34 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		folderID = &parsedFolderID
 	}
 
-	images, err := h.imageUsecase.ListImages(ctx, userID, folderID)
+	limit, cursor, err := parsePaginationParams(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+	}
+
+	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
+		FolderID: folderID,
+		Cursor:   cursor,
+		Limit:    limit,
+	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list images")
 	}
 
-	response := make([]imageResponse, 0, len(images))
-	for _, image := range images {
-		response = append(response, h.toImageResponse(image))
+	images := make([]imageResponse, 0, len(result.Images))
+	for _, image := range result.Images {
+		images = append(images, h.toImageResponse(image))
 	}
 
-	return c.JSON(http.StatusOK, response)
+	var nextCursor *string
+	if result.NextCursor != nil {
+		encoded := usecase.EncodeCursor(result.NextCursor)
+		nextCursor = &encoded
+	}
+
+	return c.JSON(http.StatusOK, listImagesResponse{Images: images, NextCursor: nextCursor})
 }
 
 func (h *ImageHandler) GetImage(c echo.Context) error {
@@ -277,19 +297,33 @@ func (h *ImageHandler) ListTrashed(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	images, err := h.imageUsecase.ListTrashed(ctx, userID)
+	limit, cursor, err := parsePaginationParams(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+	}
+
+	result, err := h.imageUsecase.ListTrashed(ctx, userID, usecase.ListTrashedParams{
+		Cursor: cursor,
+		Limit:  limit,
+	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list trashed images")
 	}
 
-	response := make([]imageResponse, 0, len(images))
-	for _, image := range images {
-		response = append(response, h.toImageResponse(image))
+	images := make([]imageResponse, 0, len(result.Images))
+	for _, image := range result.Images {
+		images = append(images, h.toImageResponse(image))
 	}
 
-	return c.JSON(http.StatusOK, response)
+	var nextCursor *string
+	if result.NextCursor != nil {
+		encoded := usecase.EncodeCursor(result.NextCursor)
+		nextCursor = &encoded
+	}
+
+	return c.JSON(http.StatusOK, listImagesResponse{Images: images, NextCursor: nextCursor})
 }
 
 func (h *ImageHandler) Restore(c echo.Context) error {
@@ -372,6 +406,27 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, h.toImageResponse(image))
+}
+
+func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCursor, err error) {
+	limit = 50
+	if limitParam := c.QueryParam("limit"); limitParam != "" {
+		parsed, parseErr := strconv.Atoi(limitParam)
+		if parseErr == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	if cursorParam := c.QueryParam("cursor"); cursorParam != "" {
+		cursor, err = usecase.DecodeCursor(cursorParam)
+		if err != nil {
+			return 0, nil, err
+		}
+	}
+	return limit, cursor, nil
 }
 
 func (h *ImageHandler) toImageResponse(image *domain.Image) imageResponse {

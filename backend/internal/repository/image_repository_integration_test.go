@@ -68,7 +68,7 @@ func TestImageRepository_List_Success(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), userID, nil)
+	images, err := repo.List(context.Background(), userID, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 2)
@@ -95,7 +95,7 @@ func TestImageRepository_List_FilterByFolder(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, &folder.ID)
+	images, err := repo.List(context.Background(), user.ID, &folder.ID, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
@@ -269,7 +269,7 @@ func TestImageRepository_ListTrashed_Success(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	trashed, err := repo.ListTrashed(context.Background(), userID)
+	trashed, err := repo.ListTrashed(context.Background(), userID, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, trashed, 2)
@@ -278,10 +278,105 @@ func TestImageRepository_ListTrashed_Success(t *testing.T) {
 func TestImageRepository_ListTrashed_Empty(t *testing.T) {
 	repo, userID := setupImageTest(t)
 
-	trashed, err := repo.ListTrashed(context.Background(), userID)
+	trashed, err := repo.ListTrashed(context.Background(), userID, nil, 200)
 
 	require.NoError(t, err)
 	assert.Empty(t, trashed)
+}
+
+func TestImageRepository_List_Pagination_FirstPage(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	_, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	_, err = repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	_, err = repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+
+	// limit=2 → repo should return limit+1=3 rows, signalling more data exists
+	images, err := repo.List(context.Background(), userID, nil, nil, 2)
+
+	require.NoError(t, err)
+	assert.Len(t, images, 3)
+}
+
+func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	_, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	second, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	_, err = repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+
+	// first page: returns 3 rows (limit+1), ordered created_at DESC, id DESC
+	firstPage, err := repo.List(context.Background(), userID, nil, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, firstPage, 3)
+
+	// cursor from the 2nd item (last of the visible page)
+	cursorItem := firstPage[1]
+	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
+
+	// second page: should return only items after the cursor
+	secondPage, err := repo.List(context.Background(), userID, nil, cursor, 2)
+
+	require.NoError(t, err)
+	assert.Len(t, secondPage, 1)
+
+	// IDs on page 2 must not overlap with page 1
+	page1IDs := map[uuid.UUID]bool{firstPage[0].ID: true, firstPage[1].ID: true}
+	for _, img := range secondPage {
+		assert.False(t, page1IDs[img.ID], "page 2 item %s appeared on page 1", img.ID)
+	}
+	_ = second
+}
+
+func TestImageRepository_ListTrashed_Pagination_FirstPage(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	for range 3 {
+		img, err := repo.Create(context.Background(), newTestImage(userID))
+		require.NoError(t, err)
+		require.NoError(t, repo.SoftDelete(context.Background(), img.ID, userID))
+	}
+
+	// limit=2 → repo should return limit+1=3 rows
+	trashed, err := repo.ListTrashed(context.Background(), userID, nil, 2)
+
+	require.NoError(t, err)
+	assert.Len(t, trashed, 3)
+}
+
+func TestImageRepository_ListTrashed_Pagination_WithCursor(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	for range 3 {
+		img, err := repo.Create(context.Background(), newTestImage(userID))
+		require.NoError(t, err)
+		require.NoError(t, repo.SoftDelete(context.Background(), img.ID, userID))
+	}
+
+	// first page
+	firstPage, err := repo.ListTrashed(context.Background(), userID, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, firstPage, 3)
+
+	cursorItem := firstPage[1]
+	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
+
+	// second page
+	secondPage, err := repo.ListTrashed(context.Background(), userID, cursor, 2)
+
+	require.NoError(t, err)
+	assert.Len(t, secondPage, 1)
+
+	page1IDs := map[uuid.UUID]bool{firstPage[0].ID: true, firstPage[1].ID: true}
+	for _, img := range secondPage {
+		assert.False(t, page1IDs[img.ID], "page 2 item %s appeared on page 1", img.ID)
+	}
 }
 
 func TestImageRepository_Update_SelectiveFieldUpdate(t *testing.T) {

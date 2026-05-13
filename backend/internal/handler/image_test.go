@@ -18,17 +18,19 @@ import (
 	"gorm.io/gorm"
 )
 
+
 // --- mocks ---
 
 type mockImageUsecase struct {
-	uploadResult     *usecase.UploadInitResult
-	completeResult   *usecase.CompleteUploadResult
-	imageDetail      *usecase.ImageDetail
-	image            *domain.Image
-	images           []*domain.Image
-	err              error
-	lastDescription  *string
-	lastUpdateParams usecase.UpdateImageParams
+	uploadResult       *usecase.UploadInitResult
+	completeResult     *usecase.CompleteUploadResult
+	imageDetail        *usecase.ImageDetail
+	image              *domain.Image
+	listImagesResult   *usecase.ListImagesResult
+	listTrashedResult  *usecase.ListTrashedResult
+	err                error
+	lastDescription    *string
+	lastUpdateParams   usecase.UpdateImageParams
 }
 
 func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -40,8 +42,14 @@ func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ stri
 	return m.completeResult, m.err
 }
 
-func (m *mockImageUsecase) ListImages(_ context.Context, _ string, _ *uuid.UUID) ([]*domain.Image, error) {
-	return m.images, m.err
+func (m *mockImageUsecase) ListImages(_ context.Context, _ string, _ usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.listImagesResult != nil {
+		return m.listImagesResult, nil
+	}
+	return &usecase.ListImagesResult{}, nil
 }
 
 func (m *mockImageUsecase) GetImage(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageDetail, error) {
@@ -52,8 +60,14 @@ func (m *mockImageUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) 
 	return m.err
 }
 
-func (m *mockImageUsecase) ListTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
-	return m.images, m.err
+func (m *mockImageUsecase) ListTrashed(_ context.Context, _ string, _ usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.listTrashedResult != nil {
+		return m.listTrashedResult, nil
+	}
+	return &usecase.ListTrashedResult{}, nil
 }
 
 func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -238,18 +252,20 @@ func TestImageHandler_ListImages(t *testing.T) {
 		wantErrStatus int
 	}{
 		{
-			name: "returns image list",
+			name: "returns paginated image list",
 			mockUC: &mockImageUsecase{
-				images: []*domain.Image{
-					{
-						ID:          uuid.New(),
-						Title:       "photo 1",
-						Description: func() *string { v := "desc"; return &v }(),
-						Width:       func() *int { v := 640; return &v }(),
-						Height:      func() *int { v := 480; return &v }(),
-						FileSize:    func() *int64 { v := int64(1024); return &v }(),
+				listImagesResult: &usecase.ListImagesResult{
+					Images: []*domain.Image{
+						{
+							ID:          uuid.New(),
+							Title:       "photo 1",
+							Description: func() *string { v := "desc"; return &v }(),
+							Width:       func() *int { v := 640; return &v }(),
+							Height:      func() *int { v := 480; return &v }(),
+							FileSize:    func() *int64 { v := int64(1024); return &v }(),
+						},
+						{ID: uuid.New(), Title: "photo 2"},
 					},
-					{ID: uuid.New(), Title: "photo 2"},
 				},
 			},
 			wantStatus: http.StatusOK,
@@ -276,21 +292,55 @@ func TestImageHandler_ListImages(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
-			var resp []map[string]any
+			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Len(t, resp, tt.wantLen)
-			if tt.wantLen > 0 {
-				_, hasDescription := resp[0]["description"]
-				_, hasWidth := resp[0]["width"]
-				_, hasHeight := resp[0]["height"]
-				_, hasFileSize := resp[0]["file_size"]
-				assert.True(t, hasDescription)
-				assert.True(t, hasWidth)
-				assert.True(t, hasHeight)
-				assert.True(t, hasFileSize)
-			}
+			images, ok := resp["images"].([]any)
+			require.True(t, ok)
+			assert.Len(t, images, tt.wantLen)
+			_, hasCursor := resp["next_cursor"]
+			assert.True(t, hasCursor)
 		})
 	}
+}
+
+func TestImageHandler_ListImages_Pagination(t *testing.T) {
+	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
+		h := NewImageHandler(&mockImageUsecase{}, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images?cursor=!!!notvalid!!!", "")
+
+		err := h.ListImages(c)
+
+		assertHTTPError(t, err, http.StatusBadRequest)
+	})
+
+	t.Run("returns paginated envelope with next_cursor on success", func(t *testing.T) {
+		cursorID := uuid.New()
+		cursorTime := time.Now().UTC()
+		mockUC := &mockImageUsecase{
+			listImagesResult: &usecase.ListImagesResult{
+				Images: []*domain.Image{{ID: uuid.New(), Title: "photo"}},
+				NextCursor: &usecase.ImageCursor{
+					CreatedAt: cursorTime,
+					ID:        cursorID,
+				},
+			},
+		}
+		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, rec := newEchoContext(t, http.MethodGet, "/images", "")
+
+		err := h.ListImages(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.NotNil(t, resp["next_cursor"])
+		assert.IsType(t, "", resp["next_cursor"])
+		images, ok := resp["images"].([]any)
+		require.True(t, ok)
+		assert.Len(t, images, 1)
+	})
 }
 
 func TestImageHandler_GetImage(t *testing.T) {
@@ -413,10 +463,12 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 		wantErrStatus int
 	}{
 		{
-			name: "returns trashed images",
+			name: "returns paginated trashed images",
 			mockUC: &mockImageUsecase{
-				images: []*domain.Image{
-					{ID: uuid.New(), Title: "deleted photo"},
+				listTrashedResult: &usecase.ListTrashedResult{
+					Images: []*domain.Image{
+						{ID: uuid.New(), Title: "deleted photo"},
+					},
 				},
 			},
 			wantStatus: http.StatusOK,
@@ -443,11 +495,55 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
 
-			var resp []map[string]any
+			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Len(t, resp, tt.wantLen)
+			images, ok := resp["images"].([]any)
+			require.True(t, ok)
+			assert.Len(t, images, tt.wantLen)
+			_, hasCursor := resp["next_cursor"]
+			assert.True(t, hasCursor)
 		})
 	}
+}
+
+func TestImageHandler_ListTrashed_Pagination(t *testing.T) {
+	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
+		h := NewImageHandler(&mockImageUsecase{}, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images/trash?cursor=!!!notvalid!!!", "")
+
+		err := h.ListTrashed(c)
+
+		assertHTTPError(t, err, http.StatusBadRequest)
+	})
+
+	t.Run("returns paginated envelope with next_cursor on success", func(t *testing.T) {
+		cursorID := uuid.New()
+		cursorTime := time.Now().UTC()
+		mockUC := &mockImageUsecase{
+			listTrashedResult: &usecase.ListTrashedResult{
+				Images: []*domain.Image{{ID: uuid.New(), Title: "deleted photo"}},
+				NextCursor: &usecase.ImageCursor{
+					CreatedAt: cursorTime,
+					ID:        cursorID,
+				},
+			},
+		}
+		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
+
+		err := h.ListTrashed(c)
+
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var resp map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.NotNil(t, resp["next_cursor"])
+		assert.IsType(t, "", resp["next_cursor"])
+		images, ok := resp["images"].([]any)
+		require.True(t, ok)
+		assert.Len(t, images, 1)
+	})
 }
 
 func TestImageHandler_Restore(t *testing.T) {

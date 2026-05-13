@@ -41,7 +41,7 @@ func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*d
 	return m.image, m.err
 }
 
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return m.images, m.err
 }
 
@@ -74,7 +74,7 @@ func (m *mockImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) 
 	return m.err
 }
 
-func (m *mockImageRepository) ListTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
+func (m *mockImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return m.images, m.err
 }
 
@@ -483,16 +483,51 @@ func TestImageUsecase_ListImages(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
-			images, err := uc.ListImages(context.Background(), "kp_abc123", nil)
+			result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
 
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Len(t, images, tt.wantLen)
+			assert.Len(t, result.Images, tt.wantLen)
 		})
 	}
+}
+
+func TestImageUsecase_ListImages_Pagination(t *testing.T) {
+	now := time.Now().UTC()
+	makeImages := func(n int) []*domain.Image {
+		imgs := make([]*domain.Image, n)
+		for i := range imgs {
+			imgs[i] = &domain.Image{ID: uuid.New(), Title: "photo", CreatedAt: now.Add(-time.Duration(i) * time.Second)}
+		}
+		return imgs
+	}
+
+	t.Run("returns next_cursor when more results exist", func(t *testing.T) {
+		// repo returns limit+1 rows
+		repo := &mockImageRepository{images: makeImages(11)}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
+
+		require.NoError(t, err)
+		assert.Len(t, result.Images, 10)
+		assert.NotNil(t, result.NextCursor)
+		assert.Equal(t, result.Images[9].ID, result.NextCursor.ID)
+	})
+
+	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
+		repo := &mockImageRepository{images: makeImages(5)}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
+
+		require.NoError(t, err)
+		assert.Len(t, result.Images, 5)
+		assert.Nil(t, result.NextCursor)
+	})
 }
 
 func TestImageUsecase_GetImage(t *testing.T) {
@@ -597,16 +632,50 @@ func TestImageUsecase_ListTrashed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
-			images, err := uc.ListTrashed(context.Background(), "kp_abc123")
+			result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{})
 
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Len(t, images, tt.wantLen)
+			assert.Len(t, result.Images, tt.wantLen)
 		})
 	}
+}
+
+func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
+	now := time.Now().UTC()
+	makeImages := func(n int) []*domain.Image {
+		imgs := make([]*domain.Image, n)
+		for i := range imgs {
+			imgs[i] = &domain.Image{ID: uuid.New(), Title: "deleted photo", CreatedAt: now.Add(-time.Duration(i) * time.Second)}
+		}
+		return imgs
+	}
+
+	t.Run("returns next_cursor when more results exist", func(t *testing.T) {
+		repo := &mockImageRepository{images: makeImages(11)}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
+
+		require.NoError(t, err)
+		assert.Len(t, result.Images, 10)
+		assert.NotNil(t, result.NextCursor)
+		assert.Equal(t, result.Images[9].ID, result.NextCursor.ID)
+	})
+
+	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
+		repo := &mockImageRepository{images: makeImages(3)}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
+
+		require.NoError(t, err)
+		assert.Len(t, result.Images, 3)
+		assert.Nil(t, result.NextCursor)
+	})
 }
 
 func TestImageUsecase_Restore(t *testing.T) {
