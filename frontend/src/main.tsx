@@ -13,6 +13,7 @@ const kindeVars = {
   VITE_KINDE_ISSUER_URL: import.meta.env.VITE_KINDE_ISSUER_URL,
   VITE_KINDE_REDIRECT_URL: import.meta.env.VITE_KINDE_REDIRECT_URL,
   VITE_KINDE_LOGOUT_REDIRECT_URL: import.meta.env.VITE_KINDE_LOGOUT_REDIRECT_URL,
+  VITE_KINDE_AUDIENCE: import.meta.env.VITE_KINDE_AUDIENCE,
 }
 
 Object.entries(kindeVars).forEach(([key, value]) => {
@@ -26,6 +27,7 @@ createRoot(document.getElementById('root')!).render(
       domain={kindeVars.VITE_KINDE_ISSUER_URL}
       redirectUri={kindeVars.VITE_KINDE_REDIRECT_URL}
       logoutUri={kindeVars.VITE_KINDE_LOGOUT_REDIRECT_URL}
+      audience={kindeVars.VITE_KINDE_AUDIENCE}
     >
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>

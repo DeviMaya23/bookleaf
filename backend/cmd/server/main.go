@@ -38,6 +38,13 @@ func main() {
 
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
+	e.Use(echomiddleware.CORSWithConfig(echomiddleware.CORSConfig{
+		AllowOrigins: cfg.CORSAllowedOrigins,
+		AllowHeaders: []string{
+			echo.HeaderAuthorization,
+			echo.HeaderContentType,
+		},
+	}))
 
 	var tel *observability.Telemetry
 	if cfg.Obs.OTELEnabled {

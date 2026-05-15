@@ -12,7 +12,7 @@ test-cover-repository:
 	@cd backend && go test -covermode=atomic -coverprofile=internal/repository/coverage.out ./internal/repository/...
 
 rebuild:
-	@docker compose build --no-cache app
+	@docker compose build --no-cache app && docker compose up -d app
 
 fe-install:
 	@cd frontend && npm install

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -46,12 +47,13 @@ type VisionConfig struct {
 }
 
 type Config struct {
-	Kinde  KindeConfig
-	DB     DBConfig
-	R2     R2Config
-	Obs    ObsConfig
-	Vision VisionConfig
-	Port   string
+	Kinde              KindeConfig
+	DB                 DBConfig
+	R2                 R2Config
+	Obs                ObsConfig
+	Vision             VisionConfig
+	Port               string
+	CORSAllowedOrigins []string
 }
 
 func Load() (*Config, error) {
@@ -103,6 +105,11 @@ func loadFromEnv() (*Config, error) {
 	}
 
 	databaseSSLMode, err := requireEnv("DATABASE_SSLMODE")
+	if err != nil {
+		return nil, err
+	}
+
+	corsAllowedOriginsRaw, err := requireEnv("CORS_ALLOWED_ORIGINS")
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +196,8 @@ func loadFromEnv() (*Config, error) {
 		Vision: VisionConfig{
 			APIKey: visionAPIKey,
 		},
-		Port: port,
+		Port:               port,
+		CORSAllowedOrigins: strings.Split(corsAllowedOriginsRaw, ","),
 	}, nil
 }
 

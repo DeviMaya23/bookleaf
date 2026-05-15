@@ -12,6 +12,7 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Helper()
 	t.Setenv("KINDE_ISSUER_URL", "https://example.kinde.com")
 	t.Setenv("KINDE_AUDIENCE", "bookleaf-api")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://app.example.com")
 	t.Setenv("DATABASE_HOST", "localhost")
 	t.Setenv("DATABASE_NAME", "bookleaf")
 	t.Setenv("DATABASE_PORT", "5432")
@@ -40,6 +41,7 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.Equal(t, "https://example.kinde.com", cfg.Kinde.IssuerURL)
 	assert.Equal(t, "bookleaf-api", cfg.Kinde.Audience)
+	assert.Equal(t, []string{"http://localhost:5173", "https://app.example.com"}, cfg.CORSAllowedOrigins)
 	assert.Equal(t, "postgres://user:pass@localhost:5432/bookleaf?sslmode=disable", cfg.DB.URL)
 	assert.Equal(t, "localhost", cfg.DB.Host)
 	assert.Equal(t, "bookleaf", cfg.DB.Name)
@@ -77,6 +79,7 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 	}{
 		{"missing KINDE_ISSUER_URL", "KINDE_ISSUER_URL"},
 		{"missing KINDE_AUDIENCE", "KINDE_AUDIENCE"},
+		{"missing CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_ORIGINS"},
 		{"missing DATABASE_HOST", "DATABASE_HOST"},
 		{"missing DATABASE_NAME", "DATABASE_NAME"},
 		{"missing DATABASE_PORT", "DATABASE_PORT"},
