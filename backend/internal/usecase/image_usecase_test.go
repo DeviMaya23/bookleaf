@@ -34,6 +34,7 @@ type mockImageRepository struct {
 	count        int64
 	updateFields map[string]any
 	createdImage *domain.Image
+	lastUnfiled  bool
 }
 
 func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
@@ -41,7 +42,8 @@ func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*d
 	return m.image, m.err
 }
 
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, unfiled bool, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+	m.lastUnfiled = unfiled
 	return m.images, m.err
 }
 
@@ -527,6 +529,34 @@ func TestImageUsecase_ListImages_Pagination(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, result.Images, 5)
 		assert.Nil(t, result.NextCursor)
+	})
+}
+
+func TestImageUsecase_ListImages_Unfiled(t *testing.T) {
+	t.Run("Unfiled true passes unfiled flag to repo", func(t *testing.T) {
+		repo := &mockImageRepository{
+			images: []*domain.Image{{ID: uuid.New(), Title: "unfoldered photo"}},
+		}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: true})
+
+		require.NoError(t, err)
+		assert.True(t, repo.lastUnfiled)
+		assert.Len(t, result.Images, 1)
+	})
+
+	t.Run("Unfiled false passes no unfiled flag to repo", func(t *testing.T) {
+		repo := &mockImageRepository{
+			images: []*domain.Image{{ID: uuid.New(), Title: "any photo"}},
+		}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: false})
+
+		require.NoError(t, err)
+		assert.False(t, repo.lastUnfiled)
+		assert.Len(t, result.Images, 1)
 	})
 }
 

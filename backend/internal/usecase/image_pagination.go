@@ -17,6 +17,7 @@ type ImageCursor struct {
 
 type ListImagesParams struct {
 	FolderID *uuid.UUID
+	Unfiled  bool
 	Cursor   *ImageCursor
 	Limit    int
 }

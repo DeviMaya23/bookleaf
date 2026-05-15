@@ -22,15 +22,16 @@ import (
 // --- mocks ---
 
 type mockImageUsecase struct {
-	uploadResult       *usecase.UploadInitResult
-	completeResult     *usecase.CompleteUploadResult
-	imageDetail        *usecase.ImageDetail
-	image              *domain.Image
-	listImagesResult   *usecase.ListImagesResult
-	listTrashedResult  *usecase.ListTrashedResult
-	err                error
-	lastDescription    *string
-	lastUpdateParams   usecase.UpdateImageParams
+	uploadResult          *usecase.UploadInitResult
+	completeResult        *usecase.CompleteUploadResult
+	imageDetail           *usecase.ImageDetail
+	image                 *domain.Image
+	listImagesResult      *usecase.ListImagesResult
+	listTrashedResult     *usecase.ListTrashedResult
+	err                   error
+	lastDescription       *string
+	lastUpdateParams      usecase.UpdateImageParams
+	lastListImagesParams  usecase.ListImagesParams
 }
 
 func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -42,7 +43,8 @@ func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ stri
 	return m.completeResult, m.err
 }
 
-func (m *mockImageUsecase) ListImages(_ context.Context, _ string, _ usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
+func (m *mockImageUsecase) ListImages(_ context.Context, _ string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
+	m.lastListImagesParams = params
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -340,6 +342,30 @@ func TestImageHandler_ListImages_Pagination(t *testing.T) {
 		images, ok := resp["images"].([]any)
 		require.True(t, ok)
 		assert.Len(t, images, 1)
+	})
+}
+
+func TestImageHandler_ListImages_Unfiled(t *testing.T) {
+	t.Run("unfiled=true sets Unfiled flag on params", func(t *testing.T) {
+		mockUC := &mockImageUsecase{}
+		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images?unfiled=true", "")
+
+		err := h.ListImages(c)
+
+		require.NoError(t, err)
+		assert.True(t, mockUC.lastListImagesParams.Unfiled)
+	})
+
+	t.Run("unfiled absent leaves Unfiled false", func(t *testing.T) {
+		mockUC := &mockImageUsecase{}
+		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images", "")
+
+		err := h.ListImages(c)
+
+		require.NoError(t, err)
+		assert.False(t, mockUC.lastListImagesParams.Unfiled)
 	})
 }
 

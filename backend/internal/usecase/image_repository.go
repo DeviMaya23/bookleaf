@@ -10,7 +10,7 @@ import (
 
 type ImageRepository interface {
 	Create(ctx context.Context, image *domain.Image) (*domain.Image, error)
-	List(ctx context.Context, userID string, folderID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, cursor *ImageCursor, limit int) ([]*domain.Image, error)
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	GetDeletedByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error

@@ -56,7 +56,7 @@ type mockFolderImageRepository struct {
 func (m *mockFolderImageRepository) Create(_ context.Context, _ *domain.Image) (*domain.Image, error) {
 	return nil, m.err
 }
-func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return nil, m.err
 }
 func (m *mockFolderImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import {
@@ -23,6 +24,8 @@ import type { Folder } from '@/lib/folders'
 export default function FolderSidebar() {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
@@ -56,6 +59,17 @@ export default function FolderSidebar() {
     setDeleteTarget(null)
   }
 
+  const activeFolderId = location.pathname.startsWith('/folders/')
+    ? location.pathname.split('/folders/')[1]
+    : null
+
+  const itemClass = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-sm cursor-pointer ${
+      active
+        ? 'bg-accent text-accent-foreground font-medium'
+        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+    }`
+
   return (
     <aside className="fixed inset-y-0 left-0 w-[240px] flex flex-col border-r bg-background">
       <div className="p-4 border-b">
@@ -64,7 +78,7 @@ export default function FolderSidebar() {
 
       <nav className="flex-1 overflow-y-auto p-2">
         <ul className="space-y-1">
-          <li className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer">
+          <li className={itemClass(activeFolderId === null)} onClick={() => navigate('/')}>
             Unsorted
           </li>
 
@@ -73,16 +87,19 @@ export default function FolderSidebar() {
           {folders.map((folder) => (
             <ContextMenu key={folder.id}>
               <ContextMenuTrigger asChild>
-                <li className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                <li
+                  className={itemClass(activeFolderId === folder.id)}
+                  onClick={() => navigate(`/folders/${folder.id}`)}
+                >
                   {folder.name}
                 </li>
               </ContextMenuTrigger>
               <ContextMenuContent>
-                <ContextMenuItem onSelect={(e) => { e.preventDefault(); setRenameTarget(folder) }}>
+                <ContextMenuItem onClick={() => setRenameTarget(folder)}>
                   Rename
                 </ContextMenuItem>
                 <ContextMenuItem
-                  onSelect={(e) => { e.preventDefault(); setDeleteTarget(folder) }}
+                  onClick={() => setDeleteTarget(folder)}
                   className="text-destructive focus:text-destructive"
                 >
                   Delete
@@ -126,7 +143,9 @@ export default function FolderSidebar() {
             <DialogTitle>Delete folder</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete <span className="font-medium text-foreground">"{deleteTarget?.name}"</span>? This cannot be undone.
+            Are you sure you want to delete{' '}
+            <span className="font-medium text-foreground">"{deleteTarget?.name}"</span>? This cannot
+            be undone.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>

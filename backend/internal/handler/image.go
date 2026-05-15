@@ -189,6 +189,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		}
 		folderID = &parsedFolderID
 	}
+	unfiled := c.QueryParam("unfiled") == "true"
 
 	limit, cursor, err := parsePaginationParams(c)
 	if err != nil {
@@ -197,6 +198,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
 		FolderID: folderID,
+		Unfiled:  unfiled,
 		Cursor:   cursor,
 		Limit:    limit,
 	})

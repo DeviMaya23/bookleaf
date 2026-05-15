@@ -404,7 +404,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	images, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Cursor, limit)
+	images, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
