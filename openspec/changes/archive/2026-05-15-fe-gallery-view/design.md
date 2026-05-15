@@ -51,5 +51,5 @@ Matches the pattern already used in `FolderSidebar` for folder deletion. No new 
 ## Risks / Trade-offs
 
 - **Thumbnail URL availability** → The image list response must include a `thumbnailUrl` (or equivalent) field. If the backend returns a storage path rather than a public URL, a mapping layer will be needed. Mitigation: confirm with backend spec before implementing the card component.
-- **`folderId=null` vs omitted** → Backend `GET /images` expects `folderId=null` as an explicit query param for unfoldered images. The API function must send `?folderId=null` (string) rather than omitting the param. Mitigation: encode explicitly in the `getImages` function.
+- **`folder_id=null` vs omitted** → Backend `GET /images` expects `folder_id=null` as an explicit query param for unfoldered images. The API function must send `?folder_id=null` (string) rather than omitting the param. Mitigation: encode explicitly in the `getImages` function.
 - **Stale image list after delete** → After a successful delete, `queryClient.invalidateQueries({ queryKey: ['images'] })` refreshes the current view. This is intentionally broad to handle edge cases where folder context changes between the delete trigger and success callback.

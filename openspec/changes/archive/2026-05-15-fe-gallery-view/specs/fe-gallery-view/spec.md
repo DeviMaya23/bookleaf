@@ -1,27 +1,27 @@
 ## ADDED Requirements
 
 ### Requirement: Root route displays unfoldered images
-The system SHALL fetch images with `folderId=null` when the user is on the root path (`/`) and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
+The system SHALL fetch images with `folder_id=null` when the user is on the root path (`/`) and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
 
 #### Scenario: Navigating to root loads unfoldered images
 - **WHEN** the authenticated user navigates to `/`
-- **THEN** the app calls `GET /images?folderId=null`
+- **THEN** the app calls `GET /images?folder_id=null`
 - **AND** the returned images are displayed in the gallery grid
 
 ### Requirement: Folder route displays folder images
-The system SHALL fetch images for a specific folder when the user is on `/folders/:folderId` and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
+The system SHALL fetch images for a specific folder when the user is on `/folders/:folder_id` and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
 
 #### Scenario: Navigating to a folder route loads that folder's images
-- **WHEN** the authenticated user navigates to `/folders/:folderId`
-- **THEN** the app calls `GET /images?folderId=<folderId>`
+- **WHEN** the authenticated user navigates to `/folders/:folder_id`
+- **THEN** the app calls `GET /images?folder_id=<folder_id>`
 - **AND** the returned images for that folder are displayed in the gallery grid
 
 ### Requirement: Folder sidebar navigates via URL
-The system SHALL navigate to `/folders/:folderId` when the user clicks a folder in the sidebar, and navigate to `/` when the user clicks "Unsorted".
+The system SHALL navigate to `/folders/:folder_id` when the user clicks a folder in the sidebar, and navigate to `/` when the user clicks "Unsorted".
 
 #### Scenario: Clicking a folder updates the URL and loads folder images
 - **WHEN** the user clicks a folder item in the sidebar
-- **THEN** the URL changes to `/folders/<folderId>`
+- **THEN** the URL changes to `/folders/<folder_id>`
 - **AND** the gallery fetches and displays images for that folder
 
 #### Scenario: Clicking Unsorted navigates to root
@@ -76,7 +76,7 @@ The system SHALL use `useInfiniteQuery` to fetch images in pages. A "Load more" 
 
 #### Scenario: Clicking Load more fetches next page
 - **WHEN** the user clicks the "Load more" button
-- **THEN** the app calls `GET /images?folderId=<current>&cursor=<next_cursor>`
+- **THEN** the app calls `GET /images?folder_id=<current>&cursor=<next_cursor>`
 - **AND** the newly fetched images are appended to the existing grid
 
 #### Scenario: Changing folder resets pagination
