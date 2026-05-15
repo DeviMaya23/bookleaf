@@ -95,11 +95,11 @@ export default function FolderSidebar() {
                 </li>
               </ContextMenuTrigger>
               <ContextMenuContent>
-                <ContextMenuItem onSelect={(e) => { e.preventDefault(); setRenameTarget(folder) }}>
+                <ContextMenuItem onClick={() => setRenameTarget(folder)}>
                   Rename
                 </ContextMenuItem>
                 <ContextMenuItem
-                  onSelect={(e) => { e.preventDefault(); setDeleteTarget(folder) }}
+                  onClick={() => setDeleteTarget(folder)}
                   className="text-destructive focus:text-destructive"
                 >
                   Delete

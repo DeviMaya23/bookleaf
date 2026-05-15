@@ -49,7 +49,7 @@ function ImageCard({ image, onDelete }: ImageCardProps) {
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem
-          onSelect={(e) => { e.preventDefault(); onDelete(image) }}
+          onClick={() => onDelete(image)}
           className="text-destructive focus:text-destructive"
         >
           Delete

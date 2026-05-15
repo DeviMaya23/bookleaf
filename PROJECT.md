@@ -81,6 +81,20 @@ When `vision_enabled` is true, the following happens synchronously on upload:
 
 If the user has no folders yet, step 3 always falls through to suggesting a new folder from the top label.
 
+## Frontend Architecture
+
+The frontend uses **shadcn** components (`src/components/ui/`) as the only interface to UI primitives. shadcn in this project wraps **Base UI** (`@base-ui/react`), not Radix UI.
+
+**Important:** Base UI and Radix UI share similar component names but have different prop APIs. Never copy props from Radix UI docs and apply them to shadcn components here — they will silently do nothing.
+
+Key difference that has caused bugs:
+- Radix UI `ContextMenuItem` uses `onSelect` to handle item clicks
+- Base UI `ContextMenu.Item` uses `onClick`
+
+Always use `onClick` on `ContextMenuItem`. When in doubt, check the wrapper in `src/components/ui/context-menu.tsx` to see which Base UI primitive it delegates to, then consult the Base UI docs for that primitive's props.
+
+All direct `@base-ui/react` and `@radix-ui/*` imports must stay inside `src/components/ui/`. Application code imports only from `@/components/ui/`.
+
 ## Environment Variables
 
 | Variable | Default | Purpose |
