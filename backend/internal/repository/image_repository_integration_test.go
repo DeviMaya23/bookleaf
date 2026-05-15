@@ -68,7 +68,7 @@ func TestImageRepository_List_Success(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), userID, nil, nil, 200)
+	images, err := repo.List(context.Background(), userID, nil, false, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 2)
@@ -95,7 +95,7 @@ func TestImageRepository_List_FilterByFolder(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, &folder.ID, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
@@ -295,7 +295,7 @@ func TestImageRepository_List_Pagination_FirstPage(t *testing.T) {
 	require.NoError(t, err)
 
 	// limit=2 → repo should return limit+1=3 rows, signalling more data exists
-	images, err := repo.List(context.Background(), userID, nil, nil, 2)
+	images, err := repo.List(context.Background(), userID, nil, false, nil, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 3)
@@ -312,7 +312,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	require.NoError(t, err)
 
 	// first page: returns 3 rows (limit+1), ordered created_at DESC, id DESC
-	firstPage, err := repo.List(context.Background(), userID, nil, nil, 2)
+	firstPage, err := repo.List(context.Background(), userID, nil, false, nil, 2)
 	require.NoError(t, err)
 	require.Len(t, firstPage, 3)
 
@@ -321,7 +321,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
 
 	// second page: should return only items after the cursor
-	secondPage, err := repo.List(context.Background(), userID, nil, cursor, 2)
+	secondPage, err := repo.List(context.Background(), userID, nil, false, cursor, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, secondPage, 1)

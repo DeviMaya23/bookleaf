@@ -29,7 +29,7 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
@@ -37,7 +37,9 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 		Order("created_at DESC, id DESC").
 		Limit(limit + 1)
 
-	if folderID != nil {
+	if unfiled {
+		query = query.Where("folder_id IS NULL")
+	} else if folderID != nil {
 		query = query.Where("folder_id = ?", *folderID)
 	}
 
