@@ -27,7 +27,12 @@ export async function getImages(
   folderId: string | null,
   cursor?: string,
 ): Promise<ImagesPage> {
-  const params = new URLSearchParams({ folder_id: folderId ?? 'null' })
+  const params = new URLSearchParams()
+  if (folderId === null) {
+    params.set('unfiled', 'true')
+  } else {
+    params.set('folder_id', folderId)
+  }
   if (cursor) params.set('cursor', cursor)
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
