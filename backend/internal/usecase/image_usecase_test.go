@@ -88,6 +88,10 @@ func (m *mockImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (i
 	return m.count, m.err
 }
 
+func (m *mockImageRepository) ListStaleUploads(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+
 func _mapCopy(fields map[string]any) map[string]any {
 	if fields == nil {
 		return nil
@@ -113,14 +117,17 @@ func generateTestPNGBytes(t *testing.T, width, height int) []byte {
 }
 
 type mockStorageService struct {
-	putURL       string
-	getURL       string
-	err          error
-	getObjectErr error
-	putObjectErr error
-	objectBytes  []byte
-	getCalls     int
-	putCalls     int
+	putURL          string
+	getURL          string
+	err             error
+	getObjectErr    error
+	putObjectErr    error
+	deleteObjectErr error
+	objectBytes     []byte
+	getCalls        int
+	putCalls        int
+	deleteCalls     int
+	deletedKeys     []string
 }
 
 func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
@@ -146,6 +153,15 @@ func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader,
 	m.putCalls++
 	if m.putObjectErr != nil {
 		return m.putObjectErr
+	}
+	return m.err
+}
+
+func (m *mockStorageService) DeleteObject(_ context.Context, key string) error {
+	m.deleteCalls++
+	m.deletedKeys = append(m.deletedKeys, key)
+	if m.deleteObjectErr != nil {
+		return m.deleteObjectErr
 	}
 	return m.err
 }
@@ -478,6 +494,7 @@ func TestImageUsecase_CompleteUpload_PersistsMetadata(t *testing.T) {
 	assert.EqualValues(t, len(store.objectBytes), repo.updateFields["file_size"])
 	assert.Equal(t, 8, repo.updateFields["width"])
 	assert.Equal(t, 6, repo.updateFields["height"])
+	assert.Equal(t, true, repo.updateFields["is_uploaded"])
 }
 
 func TestImageUsecase_CompleteUpload_DecodeFailureStillPersistsFileSize(t *testing.T) {
@@ -995,4 +1012,34 @@ func TestImageUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	status, ok := points[0].Attributes.Value(attribute.Key("r2.status"))
 	require.True(t, ok)
 	assert.Equal(t, "error", status.AsString())
+}
+
+func TestImageUsecase_CleanupStaleUploads_Success(t *testing.T) {
+	imgID1 := uuid.New()
+	imgID2 := uuid.New()
+	staleImages := []*domain.Image{
+		{ID: imgID1, UserID: "kp_user1", R2Path: "users/kp_user1/images/a.jpg"},
+		{ID: imgID2, UserID: "kp_user2", R2Path: "users/kp_user2/images/b.jpg"},
+	}
+	repo := &mockImageRepository{images: staleImages}
+	store := &mockStorageService{}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, store.deleteCalls)
+	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/a.jpg")
+	assert.Contains(t, store.deletedKeys, "users/kp_user2/images/b.jpg")
+}
+
+func TestImageUsecase_CleanupStaleUploads_ListError(t *testing.T) {
+	repo := &mockImageRepository{err: errors.New("db unavailable")}
+	store := &mockStorageService{}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+
+	require.Error(t, err)
+	assert.Equal(t, 0, store.deleteCalls)
 }

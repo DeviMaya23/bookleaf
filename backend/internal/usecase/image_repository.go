@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
@@ -20,4 +21,5 @@ type ImageRepository interface {
 	Restore(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
+	ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
 }

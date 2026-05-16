@@ -22,6 +22,7 @@ type Image struct {
 	Height        *int            `gorm:"column:height"`
 	FileSize      *int64          `gorm:"column:file_size"`
 	AILabels      json.RawMessage `gorm:"column:ai_labels;type:jsonb"`
+	IsUploaded    bool            `gorm:"column:is_uploaded;not null;default:false"`
 	CreatedAt     time.Time       `gorm:"column:created_at"`
 	UpdatedAt     time.Time       `gorm:"column:updated_at"`
 	DeletedAt     gorm.DeletedAt  `gorm:"column:deleted_at;index"`

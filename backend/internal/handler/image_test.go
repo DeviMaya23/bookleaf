@@ -94,6 +94,10 @@ func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string,
 	return m.image, m.err
 }
 
+func (m *mockImageUsecase) CleanupStaleUploads(_ context.Context, _ time.Duration) error {
+	return m.err
+}
+
 type mockImageStorageService struct{}
 
 func (m *mockImageStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
@@ -109,6 +113,10 @@ func (m *mockImageStorageService) GetObject(_ context.Context, _ string) (io.Rea
 }
 
 func (m *mockImageStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _ string) error {
+	return nil
+}
+
+func (m *mockImageStorageService) DeleteObject(_ context.Context, _ string) error {
 	return nil
 }
 
