@@ -133,6 +133,19 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 	id := uuid.New()
 	r2Path := fmt.Sprintf("users/%s/images/%s%s", userID, id.String(), storage.MimeTypeToExt(mimeType))
 
+	if folderID != nil {
+		if _, err := u.folderRepo.GetByID(ctx, *folderID, userID); err != nil {
+			observability.LoggerFromContext(ctx, u.tel.Logger).Info("initiate upload folder fallback applied",
+				zap.String("event", "image.initiate_upload.folder_fallback"),
+				zap.String("image_id", id.String()),
+				zap.String("user_id", userID),
+				zap.String("requested_folder_id", folderID.String()),
+				zap.Error(err),
+			)
+			folderID = nil
+		}
+	}
+
 	created, err := u.imageRepo.Create(ctx, &domain.Image{
 		ID:          id,
 		UserID:      userID,

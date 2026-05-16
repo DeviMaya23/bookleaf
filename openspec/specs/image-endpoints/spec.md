@@ -100,7 +100,9 @@ All other method signatures are unchanged.
 
 ### Requirement: POST /images — Initiate Upload Request and Response
 
-The `POST /images` handler SHALL accept an optional `description` field in the request body and persist it on the image record.
+The `POST /images` handler SHALL accept an optional `description` field and an optional `folder_id` field in the request body.
+
+When `folder_id` is provided, the usecase SHALL look up the folder by ID scoped to the authenticated user via `folderRepo.GetByID`. If the folder is not found, the image SHALL be created with `folder_id = null`. No error SHALL be returned to the caller in this case.
 
 Request body:
 ```json
@@ -114,6 +116,24 @@ Request body:
 ```
 
 Response body (201): `id`, `upload_url`, `r2_path`.
+
+#### Scenario: Upload initiated with a valid folder_id
+
+- **WHEN** an authenticated `POST /images` request includes a `folder_id` that exists and belongs to the user
+- **THEN** the response is `201 Created`
+- **AND** the created image record has `folder_id` set to the provided value
+
+#### Scenario: Upload initiated with a folder_id that does not exist
+
+- **WHEN** an authenticated `POST /images` request includes a `folder_id` that does not exist (or belongs to another user)
+- **THEN** the response is `201 Created`
+- **AND** the created image record has `folder_id` set to `null`
+
+#### Scenario: Upload initiated with null or omitted folder_id
+
+- **WHEN** an authenticated `POST /images` request omits `folder_id` or sets it to `null`
+- **THEN** the response is `201 Created`
+- **AND** the image record has `folder_id` as NULL
 
 #### Scenario: Upload initiated with description
 
