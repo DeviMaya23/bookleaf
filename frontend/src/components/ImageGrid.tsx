@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { getImages, deleteImage } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
@@ -80,6 +81,10 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['images'] })
       setDeleteTarget(null)
+      toast.success('Image deleted')
+    },
+    onError: () => {
+      toast.error('Failed to delete image')
     },
   })
 

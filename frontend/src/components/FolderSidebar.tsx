@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import {
@@ -50,7 +51,13 @@ export default function FolderSidebar() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteFolder(getToken, id),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      toast.success('Folder deleted')
+    },
+    onError: () => {
+      toast.error('Failed to delete folder')
+    },
   })
 
   function handleDelete() {
