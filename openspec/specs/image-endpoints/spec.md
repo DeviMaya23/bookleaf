@@ -31,6 +31,7 @@ The system SHALL register image routes on the protected Echo group in `main.go`.
 Routes:
 - `POST /images`
 - `POST /images/:id/complete`
+- `POST /images/:id/accept-suggestion`
 - `GET /images`
 - `GET /images/:id`
 - `PATCH /images/:id`
@@ -52,6 +53,7 @@ The system SHALL define an `ImageUsecase` interface in `internal/usecase/` with 
 
 ```go
 CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
+AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 ```
 
 `InitiateUpload` SHALL accept a `description *string` parameter:
@@ -70,18 +72,13 @@ type UpdateImageParams struct {
 }
 ```
 
-Where `CompleteUploadResult` is defined in `internal/usecase/`:
-```go
-type FolderSuggestion struct {
-    FolderID   *uuid.UUID
-    FolderName string
-    IsNew      bool
-}
+`CompleteUploadResult` is defined in `internal/usecase/`. The `FolderSuggestion` struct is removed; the result carries a plain string field instead:
 
+```go
 type CompleteUploadResult struct {
-    ImageID          uuid.UUID
-    FolderSuggestion *FolderSuggestion
-    Warning          string
+    ImageID              uuid.UUID
+    SuggestedFolderName  *string
+    Warning              string
 }
 ```
 
@@ -246,39 +243,34 @@ Response shape:
 ```json
 {
   "image_id": "<uuid>",
-  "folder_suggestion": {
-    "folder_id": "<uuid | null>",
-    "folder_name": "<string>",
-    "is_new": true
-  },
+  "suggested_folder_name": "<string | null>",
   "warning": "<string>"
 }
 ```
 
 - `image_id` SHALL always be present
-- `folder_suggestion` SHALL be `null` when the user does not have `vision_enabled`, when the Vision API returns no labels, or when Vision is not configured
+- `suggested_folder_name` SHALL be `null` when the user does not have `vision_enabled`, when the Vision API returns no labels, or when Vision is not configured
 - `warning` SHALL be omitted from the response when empty (`omitempty`)
 
-#### Scenario: Vision enabled and folder matched
+#### Scenario: Vision enabled and suggestion resolved
 
-- **WHEN** `CompleteUpload` succeeds and a folder suggestion is resolved
+- **WHEN** `CompleteUpload` succeeds and Vision returns at least one label
 - **THEN** the response is `200 OK`
-- **AND** `folder_suggestion.folder_id` is the matched folder's UUID
-- **AND** `folder_suggestion.is_new` is `false`
+- **AND** `suggested_folder_name` is the top label description string
 - **AND** `warning` is absent from the response body
 
 #### Scenario: Vision enabled but API call fails
 
 - **WHEN** `CompleteUpload` succeeds but the Vision API returns an error
 - **THEN** the response is still `200 OK`
-- **AND** `folder_suggestion` is `null`
+- **AND** `suggested_folder_name` is `null`
 - **AND** `warning` is a non-empty string describing the failure
 
 #### Scenario: Vision not enabled
 
 - **WHEN** the image owner has `vision_enabled = false`
 - **THEN** the response is `200 OK`
-- **AND** `folder_suggestion` is `null`
+- **AND** `suggested_folder_name` is `null`
 - **AND** `warning` is absent
 
 ---

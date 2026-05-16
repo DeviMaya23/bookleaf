@@ -33,6 +33,8 @@ type mockImageRepository struct {
 	err          error
 	count        int64
 	updateFields map[string]any
+	lastUpdateID uuid.UUID
+	lastUpdateBy string
 	createdImage *domain.Image
 	lastUnfiled  bool
 }
@@ -63,7 +65,9 @@ func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ j
 	return m.err
 }
 
-func (m *mockImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, fields map[string]any) (*domain.Image, error) {
+func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
+	m.lastUpdateID = id
+	m.lastUpdateBy = userID
 	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
 }
@@ -200,6 +204,57 @@ func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]vision
 		out[i] = vision.Label{Description: l.Description, Score: l.Score}
 	}
 	return out, nil
+}
+
+type mockAcceptSuggestionFolderRepository struct {
+	findResult      *domain.Folder
+	findErr         error
+	createResult    *domain.Folder
+	createErr       error
+	findCalls       int
+	createCalls     int
+	lastFindUserID  string
+	lastFindName    string
+	lastCreatedData *domain.Folder
+}
+
+func (m *mockAcceptSuggestionFolderRepository) Create(_ context.Context, folder *domain.Folder) (*domain.Folder, error) {
+	m.createCalls++
+	m.lastCreatedData = folder
+	if m.createErr != nil {
+		return nil, m.createErr
+	}
+	if m.createResult != nil {
+		return m.createResult, nil
+	}
+	return folder, nil
+}
+
+func (m *mockAcceptSuggestionFolderRepository) List(_ context.Context, _ string) ([]*domain.Folder, error) {
+	return nil, nil
+}
+
+func (m *mockAcceptSuggestionFolderRepository) FindByName(_ context.Context, userID, name string) (*domain.Folder, error) {
+	m.findCalls++
+	m.lastFindUserID = userID
+	m.lastFindName = name
+	return m.findResult, m.findErr
+}
+
+func (m *mockAcceptSuggestionFolderRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
+	return nil, nil
+}
+
+func (m *mockAcceptSuggestionFolderRepository) Update(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
+	return nil, nil
+}
+
+func (m *mockAcceptSuggestionFolderRepository) CountImagesByFolder(_ context.Context, _ uuid.UUID, _ string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockAcceptSuggestionFolderRepository) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
+	return nil
 }
 
 func noopTel() *observability.Telemetry {
@@ -393,28 +448,24 @@ func TestImageUsecase_CompleteUpload_DecodeFailureStillPersistsFileSize(t *testi
 
 func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 	imageID := uuid.New()
-	folderID := uuid.New()
 	baseImage := &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}
 
-	t.Run("vision enabled and folder matched returns folder suggestion", func(t *testing.T) {
+	t.Run("vision enabled returns suggested folder name", func(t *testing.T) {
 		visionSvc := &mockVisionService{labels: []visionLabel{{Description: "Nature", Score: 0.98}}}
-		folderRepo := &mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "Nature"}}
 		userRepo := &mockImageUserRepository{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
 
 		uc := NewImageUsecase(
 			&mockImageRepository{image: baseImage},
 			&mockStorageService{},
 			&mockThumbnailService{},
-			visionSvc, folderRepo, userRepo, noopTel(),
+			visionSvc, nil, userRepo, noopTel(),
 		)
 
 		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
 		require.NoError(t, err)
-		require.NotNil(t, result.FolderSuggestion)
-		assert.Equal(t, "Nature", result.FolderSuggestion.FolderName)
-		assert.Equal(t, &folderID, result.FolderSuggestion.FolderID)
-		assert.False(t, result.FolderSuggestion.IsNew)
+		require.NotNil(t, result.SuggestedFolderName)
+		assert.Equal(t, "Nature", *result.SuggestedFolderName)
 		assert.Empty(t, result.Warning)
 		assert.Equal(t, 1, visionSvc.calls)
 	})
@@ -433,7 +484,7 @@ func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
 		require.NoError(t, err)
-		assert.Nil(t, result.FolderSuggestion)
+		assert.Nil(t, result.SuggestedFolderName)
 		assert.Empty(t, result.Warning)
 		assert.Equal(t, 0, visionSvc.calls)
 	})
@@ -452,8 +503,62 @@ func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
 		require.NoError(t, err)
-		assert.Nil(t, result.FolderSuggestion)
+		assert.Nil(t, result.SuggestedFolderName)
 		assert.NotEmpty(t, result.Warning)
+	})
+}
+
+func TestImageUsecase_AcceptSuggestion(t *testing.T) {
+	imageID := uuid.New()
+	existingFolderID := uuid.New()
+	newFolderID := uuid.New()
+
+	t.Run("uses existing folder when matched", func(t *testing.T) {
+		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
+		folderRepo := &mockAcceptSuggestionFolderRepository{
+			findResult: &domain.Folder{ID: existingFolderID, Name: "Nature"},
+		}
+		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+
+		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, folderRepo.findCalls)
+		assert.Equal(t, 0, folderRepo.createCalls)
+		require.NotNil(t, imageRepo.updateFields)
+		assert.Equal(t, existingFolderID, imageRepo.updateFields["folder_id"])
+	})
+
+	t.Run("creates folder when no match is found", func(t *testing.T) {
+		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
+		folderRepo := &mockAcceptSuggestionFolderRepository{
+			createResult: &domain.Folder{ID: newFolderID, Name: "Nature"},
+		}
+		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+
+		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, folderRepo.findCalls)
+		assert.Equal(t, 1, folderRepo.createCalls)
+		require.NotNil(t, folderRepo.lastCreatedData)
+		assert.Equal(t, "kp_abc123", folderRepo.lastCreatedData.UserID)
+		assert.Equal(t, "Nature", folderRepo.lastCreatedData.Name)
+		require.NotNil(t, imageRepo.updateFields)
+		assert.Equal(t, newFolderID, imageRepo.updateFields["folder_id"])
+	})
+
+	t.Run("returns error when image is not found", func(t *testing.T) {
+		imageRepo := &mockImageRepository{err: gorm.ErrRecordNotFound}
+		folderRepo := &mockAcceptSuggestionFolderRepository{}
+		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+
+		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+		assert.Equal(t, 0, folderRepo.findCalls)
+		assert.Equal(t, 0, folderRepo.createCalls)
+		assert.Nil(t, imageRepo.updateFields)
 	})
 }
 

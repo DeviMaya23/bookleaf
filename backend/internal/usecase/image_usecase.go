@@ -51,21 +51,16 @@ type ImageDetail struct {
 	ImageURL string
 }
 
-type FolderSuggestion struct {
-	FolderID   *uuid.UUID
-	FolderName string
-	IsNew      bool
-}
-
 type CompleteUploadResult struct {
-	ImageID          uuid.UUID
-	FolderSuggestion *FolderSuggestion
-	Warning          string
+	ImageID             uuid.UUID
+	SuggestedFolderName *string
+	Warning             string
 }
 
 type ImageUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
+	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 	ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error)
@@ -221,7 +216,7 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", image.UserID, image.ID.String())
 	go u.uploadThumbnail(image, thumbnailKey, thumbnailBytes)
 
-	result.FolderSuggestion, result.Warning = u.runVisionFlow(ctx, id, userID, thumbnailBytes)
+	result.SuggestedFolderName, result.Warning = u.runVisionFlow(ctx, id, userID, thumbnailBytes)
 	return result, nil
 }
 
@@ -282,7 +277,7 @@ func (u *imageUsecase) prepareThumbnail(ctx context.Context, img *domain.Image) 
 	return thumbnailBytes, width, height, int64(len(rawBytes)), nil
 }
 
-func (u *imageUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, userID string, thumbnailBytes []byte) (suggestion *FolderSuggestion, warning string) {
+func (u *imageUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, userID string, thumbnailBytes []byte) (suggestion *string, warning string) {
 	user, err := u.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to fetch user",
@@ -334,21 +329,47 @@ func (u *imageUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, use
 	}
 
 	topLabel := labels[0]
-	folder, err := u.folderRepo.FindByName(ctx, userID, topLabel.Description)
-	if err != nil {
-		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: folder lookup failed",
-			zap.String("event", "vision.folder_lookup.failed"),
-			zap.String("image_id", imageID.String()),
-			zap.Error(err),
-		)
-		return nil, "folder suggestion unavailable"
+	return &topLabel.Description, ""
+}
+
+func (u *imageUsecase) AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.AcceptSuggestion")
+	defer span.End()
+
+	if _, err := u.imageRepo.GetByID(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
-	s := &FolderSuggestion{FolderName: topLabel.Description, IsNew: folder == nil}
-	if folder != nil {
-		s.FolderID = &folder.ID
+	suggestedFolderName = strings.TrimSpace(suggestedFolderName)
+
+	folder, err := u.folderRepo.FindByName(ctx, userID, suggestedFolderName)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
-	return s, ""
+
+	if folder == nil {
+		folder, err = u.folderRepo.Create(ctx, &domain.Folder{
+			UserID: userID,
+			Name:   suggestedFolderName,
+		})
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+	}
+
+	if _, err := u.imageRepo.Update(ctx, imageID, userID, map[string]any{"folder_id": folder.ID}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (u *imageUsecase) uploadThumbnail(image *domain.Image, thumbnailKey string, thumbnailBytes []byte) {

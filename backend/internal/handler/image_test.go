@@ -18,20 +18,23 @@ import (
 	"gorm.io/gorm"
 )
 
-
 // --- mocks ---
 
 type mockImageUsecase struct {
-	uploadResult          *usecase.UploadInitResult
-	completeResult        *usecase.CompleteUploadResult
-	imageDetail           *usecase.ImageDetail
-	image                 *domain.Image
-	listImagesResult      *usecase.ListImagesResult
-	listTrashedResult     *usecase.ListTrashedResult
-	err                   error
-	lastDescription       *string
-	lastUpdateParams      usecase.UpdateImageParams
-	lastListImagesParams  usecase.ListImagesParams
+	uploadResult         *usecase.UploadInitResult
+	completeResult       *usecase.CompleteUploadResult
+	imageDetail          *usecase.ImageDetail
+	image                *domain.Image
+	listImagesResult     *usecase.ListImagesResult
+	listTrashedResult    *usecase.ListTrashedResult
+	err                  error
+	acceptSuggestionErr  error
+	lastAcceptImageID    uuid.UUID
+	lastAcceptUserID     string
+	lastSuggestedFolder  string
+	lastDescription      *string
+	lastUpdateParams     usecase.UpdateImageParams
+	lastListImagesParams usecase.ListImagesParams
 }
 
 func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -41,6 +44,16 @@ func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *
 
 func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) (*usecase.CompleteUploadResult, error) {
 	return m.completeResult, m.err
+}
+
+func (m *mockImageUsecase) AcceptSuggestion(_ context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
+	m.lastAcceptImageID = imageID
+	m.lastAcceptUserID = userID
+	m.lastSuggestedFolder = suggestedFolderName
+	if m.acceptSuggestionErr != nil {
+		return m.acceptSuggestionErr
+	}
+	return m.err
 }
 
 func (m *mockImageUsecase) ListImages(_ context.Context, _ string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
@@ -173,23 +186,20 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 		wantStatus    int
 		wantImageID   string
 		wantWarning   string
-		wantIsNew     *bool
+		wantSuggested any
 		wantErrStatus int
 	}{
 		{
 			name: "completes upload and returns 200 response",
 			mockUC: &mockImageUsecase{
 				completeResult: &usecase.CompleteUploadResult{
-					ImageID: imageID,
-					FolderSuggestion: &usecase.FolderSuggestion{
-						FolderName: "Nature",
-						IsNew:      true,
-					},
+					ImageID:             imageID,
+					SuggestedFolderName: func() *string { v := "Nature"; return &v }(),
 				},
 			},
-			wantStatus:  http.StatusOK,
-			wantImageID: imageID.String(),
-			wantIsNew:   func() *bool { v := true; return &v }(),
+			wantStatus:    http.StatusOK,
+			wantImageID:   imageID.String(),
+			wantSuggested: "Nature",
 		},
 		{
 			name: "completes upload with warning",
@@ -199,9 +209,10 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 					Warning: "ai labelling failed",
 				},
 			},
-			wantStatus:  http.StatusOK,
-			wantImageID: imageID.String(),
-			wantWarning: "ai labelling failed",
+			wantStatus:    http.StatusOK,
+			wantImageID:   imageID.String(),
+			wantWarning:   "ai labelling failed",
+			wantSuggested: nil,
 		},
 		{
 			name:          "returns 404 when image not found",
@@ -236,11 +247,63 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 				_, exists := resp["warning"]
 				assert.False(t, exists)
 			}
-			if tt.wantIsNew != nil {
-				suggestion, ok := resp["folder_suggestion"].(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, *tt.wantIsNew, suggestion["is_new"])
+			assert.Equal(t, tt.wantSuggested, resp["suggested_folder_name"])
+		})
+	}
+}
+
+func TestImageHandler_AcceptSuggestion(t *testing.T) {
+	imageID := uuid.New()
+
+	tests := []struct {
+		name          string
+		body          string
+		mockUC        *mockImageUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "accepts suggestion and returns 204",
+			body:       `{"suggested_folder_name":"Nature"}`,
+			mockUC:     &mockImageUsecase{},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:          "returns 400 when suggested_folder_name is missing",
+			body:          `{}`,
+			mockUC:        &mockImageUsecase{},
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name: "returns 404 when image not found",
+			body: `{"suggested_folder_name":"Nature"}`,
+			mockUC: &mockImageUsecase{
+				acceptSuggestionErr: gorm.ErrRecordNotFound,
+			},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", tt.body)
+			c.SetPath("/images/:id/accept-suggestion")
+			c.SetParamNames("id")
+			c.SetParamValues(imageID.String())
+
+			err := h.AcceptSuggestion(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
 			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+			assert.Equal(t, imageID, tt.mockUC.lastAcceptImageID)
+			assert.Equal(t, "kp_abc123", tt.mockUC.lastAcceptUserID)
+			assert.Equal(t, "Nature", tt.mockUC.lastSuggestedFolder)
 		})
 	}
 }

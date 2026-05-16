@@ -1,0 +1,21 @@
+meta {
+  name: Accept Suggestion
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/images/:id/accept-suggestion
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: {{imageId}}
+}
+
+body:json {
+  {
+    "suggested_folder_name": "Nature"
+  }
+}

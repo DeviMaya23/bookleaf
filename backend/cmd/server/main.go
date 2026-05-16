@@ -117,6 +117,7 @@ func main() {
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
 	protected.POST("/images", imageHandler.InitiateUpload)
 	protected.POST("/images/:id/complete", imageHandler.CompleteUpload)
+	protected.POST("/images/:id/accept-suggestion", imageHandler.AcceptSuggestion)
 	protected.GET("/images/trash", imageHandler.ListTrashed)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
