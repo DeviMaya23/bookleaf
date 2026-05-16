@@ -81,16 +81,14 @@ type listImagesResponse struct {
 	NextCursor *string         `json:"next_cursor"`
 }
 
-type completeUploadFolderSuggestionResponse struct {
-	FolderID   *uuid.UUID `json:"folder_id"`
-	FolderName string     `json:"folder_name"`
-	IsNew      bool       `json:"is_new"`
+type completeUploadResponse struct {
+	ImageID             uuid.UUID `json:"image_id"`
+	SuggestedFolderName *string   `json:"suggested_folder_name"`
+	Warning             string    `json:"warning,omitempty"`
 }
 
-type completeUploadResponse struct {
-	ImageID          uuid.UUID                               `json:"image_id"`
-	FolderSuggestion *completeUploadFolderSuggestionResponse `json:"folder_suggestion"`
-	Warning          string                                  `json:"warning,omitempty"`
+type acceptSuggestionRequest struct {
+	SuggestedFolderName string `json:"suggested_folder_name"`
 }
 
 func NewImageHandler(imageUsecase usecase.ImageUsecase, store storage.StorageService, tel *observability.Telemetry) *ImageHandler {
@@ -156,20 +154,45 @@ func (h *ImageHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete image upload")
 	}
 
-	var folderSuggestion *completeUploadFolderSuggestionResponse
-	if result.FolderSuggestion != nil {
-		folderSuggestion = &completeUploadFolderSuggestionResponse{
-			FolderID:   result.FolderSuggestion.FolderID,
-			FolderName: result.FolderSuggestion.FolderName,
-			IsNew:      result.FolderSuggestion.IsNew,
-		}
+	return c.JSON(http.StatusOK, completeUploadResponse{
+		ImageID:             result.ImageID,
+		SuggestedFolderName: result.SuggestedFolderName,
+		Warning:             result.Warning,
+	})
+}
+
+func (h *ImageHandler) AcceptSuggestion(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.AcceptSuggestion")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	return c.JSON(http.StatusOK, completeUploadResponse{
-		ImageID:          result.ImageID,
-		FolderSuggestion: folderSuggestion,
-		Warning:          result.Warning,
-	})
+	var req acceptSuggestionRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if strings.TrimSpace(req.SuggestedFolderName) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "suggested_folder_name is required")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	if err := h.imageUsecase.AcceptSuggestion(ctx, imageID, userID, req.SuggestedFolderName); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to accept folder suggestion")
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *ImageHandler) ListImages(c echo.Context) error {
