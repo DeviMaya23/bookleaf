@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import FolderNameDialog from './FolderNameDialog'
-import LogoutButton from './LogoutButton'
+import ProfileMenu from './ProfileMenu'
 import { getFolders, createFolder, renameFolder, deleteFolder } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 
@@ -117,9 +117,7 @@ export default function FolderSidebar() {
         >
           + New folder
         </button>
-        <div className="px-1">
-          <LogoutButton />
-        </div>
+        <ProfileMenu />
       </div>
 
       <FolderNameDialog
