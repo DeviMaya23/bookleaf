@@ -78,20 +78,6 @@ The app SHALL provide an `AuthGuard` layout component that wraps all protected r
 - **WHEN** `isLoading` is true on `KindeProvider` initialisation
 - **THEN** `AuthGuard` renders nothing and does not redirect
 
-### Requirement: Logout button
-
-The app SHALL render a logout button in the top-right corner of the authenticated layout. Clicking it SHALL call `logout()` from `useKindeAuth()`, ending the Kinde session and redirecting the browser to `VITE_KINDE_LOGOUT_REDIRECT_URL`. The button SHALL only be visible to authenticated users.
-
-#### Scenario: Logout button ends session
-
-- **WHEN** an authenticated user clicks the logout button
-- **THEN** `logout()` is called and the browser redirects to the configured post-logout URL
-
-#### Scenario: Logout button is not visible to unauthenticated users
-
-- **WHEN** an unauthenticated user views any page
-- **THEN** the logout button is not rendered
-
 ### Requirement: Token-attached API client
 
 The app SHALL export an `apiFetch(path, options?)` function from `src/lib/api.ts`. Before sending any request, it SHALL retrieve the current Kinde access token via `getToken()` and attach it as `Authorization: Bearer <token>` in the request headers. The base URL for all requests SHALL be read from `VITE_API_BASE_URL`. The function SHALL be async and return a typed `Response`.
