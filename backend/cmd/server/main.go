@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/devi/bookleaf/internal/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
@@ -124,6 +125,26 @@ func main() {
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := imageUsecase.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
+				logger.Warn("stale upload cleanup failed", zap.Error(err))
+			}
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := imageUsecase.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
+				logger.Warn("trash purge failed", zap.Error(err))
+			}
+		}
+	}()
 
 	if err := e.Start(":" + cfg.Port); err != nil {
 		logger.Fatal("server stopped", zap.Error(err))

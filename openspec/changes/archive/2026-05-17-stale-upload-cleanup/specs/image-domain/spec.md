@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Image GORM Struct
 
@@ -37,42 +37,7 @@ Fields (all DB columns use snake_case):
 - **WHEN** the Go package is compiled
 - **THEN** `Image` has a `IsUploaded bool` field with GORM tag `column:is_uploaded;not null;default:false`
 
-### Requirement: Images DB Migration
-
-The system SHALL include a `golang-migrate` SQL migration that creates the `images` table with all required columns and constraints.
-
-#### Scenario: Migration creates images table
-
-- **WHEN** migrations are applied to a fresh database
-- **THEN** the `images` table exists with columns matching the `Image` struct
-- **AND** `user_id` has a NOT NULL FK constraint referencing `users(id)`
-- **AND** `folder_id` has a nullable FK constraint referencing `folders(id)`
-- **AND** `deleted_at` is a nullable timestamp column (soft delete)
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `images` table is dropped without error
-
-### Requirement: Image Metadata Migration
-
-The system SHALL include a `golang-migrate` SQL migration (000006, `add_image_metadata_fields`) that adds the new metadata columns to the existing `images` table.
-
-Columns added:
-- `description text` — nullable
-- `width integer` — nullable
-- `height integer` — nullable
-- `file_size bigint` — nullable
-
-#### Scenario: Migration adds columns to images table
-
-- **WHEN** migration 000006 up is applied
-- **THEN** the `images` table gains columns `description`, `width`, `height`, and `file_size`, all nullable
-
-#### Scenario: Migration is reversible
-
-- **WHEN** migration 000006 down is applied
-- **THEN** the four columns are dropped from `images` without error
+## ADDED Requirements
 
 ### Requirement: is_uploaded DB Migration
 

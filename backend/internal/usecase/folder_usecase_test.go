@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/observability"
@@ -85,6 +86,18 @@ func (m *mockFolderImageRepository) ListTrashed(_ context.Context, _ string, _ *
 }
 func (m *mockFolderImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
 	return m.count, m.err
+}
+
+func (m *mockFolderImageRepository) ListStaleUploads(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return nil, m.err
+}
+
+func (m *mockFolderImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return nil, m.err
+}
+
+func (m *mockFolderImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
 }
 
 func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) FolderUsecase {

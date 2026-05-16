@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/usecase"
@@ -182,6 +183,41 @@ func (r *imageRepository) CountByFolderID(ctx context.Context, folderID uuid.UUI
 	}
 
 	return count, nil
+}
+
+func (r *imageRepository) ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("deleted_at IS NOT NULL AND deleted_at < ?", olderThan).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list expired trash: %w", err)
+	}
+	return images, nil
+}
+
+func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID string) error {
+	result := r.db.WithContext(ctx).
+		Unscoped().
+		Where("id = ? AND user_id = ?", id, userID).
+		Delete(&domain.Image{})
+	if result.Error != nil {
+		return fmt.Errorf("hard delete image: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("hard delete image: %w", gorm.ErrRecordNotFound)
+	}
+	return nil
+}
+
+func (r *imageRepository) ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Where("is_uploaded = false AND created_at < ?", olderThan).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list stale uploads: %w", err)
+	}
+	return images, nil
 }
 
 var _ usecase.ImageRepository = (*imageRepository)(nil)

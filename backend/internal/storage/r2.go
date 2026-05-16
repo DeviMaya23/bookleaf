@@ -172,6 +172,22 @@ func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, c
 	return nil
 }
 
+func (r *r2Storage) DeleteObject(ctx context.Context, key string) error {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.DeleteObject")
+	defer span.End()
+
+	_, err := r.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete object %s: %w", key, err)
+	}
+	return nil
+}
+
 func (r *r2Storage) Ping(ctx context.Context) error {
 	_, err := r.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(r.bucket),
