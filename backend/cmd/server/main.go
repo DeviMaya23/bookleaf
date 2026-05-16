@@ -136,6 +136,16 @@ func main() {
 		}
 	}()
 
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := imageUsecase.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
+				logger.Warn("trash purge failed", zap.Error(err))
+			}
+		}
+	}()
+
 	if err := e.Start(":" + cfg.Port); err != nil {
 		logger.Fatal("server stopped", zap.Error(err))
 	}

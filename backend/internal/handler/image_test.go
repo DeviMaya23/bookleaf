@@ -98,6 +98,10 @@ func (m *mockImageUsecase) CleanupStaleUploads(_ context.Context, _ time.Duratio
 	return m.err
 }
 
+func (m *mockImageUsecase) PurgeExpiredTrash(_ context.Context, _ time.Duration) error {
+	return m.err
+}
+
 type mockImageStorageService struct{}
 
 func (m *mockImageStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {

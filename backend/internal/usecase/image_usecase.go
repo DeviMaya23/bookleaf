@@ -68,6 +68,7 @@ type ImageUsecase interface {
 	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
+	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
 }
 
 type imageUsecase struct {
@@ -637,6 +638,57 @@ func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.D
 		logger.Info("stale upload cleanup complete",
 			zap.String("event", "r2.stale.cleanup_complete"),
 			zap.Int("cleaned", len(stale)),
+		)
+	}
+
+	return nil
+}
+
+func (u *imageUsecase) PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.PurgeExpiredTrash")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	expired, err := u.imageRepo.ListExpiredTrash(ctx, time.Now().Add(-threshold))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("list expired trash: %w", err)
+	}
+
+	for _, img := range expired {
+		if err := u.store.DeleteObject(ctx, img.R2Path); err != nil {
+			logger.Warn("failed to delete R2 object for expired trash",
+				zap.String("event", "r2.trash.delete_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.String("r2_path", img.R2Path),
+				zap.Error(err),
+			)
+		}
+		if img.ThumbnailPath != nil {
+			if err := u.store.DeleteObject(ctx, *img.ThumbnailPath); err != nil {
+				logger.Warn("failed to delete thumbnail for expired trash",
+					zap.String("event", "r2.trash.thumbnail_delete_failed"),
+					zap.String("image_id", img.ID.String()),
+					zap.String("thumbnail_path", *img.ThumbnailPath),
+					zap.Error(err),
+				)
+			}
+		}
+		if err := u.imageRepo.HardDelete(ctx, img.ID, img.UserID); err != nil {
+			logger.Warn("failed to hard delete expired trash record",
+				zap.String("event", "r2.trash.hard_delete_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(err),
+			)
+		}
+	}
+
+	if len(expired) > 0 {
+		logger.Info("trash purge complete",
+			zap.String("event", "r2.trash.purge_complete"),
+			zap.Int("purged", len(expired)),
 		)
 	}
 

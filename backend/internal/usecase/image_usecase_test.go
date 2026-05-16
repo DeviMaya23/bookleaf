@@ -92,6 +92,14 @@ func (m *mockImageRepository) ListStaleUploads(_ context.Context, _ time.Time) (
 	return m.images, m.err
 }
 
+func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+
+func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+
 func _mapCopy(fields map[string]any) map[string]any {
 	if fields == nil {
 		return nil
@@ -1039,6 +1047,37 @@ func TestImageUsecase_CleanupStaleUploads_ListError(t *testing.T) {
 	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+
+	require.Error(t, err)
+	assert.Equal(t, 0, store.deleteCalls)
+}
+
+func TestImageUsecase_PurgeExpiredTrash_Success(t *testing.T) {
+	thumbnailPath := "users/kp_user1/thumbnails/b.jpg"
+	expiredImages := []*domain.Image{
+		{ID: uuid.New(), UserID: "kp_user1", R2Path: "users/kp_user1/images/a.jpg"},
+		{ID: uuid.New(), UserID: "kp_user1", R2Path: "users/kp_user1/images/b.jpg", ThumbnailPath: &thumbnailPath},
+	}
+	repo := &mockImageRepository{images: expiredImages}
+	store := &mockStorageService{}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+
+	require.NoError(t, err)
+	// 2 r2_path deletes + 1 thumbnail delete
+	assert.Equal(t, 3, store.deleteCalls)
+	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/a.jpg")
+	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/b.jpg")
+	assert.Contains(t, store.deletedKeys, thumbnailPath)
+}
+
+func TestImageUsecase_PurgeExpiredTrash_ListError(t *testing.T) {
+	repo := &mockImageRepository{err: errors.New("db unavailable")}
+	store := &mockStorageService{}
+	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+
+	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
 
 	require.Error(t, err)
 	assert.Equal(t, 0, store.deleteCalls)

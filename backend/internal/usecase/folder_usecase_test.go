@@ -92,6 +92,14 @@ func (m *mockFolderImageRepository) ListStaleUploads(_ context.Context, _ time.T
 	return nil, m.err
 }
 
+func (m *mockFolderImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return nil, m.err
+}
+
+func (m *mockFolderImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+
 func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) FolderUsecase {
 	return NewFolderUsecase(folderRepo, imageRepo, observability.NewTelemetry(nil, nil, nil))
 }

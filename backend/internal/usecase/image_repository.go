@@ -22,4 +22,6 @@ type ImageRepository interface {
 	ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
 	ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
+	ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
+	HardDelete(ctx context.Context, id uuid.UUID, userID string) error
 }
