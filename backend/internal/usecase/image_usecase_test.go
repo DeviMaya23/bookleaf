@@ -352,6 +352,57 @@ func TestImageUsecase_InitiateUpload_WithDescription(t *testing.T) {
 	assert.Equal(t, imageID, result.Image.ID)
 }
 
+func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
+	imageID := uuid.New()
+	validFolderID := uuid.New()
+	invalidFolderID := uuid.New()
+
+	t.Run("keeps folder_id when folder exists for user", func(t *testing.T) {
+		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+		folderRepo := &mockFolderRepository{
+			folder: &domain.Folder{ID: validFolderID, UserID: "kp_abc123", Name: "Nature"},
+		}
+		uc := NewImageUsecase(
+			repo,
+			&mockStorageService{putURL: "https://r2.example.com/upload"},
+			&mockThumbnailService{},
+			nil,
+			folderRepo,
+			nil,
+			noopTel(),
+		)
+
+		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &validFolderID, nil)
+
+		require.NoError(t, err)
+		require.NotNil(t, repo.createdImage)
+		require.NotNil(t, repo.createdImage.FolderID)
+		assert.Equal(t, validFolderID, *repo.createdImage.FolderID)
+	})
+
+	t.Run("nulls folder_id when folder is not found", func(t *testing.T) {
+		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+		folderRepo := &mockFolderRepository{
+			err: gorm.ErrRecordNotFound,
+		}
+		uc := NewImageUsecase(
+			repo,
+			&mockStorageService{putURL: "https://r2.example.com/upload"},
+			&mockThumbnailService{},
+			nil,
+			folderRepo,
+			nil,
+			noopTel(),
+		)
+
+		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &invalidFolderID, nil)
+
+		require.NoError(t, err)
+		require.NotNil(t, repo.createdImage)
+		assert.Nil(t, repo.createdImage.FolderID)
+	})
+}
+
 func TestImageUsecase_CompleteUpload(t *testing.T) {
 	imageID := uuid.New()
 
