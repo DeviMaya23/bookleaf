@@ -12,6 +12,7 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/lib/images', () => ({
   getImages: vi.fn(),
   deleteImage: vi.fn(),
+  getImage: vi.fn(),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -25,22 +26,22 @@ vi.mock('@/components/ui/context-menu', async () => {
       React.createElement(React.Fragment, null, children),
     ContextMenuItem: ({
       children,
-      onSelect,
+      onClick,
       className,
     }: {
       children: React.ReactNode
-      onSelect?: (e: Event) => void
+      onClick?: (e: React.MouseEvent) => void
       className?: string
     }) =>
       React.createElement(
         'button',
-        { role: 'menuitem', className, onClick: () => onSelect?.(new Event('select')) },
+        { role: 'menuitem', className, onClick },
         children,
       ),
   }
 })
 
-import { getImages, deleteImage } from '@/lib/images'
+import { getImages, deleteImage, getImage } from '@/lib/images'
 
 function makeImage(overrides?: object) {
   return {
@@ -127,6 +128,63 @@ describe('ImageGrid pagination', () => {
     })
 
     expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('ImageGrid lightbox', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('opens lightbox and shows image after clicking a card', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+    vi.mocked(getImage).mockResolvedValue({
+      ...makeImage(),
+      image_url: 'https://r2.example.com/full.jpg',
+    })
+
+    renderImageGrid()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByText('Test image'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img')).toHaveAttribute('src', 'https://r2.example.com/full.jpg')
+    })
+    expect(getImage).toHaveBeenCalledWith(expect.any(Function), '1')
+  })
+
+  it('closes lightbox when onOpenChange fires with false', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+    vi.mocked(getImage).mockResolvedValue({
+      ...makeImage(),
+      image_url: 'https://r2.example.com/full.jpg',
+    })
+
+    renderImageGrid()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByText('Test image'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('img')).toBeInTheDocument()
+    })
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => {
+      const allImgs = screen.queryAllByRole('img')
+      const hasLightboxImg = allImgs.some(
+        (img) => img.getAttribute('src') === 'https://r2.example.com/full.jpg',
+      )
+      expect(hasLightboxImg).toBe(false)
+    })
   })
 })
 
