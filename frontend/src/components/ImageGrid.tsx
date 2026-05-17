@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
 import {
@@ -17,19 +17,20 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, deleteImage } from '@/lib/images'
+import { getImages, deleteImage, getImage } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
 interface ImageCardProps {
   image: Image
   onDelete: (image: Image) => void
+  onOpen: (image: Image) => void
 }
 
-function ImageCard({ image, onDelete }: ImageCardProps) {
+function ImageCard({ image, onDelete, onOpen }: ImageCardProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div className="cursor-pointer rounded-lg overflow-hidden border bg-card">
+        <div className="cursor-pointer rounded-lg overflow-hidden border bg-card" onClick={() => onOpen(image)}>
           <div className="aspect-square bg-muted">
             {image.thumbnail_url ? (
               <img
@@ -68,12 +69,20 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [deleteTarget, setDeleteTarget] = useState<Image | null>(null)
+  const [lightboxTarget, setLightboxTarget] = useState<Image | null>(null)
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['images', folderId],
     queryFn: ({ pageParam }) => getImages(getToken, folderId, pageParam as string | undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  })
+
+  const { data: imageDetail, isLoading: isLoadingDetail } = useQuery({
+    queryKey: ['image', lightboxTarget?.id],
+    queryFn: () => getImage(getToken, lightboxTarget!.id),
+    enabled: !!lightboxTarget,
+    staleTime: 0,
   })
 
   const deleteMutation = useMutation({
@@ -111,7 +120,7 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
     <>
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {allImages.map((image) => (
-          <ImageCard key={image.id} image={image} onDelete={setDeleteTarget} />
+          <ImageCard key={image.id} image={image} onDelete={setDeleteTarget} onOpen={setLightboxTarget} />
         ))}
       </div>
 
@@ -133,6 +142,23 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
           </Button>
         </div>
       )}
+
+      <Dialog open={!!lightboxTarget} onOpenChange={(open) => { if (!open) setLightboxTarget(null) }}>
+        <DialogContent className="sm:max-w-fit p-0 overflow-hidden">
+          <DialogTitle className="sr-only">{lightboxTarget?.title}</DialogTitle>
+          {isLoadingDetail ? (
+            <div className="flex items-center justify-center w-64 h-64">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : imageDetail ? (
+            <img
+              src={imageDetail.image_url}
+              alt={lightboxTarget?.title}
+              className="max-h-[90vh] max-w-[90vw] object-contain"
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
         <DialogContent>

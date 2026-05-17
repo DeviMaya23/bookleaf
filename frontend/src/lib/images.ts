@@ -98,6 +98,16 @@ export async function completeUpload(
   return res.json()
 }
 
+export interface ImageDetail extends Image {
+  image_url: string
+}
+
+export async function getImage(getToken: GetToken, id: string): Promise<ImageDetail> {
+  const res = await apiFetch(`/images/${id}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch image')
+  return res.json()
+}
+
 export async function acceptSuggestion(
   getToken: GetToken,
   id: string,
