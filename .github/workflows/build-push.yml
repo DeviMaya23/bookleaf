@@ -33,3 +33,39 @@ jobs:
           context: backend
           push: true
           tags: australia-southeast1-docker.pkg.dev/bookleaf-393/bookleaf/backend:latest
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: build-push
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/258487485284/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: ci-github@bookleaf-393.iam.gserviceaccount.com
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: bookleaf-backend
+          region: australia-southeast1
+          image: australia-southeast1-docker.pkg.dev/bookleaf-393/bookleaf/backend:latest
+          service_account: ci-github@bookleaf-393.iam.gserviceaccount.com
+          secrets: |
+            DATABASE_HOST=DATABASE_HOST:latest
+            DATABASE_USER=DATABASE_USER:latest
+            DATABASE_PASSWORD=DATABASE_PASSWORD:latest
+            R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest
+            R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest
+            GOOGLE_VISION_API_KEY=GOOGLE_VISION_API_KEY:latest
+          env_vars: |
+            DATABASE_NAME=bookleaf
+            DATABASE_PORT=5432
+            DATABASE_SSLMODE=require
+            KINDE_ISSUER_URL=https://bookleaf.kinde.com
+            KINDE_AUDIENCE=https://bookleaf-api
+            R2_ACCOUNT_ID=4405668e0fb9df82719d43486c50d587
+            R2_BUCKET_NAME=bookleaf-prod
+            R2_PUBLIC_URL=https://cdn.evimay.me
+            CORS_ALLOWED_ORIGINS=https://bookleaf.evimay.me
