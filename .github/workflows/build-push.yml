@@ -51,7 +51,7 @@ jobs:
           service: bookleaf-backend
           region: australia-southeast1
           image: australia-southeast1-docker.pkg.dev/bookleaf-393/bookleaf/backend:latest
-          service_account: ci-github@bookleaf-393.iam.gserviceaccount.com
+          flags: --service-account=ci-github@bookleaf-393.iam.gserviceaccount.com
           secrets: |
             DATABASE_HOST=DATABASE_HOST:latest
             DATABASE_USER=DATABASE_USER:latest
