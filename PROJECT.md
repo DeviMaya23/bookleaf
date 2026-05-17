@@ -107,6 +107,4 @@ All direct `@base-ui/react` and `@radix-ui/*` imports must stay inside `src/comp
 | `R2_PUBLIC_URL` | — | Public bucket URL (e.g. `https://pub-xxxx.r2.dev`); used for thumbnail CDN links — requires public access enabled on the bucket |
 | `GOOGLE_VISION_API_KEY` | — | Google Vision API key for AI organising |
 | `KINDE_ISSUER_URL` | — | Kinde domain (e.g. `https://yourapp.kinde.com`) |
-| `KINDE_CLIENT_ID` | — | Kinde backend application client ID |
-| `KINDE_CLIENT_SECRET` | — | Kinde backend application client secret |
 | `KINDE_AUDIENCE` | — | API audience identifier registered in Kinde |
