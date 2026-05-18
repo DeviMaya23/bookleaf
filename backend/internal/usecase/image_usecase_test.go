@@ -28,15 +28,16 @@ import (
 // --- mocks ---
 
 type mockImageRepository struct {
-	image        *domain.Image
-	images       []*domain.Image
-	err          error
-	count        int64
-	updateFields map[string]any
-	lastUpdateID uuid.UUID
-	lastUpdateBy string
-	createdImage *domain.Image
-	lastUnfiled  bool
+	image            *domain.Image
+	images           []*domain.Image
+	err              error
+	count            int64
+	updateFields     map[string]any
+	lastUpdateID     uuid.UUID
+	lastUpdateBy     string
+	createdImage     *domain.Image
+	lastUnfiled      bool
+	hardDeleteCalls  int
 }
 
 func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
@@ -97,6 +98,7 @@ func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) (
 }
 
 func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	m.hardDeleteCalls++
 	return m.err
 }
 
@@ -1039,6 +1041,7 @@ func TestImageUsecase_CleanupStaleUploads_Success(t *testing.T) {
 	assert.Equal(t, 2, store.deleteCalls)
 	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/a.jpg")
 	assert.Contains(t, store.deletedKeys, "users/kp_user2/images/b.jpg")
+	assert.Equal(t, 2, repo.hardDeleteCalls)
 }
 
 func TestImageUsecase_CleanupStaleUploads_ListError(t *testing.T) {

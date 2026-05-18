@@ -34,7 +34,7 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND is_uploaded = true", userID).
 		Order("created_at DESC, id DESC").
 		Limit(limit + 1)
 
