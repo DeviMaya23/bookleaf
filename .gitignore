@@ -39,3 +39,9 @@ go.work.sum
 # Local make overrides (machine-specific/secrets)
 Makefile.local
 
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
