@@ -89,12 +89,68 @@ ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListIm
 ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 ```
 
+`Restore` and `UpdateImage` SHALL return `*ImageItem` instead of `*domain.Image`:
+
+```go
+Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
+UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
+```
+
+`ImageItem` is defined in `internal/usecase/`:
+
+```go
+type ImageItem struct {
+    Image        *domain.Image
+    ThumbnailURL *string
+}
+```
+
+`ListImagesResult.Images` and `ListTrashedResult.Images` SHALL be `[]ImageItem`.
+
+`ImageDetail` SHALL include a `ThumbnailURL *string` field alongside `ImageURL`:
+
+```go
+type ImageDetail struct {
+    Image        *domain.Image
+    ImageURL     string
+    ThumbnailURL *string
+}
+```
+
 All other method signatures are unchanged.
 
 #### Scenario: Usecase interface is satisfied by concrete implementation
 
 - **WHEN** the Go package is compiled
 - **THEN** `imageUsecase` implements `usecase.ImageUsecase` without compilation errors
+
+---
+
+### Requirement: Thumbnail URL Generation
+
+The usecase SHALL generate presigned GET URLs for thumbnails with a 24h TTL. A private helper `thumbnailURL(ctx context.Context, path *string) *string` on `imageUsecase` SHALL:
+
+- Return `nil` if `path` is `nil`
+- Call `store.GeneratePresignedGetURL` with `presignedGetTTL` (24h)
+- Return `nil` if presigning fails (non-fatal; thumbnail is cosmetic)
+
+This helper SHALL be called by `ListImages`, `ListTrashed`, `GetImage`, `Restore`, and `UpdateImage`.
+
+#### Scenario: Thumbnail URL is presigned when thumbnail path exists
+
+- **WHEN** an image has a non-nil `thumbnail_path`
+- **THEN** the response includes a non-nil `thumbnail_url` containing a presigned GET URL
+
+#### Scenario: Thumbnail URL is nil when no thumbnail exists
+
+- **WHEN** an image has a nil `thumbnail_path`
+- **THEN** `thumbnail_url` in the response is `null`
+
+#### Scenario: Thumbnail URL is nil when presigning fails
+
+- **WHEN** `GeneratePresignedGetURL` returns an error for the thumbnail key
+- **THEN** `thumbnail_url` in the response is `null`
+- **AND** the overall request succeeds
 
 ---
 
@@ -151,7 +207,7 @@ Response body (201): `id`, `upload_url`, `r2_path`.
 
 ### Requirement: GET /images and GET /images/:id — Response Shape
 
-The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pagination` spec). The per-item `imageResponse` shape is unchanged:
+The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pagination` spec). The per-item `imageResponse` shape uses a presigned GET URL (24h TTL) for `thumbnail_url`:
 
 ```json
 {
@@ -170,7 +226,7 @@ The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pa
 }
 ```
 
-`GET /images/:id` response (`imageDetailResponse`) is unchanged.
+`GET /images/:id` response (`imageDetailResponse`) includes a `thumbnail_url` field sourced from `ImageDetail.ThumbnailURL`, also a presigned GET URL (24h TTL).
 
 #### Scenario: Image list response returns paginated envelope
 

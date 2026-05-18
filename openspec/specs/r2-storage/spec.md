@@ -9,18 +9,17 @@ New fields in `config.go`:
 - `R2_ACCESS_KEY_ID` — required; R2 API access key ID
 - `R2_SECRET_ACCESS_KEY` — required; R2 API secret access key
 - `R2_BUCKET_NAME` — required; target bucket name
-- `R2_PUBLIC_URL` — required; CDN base URL (e.g. `https://assets.bookleaf.app`)
 
-All five are required. `Load()` SHALL return an error if any are missing.
+All four are required. `Load()` SHALL return an error if any are missing. `R2_PUBLIC_URL` is removed — the bucket is private and all reads use presigned GET URLs.
 
 #### Scenario: All R2 vars set — config loads successfully
 
-- **WHEN** all five R2 environment variables are set
+- **WHEN** all four R2 environment variables are set
 - **THEN** `Load()` returns a `Config` with a populated `R2` field
 
 #### Scenario: Missing R2 var — config fails with descriptive error
 
-- **WHEN** any one of the five R2 environment variables is missing or empty
+- **WHEN** any one of the four R2 environment variables is missing or empty
 - **THEN** `Load()` returns an error naming the missing variable
 
 ---
@@ -34,8 +33,10 @@ Methods:
 - `GeneratePresignedGetURL(ctx, key string, ttl time.Duration) (string, error)`
 - `GetObject(ctx, key string) (io.ReadCloser, error)`
 - `PutObject(ctx, key string, body io.Reader, contentType string) error`
-- `CDNUrl(key string) string` — constructs the public CDN URL for a given key (no network call)
+- `DeleteObject(ctx, key string) error`
 - `Ping(ctx context.Context) error` — verifies R2 connectivity and credential validity; implemented as a `HeadBucket` call; returns `nil` on success or a wrapped error on failure
+
+`CDNUrl` is removed. The bucket is private; all read access goes through presigned GET URLs.
 
 #### Scenario: Interface is satisfied by R2 implementation
 
@@ -63,12 +64,7 @@ The system SHALL implement `StorageService` using the AWS SDK v2 S3-compatible c
 - `GeneratePresignedGetURL` SHALL produce a GET presigned URL valid for the given TTL
 - `GetObject` SHALL fetch an object's body from R2
 - `PutObject` SHALL upload a byte stream to R2 at the given key with the given content type
-- `CDNUrl` SHALL return `{R2_PUBLIC_URL}/{key}`
-
-#### Scenario: CDN URL is constructed without a network call
-
-- **WHEN** `CDNUrl("users/kp_abc123/thumbnails/img-uuid.jpg")` is called
-- **THEN** the return value is `{R2_PUBLIC_URL}/users/kp_abc123/thumbnails/img-uuid.jpg`
+- `DeleteObject` SHALL delete the object at the given key from R2
 
 #### Scenario: Presigned PUT URL targets the correct key
 
