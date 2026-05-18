@@ -29,7 +29,7 @@ interface ImageCardProps {
 function ImageCard({ image, onDelete, onOpen }: ImageCardProps) {
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
+      <ContextMenuTrigger>
         <div className="cursor-pointer rounded-lg overflow-hidden border bg-card" onClick={() => onOpen(image)}>
           <div className="aspect-square bg-muted">
             {image.thumbnail_url ? (

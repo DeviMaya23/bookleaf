@@ -93,7 +93,7 @@ export default function FolderSidebar() {
 
           {folders.map((folder) => (
             <ContextMenu key={folder.id}>
-              <ContextMenuTrigger asChild>
+              <ContextMenuTrigger>
                 <li
                   className={itemClass(activeFolderId === folder.id)}
                   onClick={() => navigate(`/folders/${folder.id}`)}
