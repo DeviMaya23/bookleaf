@@ -21,7 +21,6 @@ type r2Storage struct {
 	client             *s3.Client
 	presign            *s3.PresignClient
 	bucket             string
-	publicURL          string
 	tel                *observability.Telemetry
 	presignURLDuration metric.Float64Histogram
 }
@@ -45,14 +44,9 @@ func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) StorageServ
 		client:             client,
 		presign:            s3.NewPresignClient(client),
 		bucket:             cfg.BucketName,
-		publicURL:          cfg.PublicURL,
 		tel:                tel,
 		presignURLDuration: presignURLDuration,
 	}
-}
-
-func (r *r2Storage) CDNUrl(key string) string {
-	return r.publicURL + "/" + key
 }
 
 func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentType string, ttl time.Duration) (string, error) {

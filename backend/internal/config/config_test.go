@@ -23,7 +23,6 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Setenv("R2_ACCESS_KEY_ID", "access-key-id")
 	t.Setenv("R2_SECRET_ACCESS_KEY", "secret-access-key")
 	t.Setenv("R2_BUCKET_NAME", "bucket-name")
-	t.Setenv("R2_PUBLIC_URL", "https://assets.bookleaf.app")
 	t.Setenv("OTEL_EXPORTER", "jaeger")
 	t.Setenv("OTEL_METRICS_EXPORTER", "prometheus")
 }
@@ -53,7 +52,6 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.Equal(t, "access-key-id", cfg.R2.AccessKeyID)
 	assert.Equal(t, "secret-access-key", cfg.R2.SecretAccessKey)
 	assert.Equal(t, "bucket-name", cfg.R2.BucketName)
-	assert.Equal(t, "https://assets.bookleaf.app", cfg.R2.PublicURL)
 	assert.True(t, cfg.Obs.OTELEnabled)
 	assert.Equal(t, "jaeger", cfg.Obs.OTELExporter)
 	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
@@ -90,7 +88,6 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 		{"missing R2_ACCESS_KEY_ID", "R2_ACCESS_KEY_ID"},
 		{"missing R2_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY"},
 		{"missing R2_BUCKET_NAME", "R2_BUCKET_NAME"},
-		{"missing R2_PUBLIC_URL", "R2_PUBLIC_URL"},
 	}
 
 	for _, tt := range tests {

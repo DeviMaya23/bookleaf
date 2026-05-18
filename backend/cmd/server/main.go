@@ -97,7 +97,7 @@ func main() {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
 	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
-	imageHandler := httphandler.NewImageHandler(imageUsecase, storageService, tel)
+	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
 	if err != nil {

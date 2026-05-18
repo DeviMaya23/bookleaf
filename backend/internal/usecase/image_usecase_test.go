@@ -180,10 +180,6 @@ func (m *mockStorageService) Ping(_ context.Context) error {
 	return m.err
 }
 
-func (m *mockStorageService) CDNUrl(_ string) string {
-	return "https://cdn.example.com/test"
-}
-
 type mockThumbnailService struct {
 	err error
 }
@@ -700,7 +696,7 @@ func TestImageUsecase_ListImages_Pagination(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, result.Images, 10)
 		assert.NotNil(t, result.NextCursor)
-		assert.Equal(t, result.Images[9].ID, result.NextCursor.ID)
+		assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
 	})
 
 	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
@@ -712,6 +708,52 @@ func TestImageUsecase_ListImages_Pagination(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, result.Images, 5)
 		assert.Nil(t, result.NextCursor)
+	})
+}
+
+func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+
+	t.Run("returns presigned thumbnail URL when path exists", func(t *testing.T) {
+		repo := &mockImageRepository{
+			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
+		}
+		store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
+		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
+
+		require.NoError(t, err)
+		require.Len(t, result.Images, 1)
+		require.NotNil(t, result.Images[0].ThumbnailURL)
+		assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
+	})
+
+	t.Run("returns nil thumbnail URL when path is nil", func(t *testing.T) {
+		repo := &mockImageRepository{
+			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: nil}},
+		}
+		uc := NewImageUsecase(repo, &mockStorageService{getURL: "https://r2.example.com/thumb"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
+
+		require.NoError(t, err)
+		require.Len(t, result.Images, 1)
+		assert.Nil(t, result.Images[0].ThumbnailURL)
+	})
+
+	t.Run("returns nil thumbnail URL when presigning fails", func(t *testing.T) {
+		repo := &mockImageRepository{
+			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
+		}
+		store := &mockStorageService{err: errors.New("presign failed")}
+		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
+
+		require.NoError(t, err)
+		require.Len(t, result.Images, 1)
+		assert.Nil(t, result.Images[0].ThumbnailURL)
 	})
 }
 
@@ -746,15 +788,25 @@ func TestImageUsecase_ListImages_Unfiled(t *testing.T) {
 func TestImageUsecase_GetImage(t *testing.T) {
 	imageID := uuid.New()
 
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+
 	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		store   *mockStorageService
-		wantURL string
-		wantErr bool
+		name             string
+		repo             *mockImageRepository
+		store            *mockStorageService
+		wantURL          string
+		wantThumbnailURL *string
+		wantErr          bool
 	}{
 		{
-			name:    "returns image detail with presigned get url",
+			name:             "returns image detail with presigned get url and thumbnail url",
+			repo:             &mockImageRepository{image: &domain.Image{ID: imageID, Title: "photo", ThumbnailPath: &thumbnailPath}},
+			store:            &mockStorageService{getURL: "https://r2.example.com/view"},
+			wantURL:          "https://r2.example.com/view",
+			wantThumbnailURL: func() *string { v := "https://r2.example.com/view"; return &v }(),
+		},
+		{
+			name:    "returns nil thumbnail url when no thumbnail exists",
 			repo:    &mockImageRepository{image: &domain.Image{ID: imageID, Title: "photo"}},
 			store:   &mockStorageService{getURL: "https://r2.example.com/view"},
 			wantURL: "https://r2.example.com/view",
@@ -780,6 +832,12 @@ func TestImageUsecase_GetImage(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantURL, detail.ImageURL)
 			assert.Equal(t, imageID, detail.Image.ID)
+			if tt.wantThumbnailURL != nil {
+				require.NotNil(t, detail.ThumbnailURL)
+				assert.Equal(t, *tt.wantThumbnailURL, *detail.ThumbnailURL)
+			} else {
+				assert.Nil(t, detail.ThumbnailURL)
+			}
 		})
 	}
 }
@@ -876,7 +934,7 @@ func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, result.Images, 10)
 		assert.NotNil(t, result.NextCursor)
-		assert.Equal(t, result.Images[9].ID, result.NextCursor.ID)
+		assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
 	})
 
 	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
@@ -916,14 +974,14 @@ func TestImageUsecase_Restore(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
-			image, err := uc.Restore(context.Background(), imageID, "kp_abc123")
+			item, err := uc.Restore(context.Background(), imageID, "kp_abc123")
 
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, image.ID)
+			assert.Equal(t, tt.wantID, item.Image.ID)
 		})
 	}
 }
@@ -959,14 +1017,14 @@ func TestImageUsecase_UpdateImage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
-			image, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", tt.params)
+			item, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", tt.params)
 
 			if tt.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, image.ID)
+			assert.Equal(t, tt.wantID, item.Image.ID)
 		})
 	}
 }

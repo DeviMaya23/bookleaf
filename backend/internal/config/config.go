@@ -32,7 +32,6 @@ type R2Config struct {
 	AccessKeyID     string
 	SecretAccessKey string
 	BucketName      string
-	PublicURL       string
 }
 
 type ObsConfig struct {
@@ -147,11 +146,6 @@ func loadFromEnv() (*Config, error) {
 		return nil, err
 	}
 
-	r2PublicURL, err := requireEnv("R2_PUBLIC_URL")
-	if err != nil {
-		return nil, err
-	}
-
 	otelEnabled := envWithDefault("OTEL_ENABLED", "false") == "true"
 	otelExporter := envWithDefault("OTEL_EXPORTER", "")
 	otelMetricsExporter := envWithDefault("OTEL_METRICS_EXPORTER", "")
@@ -185,7 +179,6 @@ func loadFromEnv() (*Config, error) {
 			AccessKeyID:     r2AccessKeyID,
 			SecretAccessKey: r2SecretAccessKey,
 			BucketName:      r2BucketName,
-			PublicURL:       r2PublicURL,
 		},
 		Obs: ObsConfig{
 			OTELEnabled:         otelEnabled,

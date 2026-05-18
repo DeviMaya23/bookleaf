@@ -8,10 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/observability"
-	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -21,7 +19,6 @@ import (
 
 type ImageHandler struct {
 	imageUsecase usecase.ImageUsecase
-	store        storage.StorageService
 	tel          *observability.Telemetry
 }
 
@@ -91,10 +88,9 @@ type acceptSuggestionRequest struct {
 	SuggestedFolderName string `json:"suggested_folder_name"`
 }
 
-func NewImageHandler(imageUsecase usecase.ImageUsecase, store storage.StorageService, tel *observability.Telemetry) *ImageHandler {
+func NewImageHandler(imageUsecase usecase.ImageUsecase, tel *observability.Telemetry) *ImageHandler {
 	return &ImageHandler{
 		imageUsecase: imageUsecase,
-		store:        store,
 		tel:          tel,
 	}
 }
@@ -232,8 +228,8 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	images := make([]imageResponse, 0, len(result.Images))
-	for _, image := range result.Images {
-		images = append(images, h.toImageResponse(image))
+	for _, item := range result.Images {
+		images = append(images, toImageResponse(item))
 	}
 
 	var nextCursor *string
@@ -269,21 +265,21 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get image")
 	}
 
-	imageResp := h.toImageResponse(result.Image)
+	item := toImageResponse(usecase.ImageItem{Image: result.Image, ThumbnailURL: result.ThumbnailURL})
 	return c.JSON(http.StatusOK, imageDetailResponse{
-		ID:           imageResp.ID,
-		Title:        imageResp.Title,
-		Description:  imageResp.Description,
-		MIMEType:     imageResp.MIMEType,
-		SourceURL:    imageResp.SourceURL,
-		FolderID:     imageResp.FolderID,
-		ThumbnailURL: imageResp.ThumbnailURL,
-		Width:        imageResp.Width,
-		Height:       imageResp.Height,
-		FileSize:     imageResp.FileSize,
+		ID:           item.ID,
+		Title:        item.Title,
+		Description:  item.Description,
+		MIMEType:     item.MIMEType,
+		SourceURL:    item.SourceURL,
+		FolderID:     item.FolderID,
+		ThumbnailURL: item.ThumbnailURL,
+		Width:        item.Width,
+		Height:       item.Height,
+		FileSize:     item.FileSize,
 		ImageURL:     result.ImageURL,
-		CreatedAt:    imageResp.CreatedAt,
-		UpdatedAt:    imageResp.UpdatedAt,
+		CreatedAt:    item.CreatedAt,
+		UpdatedAt:    item.UpdatedAt,
 	})
 }
 
@@ -338,8 +334,8 @@ func (h *ImageHandler) ListTrashed(c echo.Context) error {
 	}
 
 	images := make([]imageResponse, 0, len(result.Images))
-	for _, image := range result.Images {
-		images = append(images, h.toImageResponse(image))
+	for _, item := range result.Images {
+		images = append(images, toImageResponse(item))
 	}
 
 	var nextCursor *string
@@ -365,7 +361,7 @@ func (h *ImageHandler) Restore(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	image, err := h.imageUsecase.Restore(ctx, imageID, userID)
+	item, err := h.imageUsecase.Restore(ctx, imageID, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -375,7 +371,7 @@ func (h *ImageHandler) Restore(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to restore image")
 	}
 
-	return c.JSON(http.StatusOK, h.toImageResponse(image))
+	return c.JSON(http.StatusOK, toImageResponse(*item))
 }
 
 func (h *ImageHandler) UpdateImage(c echo.Context) error {
@@ -420,7 +416,7 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		}
 	}
 
-	image, err := h.imageUsecase.UpdateImage(ctx, imageID, userID, params)
+	item, err := h.imageUsecase.UpdateImage(ctx, imageID, userID, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -430,7 +426,7 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update image")
 	}
 
-	return c.JSON(http.StatusOK, h.toImageResponse(image))
+	return c.JSON(http.StatusOK, toImageResponse(*item))
 }
 
 func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCursor, err error) {
@@ -454,25 +450,19 @@ func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCurs
 	return limit, cursor, nil
 }
 
-func (h *ImageHandler) toImageResponse(image *domain.Image) imageResponse {
-	var thumbnailURL *string
-	if image.ThumbnailPath != nil {
-		url := h.store.CDNUrl(*image.ThumbnailPath)
-		thumbnailURL = &url
-	}
-
+func toImageResponse(item usecase.ImageItem) imageResponse {
 	return imageResponse{
-		ID:           image.ID,
-		Title:        image.Title,
-		Description:  image.Description,
-		MIMEType:     image.MIMEType,
-		SourceURL:    image.SourceURL,
-		FolderID:     image.FolderID,
-		ThumbnailURL: thumbnailURL,
-		Width:        image.Width,
-		Height:       image.Height,
-		FileSize:     image.FileSize,
-		CreatedAt:    image.CreatedAt,
-		UpdatedAt:    image.UpdatedAt,
+		ID:           item.Image.ID,
+		Title:        item.Image.Title,
+		Description:  item.Image.Description,
+		MIMEType:     item.Image.MIMEType,
+		SourceURL:    item.Image.SourceURL,
+		FolderID:     item.Image.FolderID,
+		ThumbnailURL: item.ThumbnailURL,
+		Width:        item.Image.Width,
+		Height:       item.Image.Height,
+		FileSize:     item.Image.FileSize,
+		CreatedAt:    item.Image.CreatedAt,
+		UpdatedAt:    item.Image.UpdatedAt,
 	}
 }

@@ -47,8 +47,9 @@ type UpdateImageParams struct {
 }
 
 type ImageDetail struct {
-	Image    *domain.Image
-	ImageURL string
+	Image        *domain.Image
+	ImageURL     string
+	ThumbnailURL *string
 }
 
 type CompleteUploadResult struct {
@@ -57,16 +58,21 @@ type CompleteUploadResult struct {
 	Warning             string
 }
 
+type ImageItem struct {
+	Image        *domain.Image
+	ThumbnailURL *string
+}
+
 type ImageUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
 	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 	ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
-	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error)
+	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
-	Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
+	Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
 	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
 	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
 }
@@ -430,6 +436,17 @@ func (u *imageUsecase) uploadThumbnail(image *domain.Image, thumbnailKey string,
 	recordMetrics("success")
 }
 
+func (u *imageUsecase) thumbnailURL(ctx context.Context, path *string) *string {
+	if path == nil {
+		return nil
+	}
+	url, err := u.store.GeneratePresignedGetURL(ctx, *path, presignedGetTTL)
+	if err != nil {
+		return nil
+	}
+	return &url
+}
+
 func (u *imageUsecase) ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
@@ -441,7 +458,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	images, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -449,13 +466,18 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	}
 
 	var nextCursor *ImageCursor
-	if len(images) > limit {
-		images = images[:limit]
-		last := images[limit-1]
+	if len(rawImages) > limit {
+		rawImages = rawImages[:limit]
+		last := rawImages[limit-1]
 		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 
-	return &ListImagesResult{Images: images, NextCursor: nextCursor}, nil
+	items := make([]ImageItem, len(rawImages))
+	for i, img := range rawImages {
+		items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}
+	}
+
+	return &ListImagesResult{Images: items, NextCursor: nextCursor}, nil
 }
 
 func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error) {
@@ -476,7 +498,7 @@ func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string
 		return nil, fmt.Errorf("generate presigned url: %w", err)
 	}
 
-	return &ImageDetail{Image: image, ImageURL: imageURL}, nil
+	return &ImageDetail{Image: image, ImageURL: imageURL, ThumbnailURL: u.thumbnailURL(ctx, image.ThumbnailPath)}, nil
 }
 
 func (u *imageUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {
@@ -509,7 +531,7 @@ func (u *imageUsecase) ListTrashed(ctx context.Context, userID string, params Li
 		limit = 200
 	}
 
-	images, err := u.imageRepo.ListTrashed(ctx, userID, params.Cursor, limit)
+	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -517,16 +539,21 @@ func (u *imageUsecase) ListTrashed(ctx context.Context, userID string, params Li
 	}
 
 	var nextCursor *ImageCursor
-	if len(images) > limit {
-		images = images[:limit]
-		last := images[limit-1]
+	if len(rawImages) > limit {
+		rawImages = rawImages[:limit]
+		last := rawImages[limit-1]
 		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 	}
 
-	return &ListTrashedResult{Images: images, NextCursor: nextCursor}, nil
+	items := make([]ImageItem, len(rawImages))
+	for i, img := range rawImages {
+		items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}
+	}
+
+	return &ListTrashedResult{Images: items, NextCursor: nextCursor}, nil
 }
 
-func (u *imageUsecase) Restore(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {
+func (u *imageUsecase) Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.Restore")
 	defer span.End()
 
@@ -548,10 +575,10 @@ func (u *imageUsecase) Restore(ctx context.Context, id uuid.UUID, userID string)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	return image, nil
+	return &ImageItem{Image: image, ThumbnailURL: u.thumbnailURL(ctx, image.ThumbnailPath)}, nil
 }
 
-func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*domain.Image, error) {
+func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImage")
 	defer span.End()
 
@@ -600,7 +627,7 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 		}
 	}
 
-	return updated, nil
+	return &ImageItem{Image: updated, ThumbnailURL: u.thumbnailURL(ctx, updated.ThumbnailPath)}, nil
 }
 
 func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.Duration) error {
