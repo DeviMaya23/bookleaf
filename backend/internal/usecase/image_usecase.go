@@ -625,9 +625,9 @@ func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.D
 				zap.Error(err),
 			)
 		}
-		if err := u.imageRepo.SoftDelete(ctx, img.ID, img.UserID); err != nil {
-			logger.Warn("failed to soft delete stale image record",
-				zap.String("event", "r2.stale.soft_delete_failed"),
+		if err := u.imageRepo.HardDelete(ctx, img.ID, img.UserID); err != nil {
+			logger.Warn("failed to hard delete stale image record",
+				zap.String("event", "r2.stale.hard_delete_failed"),
 				zap.String("image_id", img.ID.String()),
 				zap.Error(err),
 			)
