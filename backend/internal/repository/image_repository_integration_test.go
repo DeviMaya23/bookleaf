@@ -28,11 +28,12 @@ func setupImageTest(t *testing.T) (usecase.ImageRepository, string) {
 func newTestImage(userID string) *domain.Image {
 	id := uuid.New()
 	return &domain.Image{
-		ID:       id,
-		UserID:   userID,
-		Title:    "test image",
-		MIMEType: "image/jpeg",
-		R2Path:   "users/" + userID + "/images/" + id.String() + ".jpg",
+		ID:         id,
+		UserID:     userID,
+		Title:      "test image",
+		MIMEType:   "image/jpeg",
+		R2Path:     "users/" + userID + "/images/" + id.String() + ".jpg",
+		IsUploaded: true,
 	}
 }
 
