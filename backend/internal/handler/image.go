@@ -73,6 +73,10 @@ type imageDetailResponse struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
+type downloadImageResponse struct {
+	DownloadURL string `json:"download_url"`
+}
+
 type listImagesResponse struct {
 	Images     []imageResponse `json:"images"`
 	NextCursor *string         `json:"next_cursor"`
@@ -281,6 +285,33 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		CreatedAt:    item.CreatedAt,
 		UpdatedAt:    item.UpdatedAt,
 	})
+}
+
+func (h *ImageHandler) DownloadImage(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DownloadImage")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	downloadURL, err := h.imageUsecase.DownloadImage(ctx, imageID, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get image download url")
+	}
+
+	return c.JSON(http.StatusOK, downloadImageResponse{DownloadURL: downloadURL})
 }
 
 func (h *ImageHandler) SoftDelete(c echo.Context) error {

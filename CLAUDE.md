@@ -9,9 +9,12 @@ This file will detail development conventions only.
 - Branch name format: `feat/<spec-name-here>`
 - Generate each artifact during proposal step by step. Confirm with me before moving on to the next one.
 
-## Unit Testing
+### Unit Testing in proposals
 
 - Always plan for unit tests on the service and handler layers
 - Do not write unit tests for SQL repositories, only do integration test
 - Each unit test should cover one success scenario and one failure scenario by default
 - If the spec requires more scenarios, follow the spec
+
+### Others to keep in mind during proposals
+- When creating tasks for a new endpoint, always include a bruno file creation.

@@ -132,6 +132,50 @@ func (r *r2Storage) GeneratePresignedGetURL(ctx context.Context, key string, ttl
 	return resp.URL, nil
 }
 
+func (r *r2Storage) GeneratePresignedDownloadURL(ctx context.Context, key, filename string, ttl time.Duration) (string, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.GeneratePresignedDownloadURL")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+	start := time.Now()
+
+	resp, err := r.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket:                     aws.String(r.bucket),
+		Key:                        aws.String(key),
+		ResponseContentDisposition: aws.String(fmt.Sprintf("attachment; filename=\"%s\"", filename)),
+	}, s3.WithPresignExpires(ttl))
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	r.presignURLDuration.Record(ctx, float64(time.Since(start).Milliseconds()),
+		metric.WithAttributes(
+			attribute.String("r2.operation", "presigned_download"),
+			attribute.String("r2.status", status),
+		),
+	)
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		logger.Error("presigned download URL generation failed",
+			zap.String("event", "r2.presigned_download.failed"),
+			zap.String("r2_key", key),
+			zap.String("filename", filename),
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("presign download %s: %w", key, err)
+	}
+
+	logger.Info("presigned download URL generated",
+		zap.String("event", "r2.presigned_download.success"),
+		zap.String("r2_key", key),
+		zap.String("filename", filename),
+	)
+	return resp.URL, nil
+}
+
 func (r *r2Storage) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {
 	ctx, span := r.tel.Tracer.Start(ctx, "storage.GetObject")
 	defer span.End()

@@ -122,6 +122,7 @@ func main() {
 	protected.GET("/images/trash", imageHandler.ListTrashed)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
+	protected.GET("/images/:id/download", imageHandler.DownloadImage)
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)

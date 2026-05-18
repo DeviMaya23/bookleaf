@@ -28,16 +28,16 @@ import (
 // --- mocks ---
 
 type mockImageRepository struct {
-	image            *domain.Image
-	images           []*domain.Image
-	err              error
-	count            int64
-	updateFields     map[string]any
-	lastUpdateID     uuid.UUID
-	lastUpdateBy     string
-	createdImage     *domain.Image
-	lastUnfiled      bool
-	hardDeleteCalls  int
+	image           *domain.Image
+	images          []*domain.Image
+	err             error
+	count           int64
+	updateFields    map[string]any
+	lastUpdateID    uuid.UUID
+	lastUpdateBy    string
+	createdImage    *domain.Image
+	lastUnfiled     bool
+	hardDeleteCalls int
 }
 
 func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
@@ -127,17 +127,21 @@ func generateTestPNGBytes(t *testing.T, width, height int) []byte {
 }
 
 type mockStorageService struct {
-	putURL          string
-	getURL          string
-	err             error
-	getObjectErr    error
-	putObjectErr    error
-	deleteObjectErr error
-	objectBytes     []byte
-	getCalls        int
-	putCalls        int
-	deleteCalls     int
-	deletedKeys     []string
+	putURL               string
+	getURL               string
+	downloadURL          string
+	err                  error
+	getObjectErr         error
+	putObjectErr         error
+	deleteObjectErr      error
+	objectBytes          []byte
+	getCalls             int
+	putCalls             int
+	deleteCalls          int
+	deletedKeys          []string
+	lastDownloadKey      string
+	lastDownloadFilename string
+	lastDownloadTTL      time.Duration
 }
 
 func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
@@ -146,6 +150,13 @@ func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ str
 
 func (m *mockStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
 	return m.getURL, m.err
+}
+
+func (m *mockStorageService) GeneratePresignedDownloadURL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
+	m.lastDownloadKey = key
+	m.lastDownloadFilename = filename
+	m.lastDownloadTTL = ttl
+	return m.downloadURL, m.err
 }
 
 func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
@@ -840,6 +851,41 @@ func TestImageUsecase_GetImage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImageUsecase_DownloadImage(t *testing.T) {
+	imageID := uuid.New()
+
+	t.Run("returns presigned download url for owned image", func(t *testing.T) {
+		repo := &mockImageRepository{
+			image: &domain.Image{
+				ID:       imageID,
+				Title:    "photo",
+				MIMEType: "image/jpeg",
+				R2Path:   "users/kp_abc123/images/photo.jpg",
+			},
+		}
+		store := &mockStorageService{downloadURL: "https://r2.example.com/download"}
+		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
+
+		require.NoError(t, err)
+		assert.Equal(t, "https://r2.example.com/download", url)
+		assert.Equal(t, "users/kp_abc123/images/photo.jpg", store.lastDownloadKey)
+		assert.Equal(t, "photo.jpg", store.lastDownloadFilename)
+		assert.Equal(t, 5*time.Minute, store.lastDownloadTTL)
+	})
+
+	t.Run("returns error when image not found", func(t *testing.T) {
+		repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
+		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
+
+		require.Error(t, err)
+		assert.Empty(t, url)
+	})
 }
 
 func TestImageUsecase_SoftDelete(t *testing.T) {
