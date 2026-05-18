@@ -22,6 +22,7 @@ import (
 type mockImageUsecase struct {
 	uploadResult         *usecase.UploadInitResult
 	completeResult       *usecase.CompleteUploadResult
+	downloadURL          string
 	imageDetail          *usecase.ImageDetail
 	imageItem            *usecase.ImageItem
 	listImagesResult     *usecase.ListImagesResult
@@ -43,6 +44,10 @@ func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *
 
 func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) (*usecase.CompleteUploadResult, error) {
 	return m.completeResult, m.err
+}
+
+func (m *mockImageUsecase) DownloadImage(_ context.Context, _ uuid.UUID, _ string) (string, error) {
+	return m.downloadURL, m.err
 }
 
 func (m *mockImageUsecase) AcceptSuggestion(_ context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
@@ -479,6 +484,51 @@ func TestImageHandler_GetImage(t *testing.T) {
 			assert.True(t, hasWidth)
 			assert.True(t, hasHeight)
 			assert.True(t, hasFileSize)
+		})
+	}
+}
+
+func TestImageHandler_DownloadImage(t *testing.T) {
+	imageID := uuid.New()
+
+	tests := []struct {
+		name          string
+		mockUC        *mockImageUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "returns download url",
+			mockUC:     &mockImageUsecase{downloadURL: "https://r2.example.com/download"},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "returns 404 when image not found",
+			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodGet, "/images/"+imageID.String()+"/download", "")
+			c.SetPath("/images/:id/download")
+			c.SetParamNames("id")
+			c.SetParamValues(imageID.String())
+
+			err := h.DownloadImage(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, "https://r2.example.com/download", resp["download_url"])
 		})
 	}
 }

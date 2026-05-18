@@ -33,6 +33,7 @@ var (
 const (
 	uploadURLTTL    = 15 * time.Minute
 	presignedGetTTL = 24 * time.Hour
+	downloadURLTTL  = 5 * time.Minute
 )
 
 type UploadInitResult struct {
@@ -69,6 +70,7 @@ type ImageUsecase interface {
 	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 	ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
+	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
@@ -501,6 +503,28 @@ func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string
 	return &ImageDetail{Image: image, ImageURL: imageURL, ThumbnailURL: u.thumbnailURL(ctx, image.ThumbnailPath)}, nil
 }
 
+func (u *imageUsecase) DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DownloadImage")
+	defer span.End()
+
+	image, err := u.imageRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return "", err
+	}
+
+	filename := image.Title + "." + downloadFileExtension(image.MIMEType)
+	downloadURL, err := u.store.GeneratePresignedDownloadURL(ctx, image.R2Path, filename, downloadURLTTL)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return "", fmt.Errorf("generate presigned download url: %w", err)
+	}
+
+	return downloadURL, nil
+}
+
 func (u *imageUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.SoftDelete")
 	defer span.End()
@@ -628,6 +652,21 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	}
 
 	return &ImageItem{Image: updated, ThumbnailURL: u.thumbnailURL(ctx, updated.ThumbnailPath)}, nil
+}
+
+func downloadFileExtension(mimeType string) string {
+	switch mimeType {
+	case "image/jpeg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/webp":
+		return "webp"
+	case "image/gif":
+		return "gif"
+	default:
+		return "bin"
+	}
 }
 
 func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.Duration) error {
