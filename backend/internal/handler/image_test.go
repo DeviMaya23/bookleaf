@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ type mockImageUsecase struct {
 	uploadResult         *usecase.UploadInitResult
 	completeResult       *usecase.CompleteUploadResult
 	imageDetail          *usecase.ImageDetail
-	image                *domain.Image
+	imageItem            *usecase.ImageItem
 	listImagesResult     *usecase.ListImagesResult
 	listTrashedResult    *usecase.ListTrashedResult
 	err                  error
@@ -85,13 +84,13 @@ func (m *mockImageUsecase) ListTrashed(_ context.Context, _ string, _ usecase.Li
 	return &usecase.ListTrashedResult{}, nil
 }
 
-func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
-	return m.image, m.err
+func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageItem, error) {
+	return m.imageItem, m.err
 }
 
-func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*domain.Image, error) {
+func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*usecase.ImageItem, error) {
 	m.lastUpdateParams = params
-	return m.image, m.err
+	return m.imageItem, m.err
 }
 
 func (m *mockImageUsecase) CleanupStaleUploads(_ context.Context, _ time.Duration) error {
@@ -100,36 +99,6 @@ func (m *mockImageUsecase) CleanupStaleUploads(_ context.Context, _ time.Duratio
 
 func (m *mockImageUsecase) PurgeExpiredTrash(_ context.Context, _ time.Duration) error {
 	return m.err
-}
-
-type mockImageStorageService struct{}
-
-func (m *mockImageStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
-	return "", nil
-}
-
-func (m *mockImageStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
-	return "", nil
-}
-
-func (m *mockImageStorageService) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
-	return nil, nil
-}
-
-func (m *mockImageStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _ string) error {
-	return nil
-}
-
-func (m *mockImageStorageService) DeleteObject(_ context.Context, _ string) error {
-	return nil
-}
-
-func (m *mockImageStorageService) Ping(_ context.Context) error {
-	return nil
-}
-
-func (m *mockImageStorageService) CDNUrl(_ string) string {
-	return "https://cdn.example.com/thumbnail.jpg"
 }
 
 // --- tests ---
@@ -165,7 +134,7 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images", tt.body)
 
 			err := h.InitiateUpload(c)
@@ -235,7 +204,7 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", "")
 			c.SetPath("/images/:id/complete")
 			c.SetParamNames("id")
@@ -298,7 +267,7 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", tt.body)
 			c.SetPath("/images/:id/accept-suggestion")
 			c.SetParamNames("id")
@@ -332,16 +301,16 @@ func TestImageHandler_ListImages(t *testing.T) {
 			name: "returns paginated image list",
 			mockUC: &mockImageUsecase{
 				listImagesResult: &usecase.ListImagesResult{
-					Images: []*domain.Image{
-						{
+					Images: []usecase.ImageItem{
+						{Image: &domain.Image{
 							ID:          uuid.New(),
 							Title:       "photo 1",
 							Description: func() *string { v := "desc"; return &v }(),
 							Width:       func() *int { v := 640; return &v }(),
 							Height:      func() *int { v := 480; return &v }(),
 							FileSize:    func() *int64 { v := int64(1024); return &v }(),
-						},
-						{ID: uuid.New(), Title: "photo 2"},
+						}},
+						{Image: &domain.Image{ID: uuid.New(), Title: "photo 2"}},
 					},
 				},
 			},
@@ -357,7 +326,7 @@ func TestImageHandler_ListImages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images", "")
 
 			err := h.ListImages(c)
@@ -382,7 +351,7 @@ func TestImageHandler_ListImages(t *testing.T) {
 
 func TestImageHandler_ListImages_Pagination(t *testing.T) {
 	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
-		h := NewImageHandler(&mockImageUsecase{}, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
 		c, _ := newEchoContext(t, http.MethodGet, "/images?cursor=!!!notvalid!!!", "")
 
 		err := h.ListImages(c)
@@ -395,14 +364,14 @@ func TestImageHandler_ListImages_Pagination(t *testing.T) {
 		cursorTime := time.Now().UTC()
 		mockUC := &mockImageUsecase{
 			listImagesResult: &usecase.ListImagesResult{
-				Images: []*domain.Image{{ID: uuid.New(), Title: "photo"}},
+				Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "photo"}}},
 				NextCursor: &usecase.ImageCursor{
 					CreatedAt: cursorTime,
 					ID:        cursorID,
 				},
 			},
 		}
-		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
 		c, rec := newEchoContext(t, http.MethodGet, "/images", "")
 
 		err := h.ListImages(c)
@@ -423,7 +392,7 @@ func TestImageHandler_ListImages_Pagination(t *testing.T) {
 func TestImageHandler_ListImages_Unfiled(t *testing.T) {
 	t.Run("unfiled=true sets Unfiled flag on params", func(t *testing.T) {
 		mockUC := &mockImageUsecase{}
-		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
 		c, _ := newEchoContext(t, http.MethodGet, "/images?unfiled=true", "")
 
 		err := h.ListImages(c)
@@ -434,7 +403,7 @@ func TestImageHandler_ListImages_Unfiled(t *testing.T) {
 
 	t.Run("unfiled absent leaves Unfiled false", func(t *testing.T) {
 		mockUC := &mockImageUsecase{}
-		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
 		c, _ := newEchoContext(t, http.MethodGet, "/images", "")
 
 		err := h.ListImages(c)
@@ -483,7 +452,7 @@ func TestImageHandler_GetImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -537,7 +506,7 @@ func TestImageHandler_SoftDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -567,8 +536,8 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 			name: "returns paginated trashed images",
 			mockUC: &mockImageUsecase{
 				listTrashedResult: &usecase.ListTrashedResult{
-					Images: []*domain.Image{
-						{ID: uuid.New(), Title: "deleted photo"},
+					Images: []usecase.ImageItem{
+						{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}},
 					},
 				},
 			},
@@ -584,7 +553,7 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
 
 			err := h.ListTrashed(c)
@@ -609,7 +578,7 @@ func TestImageHandler_ListTrashed(t *testing.T) {
 
 func TestImageHandler_ListTrashed_Pagination(t *testing.T) {
 	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
-		h := NewImageHandler(&mockImageUsecase{}, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
 		c, _ := newEchoContext(t, http.MethodGet, "/images/trash?cursor=!!!notvalid!!!", "")
 
 		err := h.ListTrashed(c)
@@ -622,14 +591,14 @@ func TestImageHandler_ListTrashed_Pagination(t *testing.T) {
 		cursorTime := time.Now().UTC()
 		mockUC := &mockImageUsecase{
 			listTrashedResult: &usecase.ListTrashedResult{
-				Images: []*domain.Image{{ID: uuid.New(), Title: "deleted photo"}},
+				Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}}},
 				NextCursor: &usecase.ImageCursor{
 					CreatedAt: cursorTime,
 					ID:        cursorID,
 				},
 			},
 		}
-		h := NewImageHandler(mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
 		c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
 
 		err := h.ListTrashed(c)
@@ -658,7 +627,7 @@ func TestImageHandler_Restore(t *testing.T) {
 	}{
 		{
 			name:       "restores image and returns 200",
-			mockUC:     &mockImageUsecase{image: &domain.Image{ID: imageID, Title: "photo"}},
+			mockUC:     &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "photo"}}},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -670,7 +639,7 @@ func TestImageHandler_Restore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/restore", "")
 			c.SetPath("/images/:id/restore")
 			c.SetParamNames("id")
@@ -707,7 +676,7 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			name: "updates image and returns 200 with updated image",
 			body: `{"title":"updated title","description":"new desc"}`,
 			mockUC: &mockImageUsecase{
-				image: &domain.Image{ID: imageID, Title: title},
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
 			},
 			wantStatus: http.StatusOK,
 		},
@@ -721,7 +690,7 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, &mockImageStorageService{}, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), tt.body)
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")

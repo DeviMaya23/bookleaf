@@ -13,7 +13,6 @@ type StorageService interface {
 	PutObject(ctx context.Context, key string, body io.Reader, contentType string) error
 	DeleteObject(ctx context.Context, key string) error
 	Ping(ctx context.Context) error
-	CDNUrl(key string) string
 }
 
 func MimeTypeToExt(mimeType string) string {

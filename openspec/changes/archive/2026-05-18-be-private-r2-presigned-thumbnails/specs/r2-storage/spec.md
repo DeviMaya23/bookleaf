@@ -1,10 +1,10 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: R2 Config
 
 The system SHALL load R2 connection settings from environment variables and expose them via the existing `Config` struct.
 
-New fields in `config.go`:
+Fields in `config.go`:
 - `R2_ACCOUNT_ID` — required; Cloudflare account ID
 - `R2_ACCESS_KEY_ID` — required; R2 API access key ID
 - `R2_SECRET_ACCESS_KEY` — required; R2 API secret access key
@@ -70,20 +70,3 @@ The system SHALL implement `StorageService` using the AWS SDK v2 S3-compatible c
 
 - **WHEN** `GeneratePresignedPutURL` is called with a key and TTL
 - **THEN** the returned URL contains the key path and an expiry consistent with the TTL
-
----
-
-### Requirement: R2 Object Key Scheme
-
-The system SHALL use the following key structure for all objects stored in R2:
-
-- Full-resolution images: `users/{kindeID}/images/{imageID}.{ext}`
-- Thumbnails: `users/{kindeID}/thumbnails/{imageID}.jpg`
-
-Extension is derived from the image MIME type at record creation time (`image/jpeg` → `.jpg`, `image/png` → `.png`, `image/webp` → `.webp`, `image/gif` → `.gif`). Thumbnails are always stored as JPEG regardless of the original format.
-
-#### Scenario: Key scheme is consistent between upload and thumbnail
-
-- **WHEN** an image is created with ID `abc` and mime type `image/png` for user `kp_xyz`
-- **THEN** the full-image key is `users/kp_xyz/images/abc.png`
-- **AND** the thumbnail key is `users/kp_xyz/thumbnails/abc.jpg`

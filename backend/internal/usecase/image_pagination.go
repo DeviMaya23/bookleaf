@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
 )
 
@@ -23,7 +22,7 @@ type ListImagesParams struct {
 }
 
 type ListImagesResult struct {
-	Images     []*domain.Image
+	Images     []ImageItem
 	NextCursor *ImageCursor
 }
 
@@ -33,7 +32,7 @@ type ListTrashedParams struct {
 }
 
 type ListTrashedResult struct {
-	Images     []*domain.Image
+	Images     []ImageItem
 	NextCursor *ImageCursor
 }
 
