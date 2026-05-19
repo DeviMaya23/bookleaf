@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { useDraggable, useDroppable, useDndContext } from '@dnd-kit/core'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -49,30 +50,81 @@ function buildFolderTree(folders: Folder[]): FolderNode[] {
   return roots
 }
 
+export function getFolderSubtreeIds(folders: Folder[], folderId: string): Set<string> {
+  const ids = new Set<string>([folderId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const f of folders) {
+      if (f.parent_id && ids.has(f.parent_id) && !ids.has(f.id)) {
+        ids.add(f.id)
+        changed = true
+      }
+    }
+  }
+  return ids
+}
+
 interface FolderItemProps {
   folder: FolderNode
   depth: number
   view: AppView
+  folders: Folder[]
+  activeDragType: string | null
+  activeDragFolderId: string | null
   onSelect: (folder: FolderNode) => void
   onRename: (folder: Folder) => void
   onDelete: (folder: Folder) => void
   onNewSubfolder: (folder: Folder) => void
 }
 
-function FolderItem({ folder, depth, view, onSelect, onRename, onDelete, onNewSubfolder }: FolderItemProps) {
+function FolderItem({
+  folder, depth, view, folders,
+  activeDragType, activeDragFolderId,
+  onSelect, onRename, onDelete, onNewSubfolder,
+}: FolderItemProps) {
   const [open, setOpen] = useState(depth === 0)
   const hasChildren = folder.children.length > 0
   const isActive = view.type === 'folder' && view.id === folder.id
 
+  const subtreeIds = activeDragFolderId
+    ? getFolderSubtreeIds(folders, activeDragFolderId)
+    : new Set<string>()
+  const isInvalidFolderTarget = activeDragType === 'folder' && subtreeIds.has(folder.id)
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `folder-drop-${folder.id}`,
+    disabled: isInvalidFolderTarget,
+    data: { type: 'folder', folderId: folder.id },
+  })
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `folder-drag-${folder.id}`,
+    data: { type: 'folder', folderId: folder.id, name: folder.name, parentId: folder.parent_id },
+  })
+
+  const isImageDropTarget = activeDragType === 'image' && isOver
+  const isFolderDropTarget = activeDragType === 'folder' && isOver && !isInvalidFolderTarget
+
+  const setRef = (el: HTMLDivElement | null) => {
+    setDropRef(el)
+    setDragRef(el)
+  }
+
   return (
-    <div>
+    <div style={{ opacity: isDragging ? 0.4 : 1 }}>
       <ContextMenu>
         <ContextMenuTrigger>
           <div
+            ref={setRef}
+            {...listeners}
+            {...attributes}
             style={{ paddingLeft: 8 + depth * 14 }}
             className={`flex items-center gap-1 pr-2 py-1 rounded-md cursor-pointer mb-0.5 text-sm select-none ${
               isActive
                 ? 'bg-accent text-accent-foreground font-medium'
+                : isImageDropTarget || isFolderDropTarget
+                ? 'bg-accent text-accent-foreground ring-1 ring-primary/40'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             }`}
             onClick={() => onSelect(folder)}
@@ -112,6 +164,9 @@ function FolderItem({ folder, depth, view, onSelect, onRename, onDelete, onNewSu
               folder={child}
               depth={depth + 1}
               view={view}
+              folders={folders}
+              activeDragType={activeDragType}
+              activeDragFolderId={activeDragFolderId}
               onSelect={onSelect}
               onRename={onRename}
               onDelete={onDelete}
@@ -124,26 +179,58 @@ function FolderItem({ folder, depth, view, onSelect, onRename, onDelete, onNewSu
   )
 }
 
-interface SystemEntryProps {
-  label: string
+interface UnsortedEntryProps {
   active: boolean
-  muted?: boolean
+  activeDragType: string | null
   onClick: () => void
 }
 
-function SystemEntry({ label, active, muted, onClick }: SystemEntryProps) {
+function UnsortedEntry({ active, activeDragType, onClick }: UnsortedEntryProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'unsorted-drop',
+    data: { type: 'unsorted' },
+  })
+
+  const isDropTarget = activeDragType === 'image' && isOver
+
   return (
     <div
+      ref={setNodeRef}
       className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
         active
           ? 'bg-accent text-accent-foreground font-medium'
-          : muted
-          ? 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
+          : isDropTarget
+          ? 'bg-accent text-accent-foreground ring-1 ring-primary/40'
           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
       }`}
       onClick={onClick}
     >
-      {label}
+      Unsorted
+    </div>
+  )
+}
+
+function RootDropZone() {
+  const { active } = useDndContext()
+  const isDraggingFolder = active?.data.current?.type === 'folder'
+
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'root-drop',
+    data: { type: 'root' },
+  })
+
+  if (!isDraggingFolder) return null
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`mx-2 mt-1 px-3 py-2 rounded-md border-2 border-dashed text-xs text-center select-none transition-colors ${
+        isOver
+          ? 'border-primary bg-primary/5 text-primary'
+          : 'border-muted-foreground/30 text-muted-foreground/50'
+      }`}
+    >
+      Move to root
     </div>
   )
 }
@@ -156,6 +243,12 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { active } = useDndContext()
+
+  const activeDragType = (active?.data.current?.type as string) ?? null
+  const activeDragFolderId = activeDragType === 'folder'
+    ? (active?.data.current?.folderId as string)
+    : null
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
@@ -210,22 +303,33 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
-        <SystemEntry
-          label="All"
-          active={view.type === 'all'}
+        <div
+          className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+            view.type === 'all'
+              ? 'bg-accent text-accent-foreground font-medium'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+          }`}
           onClick={() => navigate('/')}
-        />
-        <SystemEntry
-          label="Unsorted"
+        >
+          All
+        </div>
+        <UnsortedEntry
           active={view.type === 'unsorted'}
+          activeDragType={activeDragType}
           onClick={() => navigate('/unsorted')}
         />
-        <SystemEntry
-          label="Trash"
-          active={view.type === 'trash'}
-          muted
-          onClick={() => navigate('/trash')}
-        />
+        <div className="mt-[8px]">
+          <div
+            className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+              view.type === 'trash'
+                ? 'bg-accent text-accent-foreground font-medium'
+                : 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
+            }`}
+            onClick={() => navigate('/trash')}
+          >
+            Trash
+          </div>
+        </div>
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />
@@ -240,12 +344,17 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
             folder={folder}
             depth={0}
             view={view}
+            folders={folders}
+            activeDragType={activeDragType}
+            activeDragFolderId={activeDragFolderId}
             onSelect={handleFolderSelect}
             onRename={setRenameTarget}
             onDelete={setDeleteTarget}
             onNewSubfolder={setSubfolderParent}
           />
         ))}
+
+        <RootDropZone />
       </nav>
 
       <div className="p-2 border-t space-y-1">

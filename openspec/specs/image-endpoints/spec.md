@@ -1,5 +1,3 @@
-## MODIFIED Requirements
-
 ### Requirement: Image Repository Interface
 
 The system SHALL define an `ImageRepository` interface in `internal/usecase/` that the SQL repository implements.
@@ -260,6 +258,64 @@ The `GET /images/trash` endpoint SHALL return a paginated envelope using the sam
 
 ---
 
+### Requirement: DELETE /images/:id — Soft Delete
+
+The system SHALL expose a `DELETE /images/:id` endpoint on the protected route group that soft-deletes an image by setting `deleted_at`.
+
+Response: `204 No Content`
+
+- The image MUST be owned by the authenticated user
+- Returns `404 Not Found` if the image does not exist or belongs to another user
+- The image is NOT removed from R2; only the `deleted_at` timestamp is set
+
+#### Scenario: Authenticated user soft-deletes an image
+
+- **WHEN** an authenticated `DELETE /images/:id` request is made for an owned non-deleted image
+- **THEN** the response is `204 No Content`
+- **AND** the image has `deleted_at` set in the database
+- **AND** the image no longer appears in `GET /images` results
+
+#### Scenario: Image not found or not owned by user
+
+- **WHEN** an authenticated `DELETE /images/:id` request is made for a non-existent or unowned image
+- **THEN** the response is `404 Not Found`
+
+#### Scenario: Unauthenticated request is rejected
+
+- **WHEN** a `DELETE /images/:id` request is made without a valid Bearer token
+- **THEN** the response is `401 Unauthorized`
+
+---
+
+### Requirement: POST /images/:id/restore — Restore from Trash
+
+The system SHALL expose a `POST /images/:id/restore` endpoint on the protected route group that restores a soft-deleted image by clearing `deleted_at`.
+
+Response body (200): the restored image in the same `imageResponse` shape as `GET /images` list items, including a presigned `thumbnail_url` (24h TTL).
+
+- The image MUST be soft-deleted and owned by the authenticated user
+- Returns `404 Not Found` if the image does not exist, is not soft-deleted, or belongs to another user
+
+#### Scenario: Authenticated user restores a trashed image
+
+- **WHEN** an authenticated `POST /images/:id/restore` request is made for a soft-deleted owned image
+- **THEN** the response is `200 OK`
+- **AND** `deleted_at` is cleared in the database
+- **AND** the response body includes the restored image with all `imageResponse` fields
+- **AND** the image appears again in `GET /images` results
+
+#### Scenario: Image not found, not deleted, or not owned
+
+- **WHEN** a `POST /images/:id/restore` request is made for an image that is not soft-deleted or does not belong to the user
+- **THEN** the response is `404 Not Found`
+
+#### Scenario: Unauthenticated request is rejected
+
+- **WHEN** a `POST /images/:id/restore` request is made without a valid Bearer token
+- **THEN** the response is `401 Unauthorized`
+
+---
+
 ### Requirement: PATCH /images/:id — Accept Description
 
 The `PATCH /images/:id` handler SHALL accept an optional `description` field and persist it.
@@ -377,3 +433,36 @@ The `GET /images` handler SHALL accept an optional `unfiled` boolean query param
 
 - **WHEN** `GET /images` is called without `unfiled` or with `unfiled=false`
 - **THEN** existing folder filtering behaviour applies unchanged
+
+---
+
+### Requirement: Image Usecase Unit Tests
+
+The system SHALL have unit tests for `imageUsecase` covering each method with mocked `ImageRepository` and `StorageService`. Each method SHALL have at minimum one success scenario and one failure scenario.
+
+#### Scenario: Usecase unit tests cover the happy path and failure path
+
+- **WHEN** each usecase method is tested with a valid mock setup
+- **THEN** both the success and at least one error case are asserted
+
+---
+
+### Requirement: Image Handler Unit Tests
+
+The system SHALL have unit tests for `ImageHandler` covering each handler method with a mocked `ImageUsecase`. Each handler method SHALL have at minimum one success scenario and one failure scenario.
+
+#### Scenario: Handler unit tests cover HTTP status codes and response shape
+
+- **WHEN** each handler method is tested with a mock usecase
+- **THEN** both the success status code and at least one error status code are asserted
+
+---
+
+### Requirement: Image Repository Integration Tests
+
+The system SHALL have integration tests for `imageRepository` using Testcontainers. Each repository method SHALL be tested against a real PostgreSQL database. Unit tests SHALL NOT be written for the SQL repository.
+
+#### Scenario: Repository integration tests exercise each method against a real database
+
+- **WHEN** the integration test suite runs with a live PostgreSQL container
+- **THEN** each `ImageRepository` method is exercised with at least one success scenario and one failure scenario
