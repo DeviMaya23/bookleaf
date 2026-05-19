@@ -39,6 +39,28 @@ export async function getImages(
   return res.json()
 }
 
+export async function getAllImages(getToken: GetToken, cursor?: string): Promise<ImagesPage> {
+  const params = new URLSearchParams()
+  if (cursor) params.set('cursor', cursor)
+  const res = await apiFetch(`/images?${params}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch images')
+  return res.json()
+}
+
+export async function getTrashedImages(getToken: GetToken, cursor?: string): Promise<ImagesPage> {
+  const params = new URLSearchParams()
+  if (cursor) params.set('cursor', cursor)
+  const res = await apiFetch(`/images/trash?${params}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch trashed images')
+  return res.json()
+}
+
+export async function restoreImage(getToken: GetToken, id: string): Promise<Image> {
+  const res = await apiFetch(`/images/${id}/restore`, getToken, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to restore image')
+  return res.json()
+}
+
 export async function deleteImage(getToken: GetToken, id: string): Promise<void> {
   const res = await apiFetch(`/images/${id}`, getToken, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete image')

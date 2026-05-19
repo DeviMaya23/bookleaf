@@ -567,7 +567,8 @@ func (u *imageUsecase) ListTrashed(ctx context.Context, userID string, params Li
 	if len(rawImages) > limit {
 		rawImages = rawImages[:limit]
 		last := rawImages[limit-1]
-		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+		deletedAt := last.DeletedAt.Time
+		nextCursor = &ImageCursor{DeletedAt: &deletedAt, ID: last.ID}
 	}
 
 	items := make([]ImageItem, len(rawImages))

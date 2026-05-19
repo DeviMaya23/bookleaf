@@ -159,11 +159,11 @@ func (r *imageRepository) ListTrashed(ctx context.Context, userID string, cursor
 	query := r.db.WithContext(ctx).
 		Unscoped().
 		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
-		Order("created_at DESC, id DESC").
+		Order("deleted_at ASC, id ASC").
 		Limit(limit + 1)
 
-	if cursor != nil {
-		query = query.Where("(created_at, id) < (?, ?)", cursor.CreatedAt, cursor.ID)
+	if cursor != nil && cursor.DeletedAt != nil {
+		query = query.Where("(deleted_at, id) > (?, ?)", cursor.DeletedAt, cursor.ID)
 	}
 
 	if err := query.Find(&images).Error; err != nil {

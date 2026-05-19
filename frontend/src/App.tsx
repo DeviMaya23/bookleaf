@@ -11,6 +11,8 @@ function App() {
       <Route path="/callback" element={<CallbackPage />} />
       <Route element={<AuthGuard />}>
         <Route path="/" element={<AppLayout />} />
+        <Route path="/unsorted" element={<AppLayout />} />
+        <Route path="/trash" element={<AppLayout />} />
         <Route path="/folders/:folderId" element={<AppLayout />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

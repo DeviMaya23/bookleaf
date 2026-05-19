@@ -17,11 +17,13 @@ export async function getFolders(getToken: GetToken): Promise<Folder[]> {
   return res.json()
 }
 
-export async function createFolder(getToken: GetToken, name: string): Promise<Folder> {
+export async function createFolder(getToken: GetToken, name: string, parentId?: string): Promise<Folder> {
+  const body: Record<string, string> = { name }
+  if (parentId) body.parent_id = parentId
   const res = await apiFetch('/folders', getToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error('Failed to create folder')
   return res.json()

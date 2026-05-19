@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useLocation } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -8,15 +8,28 @@ import ImageGrid from './ImageGrid'
 import UploadModal from './UploadModal'
 import RightPanel from './RightPanel'
 import type { Image } from '@/lib/images'
+import type { AppView } from '@/lib/view'
+
+function useAppView(): AppView {
+  const { folderId } = useParams<{ folderId: string }>()
+  const { pathname } = useLocation()
+
+  if (folderId) return { type: 'folder', id: folderId }
+  if (pathname === '/unsorted') return { type: 'unsorted' }
+  if (pathname === '/trash') return { type: 'trash' }
+  return { type: 'all' }
+}
 
 export default function AppLayout() {
-  const { folderId } = useParams<{ folderId: string }>()
+  const view = useAppView()
   const [uploadOpen, setUploadOpen] = useState(false)
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
 
+  const folderId = view.type === 'folder' ? view.id : null
+
   return (
     <div className="flex h-screen">
-      <FolderSidebar />
+      <FolderSidebar view={view} />
       <main className="ml-[240px] flex-1 h-screen min-w-0">
         <ScrollArea className="h-full">
           <div className="p-6">
@@ -27,7 +40,7 @@ export default function AppLayout() {
               </Button>
             </div>
             <ImageGrid
-              folderId={folderId ?? null}
+              view={view}
               onImageSelect={setSelectedImage}
             />
           </div>
@@ -42,7 +55,7 @@ export default function AppLayout() {
       <UploadModal
         open={uploadOpen}
         onOpenChange={setUploadOpen}
-        folderId={folderId ?? null}
+        folderId={folderId}
       />
     </div>
   )
