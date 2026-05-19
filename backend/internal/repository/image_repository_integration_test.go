@@ -360,13 +360,14 @@ func TestImageRepository_ListTrashed_Pagination_WithCursor(t *testing.T) {
 		require.NoError(t, repo.SoftDelete(context.Background(), img.ID, userID))
 	}
 
-	// first page
+	// first page (limit=2, returns 3 since repo returns limit+1 to signal more data)
 	firstPage, err := repo.ListTrashed(context.Background(), userID, nil, 2)
 	require.NoError(t, err)
 	require.Len(t, firstPage, 3)
 
 	cursorItem := firstPage[1]
-	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
+	deletedAt := cursorItem.DeletedAt.Time
+	cursor := &usecase.ImageCursor{DeletedAt: &deletedAt, ID: cursorItem.ID}
 
 	// second page
 	secondPage, err := repo.ListTrashed(context.Background(), userID, cursor, 2)
@@ -377,6 +378,26 @@ func TestImageRepository_ListTrashed_Pagination_WithCursor(t *testing.T) {
 	page1IDs := map[uuid.UUID]bool{firstPage[0].ID: true, firstPage[1].ID: true}
 	for _, img := range secondPage {
 		assert.False(t, page1IDs[img.ID], "page 2 item %s appeared on page 1", img.ID)
+	}
+}
+
+func TestImageRepository_ListTrashed_OrderedByDeletedAtAsc(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	for range 3 {
+		img, err := repo.Create(context.Background(), newTestImage(userID))
+		require.NoError(t, err)
+		require.NoError(t, repo.SoftDelete(context.Background(), img.ID, userID))
+	}
+
+	trashed, err := repo.ListTrashed(context.Background(), userID, nil, 200)
+
+	require.NoError(t, err)
+	require.Len(t, trashed, 3)
+	for i := 1; i < len(trashed); i++ {
+		prev := trashed[i-1].DeletedAt.Time
+		curr := trashed[i].DeletedAt.Time
+		assert.True(t, !curr.Before(prev), "expected deleted_at ASC: item %d (%s) is before item %d (%s)", i, curr, i-1, prev)
 	}
 }
 

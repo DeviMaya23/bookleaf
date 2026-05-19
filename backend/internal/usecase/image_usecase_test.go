@@ -966,12 +966,18 @@ func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
 	makeImages := func(n int) []*domain.Image {
 		imgs := make([]*domain.Image, n)
 		for i := range imgs {
-			imgs[i] = &domain.Image{ID: uuid.New(), Title: "deleted photo", CreatedAt: now.Add(-time.Duration(i) * time.Second)}
+			deletedAt := now.Add(time.Duration(i) * time.Second)
+			imgs[i] = &domain.Image{
+				ID:        uuid.New(),
+				Title:     "deleted photo",
+				CreatedAt: now,
+				DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
+			}
 		}
 		return imgs
 	}
 
-	t.Run("returns next_cursor when more results exist", func(t *testing.T) {
+	t.Run("cursor carries deleted_at of last item", func(t *testing.T) {
 		repo := &mockImageRepository{images: makeImages(11)}
 		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
@@ -979,8 +985,10 @@ func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Len(t, result.Images, 10)
-		assert.NotNil(t, result.NextCursor)
+		require.NotNil(t, result.NextCursor)
 		assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
+		require.NotNil(t, result.NextCursor.DeletedAt)
+		assert.Equal(t, result.Images[9].Image.DeletedAt.Time.UTC(), result.NextCursor.DeletedAt.UTC())
 	})
 
 	t.Run("returns nil next_cursor on last page", func(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 
 type ImageCursor struct {
 	CreatedAt time.Time
+	DeletedAt *time.Time // non-nil only for trash cursors
 	ID        uuid.UUID
 }
 
@@ -37,12 +38,13 @@ type ListTrashedResult struct {
 }
 
 type cursorPayload struct {
-	CreatedAt time.Time `json:"created_at"`
-	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	ID        uuid.UUID  `json:"id"`
 }
 
 func EncodeCursor(c *ImageCursor) string {
-	b, _ := json.Marshal(cursorPayload{CreatedAt: c.CreatedAt, ID: c.ID})
+	b, _ := json.Marshal(cursorPayload{CreatedAt: c.CreatedAt, DeletedAt: c.DeletedAt, ID: c.ID})
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
@@ -55,5 +57,5 @@ func DecodeCursor(s string) (*ImageCursor, error) {
 	if err := json.Unmarshal(b, &p); err != nil {
 		return nil, fmt.Errorf("unmarshal cursor: %w", err)
 	}
-	return &ImageCursor{CreatedAt: p.CreatedAt, ID: p.ID}, nil
+	return &ImageCursor{CreatedAt: p.CreatedAt, DeletedAt: p.DeletedAt, ID: p.ID}, nil
 }
