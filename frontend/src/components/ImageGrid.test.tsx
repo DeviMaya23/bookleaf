@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ImageGrid from './ImageGrid'
+import type { AppView } from '@/lib/view'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -11,7 +12,10 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 
 vi.mock('@/lib/images', () => ({
   getImages: vi.fn(),
+  getAllImages: vi.fn(),
+  getTrashedImages: vi.fn(),
   deleteImage: vi.fn(),
+  restoreImage: vi.fn(),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -61,14 +65,14 @@ function makeImage(overrides?: object): Image {
   }
 }
 
-function renderImageGrid(folderId: string | null = null, onImageSelect = vi.fn()) {
+function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <ImageGrid folderId={folderId} onImageSelect={onImageSelect} />
+        <ImageGrid view={view} onImageSelect={onImageSelect} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -104,7 +108,7 @@ describe('ImageGrid', () => {
     const onImageSelect = vi.fn()
     vi.mocked(getImages).mockResolvedValue({ images: [image], next_cursor: null })
 
-    renderImageGrid(null, onImageSelect)
+    renderImageGrid({ type: 'unsorted' }, onImageSelect)
 
     await waitFor(() => {
       expect(screen.getByText('Test image')).toBeInTheDocument()
