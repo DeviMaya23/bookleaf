@@ -1,3 +1,5 @@
+## MODIFIED Requirements
+
 ### Requirement: PATCH /images/:id — Edit Image Metadata
 
 The system SHALL expose a `PATCH /images/:id` endpoint on the protected route group that updates the `title`, `folder_id`, and/or `source_url` of an existing image. No field is required; omitting a field means that field is left unchanged. The image binary (`r2_path`) SHALL NOT be modifiable via this endpoint.

@@ -12,7 +12,6 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/lib/images', () => ({
   getImages: vi.fn(),
   deleteImage: vi.fn(),
-  getImage: vi.fn(),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -41,9 +40,10 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-import { getImages, deleteImage, getImage } from '@/lib/images'
+import { getImages, deleteImage } from '@/lib/images'
+import type { Image } from '@/lib/images'
 
-function makeImage(overrides?: object) {
+function makeImage(overrides?: object): Image {
   return {
     id: '1',
     title: 'Test image',
@@ -61,14 +61,14 @@ function makeImage(overrides?: object) {
   }
 }
 
-function renderImageGrid(folderId: string | null = null) {
+function renderImageGrid(folderId: string | null = null, onImageSelect = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <ImageGrid folderId={folderId} />
+        <ImageGrid folderId={folderId} onImageSelect={onImageSelect} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -97,6 +97,22 @@ describe('ImageGrid', () => {
     await waitFor(() => {
       expect(screen.getByText('No images here yet')).toBeInTheDocument()
     })
+  })
+
+  it('calls onImageSelect when a card is clicked', async () => {
+    const image = makeImage()
+    const onImageSelect = vi.fn()
+    vi.mocked(getImages).mockResolvedValue({ images: [image], next_cursor: null })
+
+    renderImageGrid(null, onImageSelect)
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByText('Test image'))
+
+    expect(onImageSelect).toHaveBeenCalledWith(image)
   })
 })
 
@@ -128,63 +144,6 @@ describe('ImageGrid pagination', () => {
     })
 
     expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument()
-  })
-})
-
-describe('ImageGrid lightbox', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('opens lightbox and shows image after clicking a card', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-    vi.mocked(getImage).mockResolvedValue({
-      ...makeImage(),
-      image_url: 'https://r2.example.com/full.jpg',
-    })
-
-    renderImageGrid()
-
-    await waitFor(() => {
-      expect(screen.getByText('Test image')).toBeInTheDocument()
-    })
-
-    await userEvent.click(screen.getByText('Test image'))
-
-    await waitFor(() => {
-      expect(screen.getByRole('img')).toHaveAttribute('src', 'https://r2.example.com/full.jpg')
-    })
-    expect(getImage).toHaveBeenCalledWith(expect.any(Function), '1')
-  })
-
-  it('closes lightbox when onOpenChange fires with false', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-    vi.mocked(getImage).mockResolvedValue({
-      ...makeImage(),
-      image_url: 'https://r2.example.com/full.jpg',
-    })
-
-    renderImageGrid()
-
-    await waitFor(() => {
-      expect(screen.getByText('Test image')).toBeInTheDocument()
-    })
-
-    await userEvent.click(screen.getByText('Test image'))
-
-    await waitFor(() => {
-      expect(screen.getByRole('img')).toBeInTheDocument()
-    })
-
-    await userEvent.keyboard('{Escape}')
-
-    await waitFor(() => {
-      const allImgs = screen.queryAllByRole('img')
-      const hasLightboxImg = allImgs.some(
-        (img) => img.getAttribute('src') === 'https://r2.example.com/full.jpg',
-      )
-      expect(hasLightboxImg).toBe(false)
-    })
   })
 })
 

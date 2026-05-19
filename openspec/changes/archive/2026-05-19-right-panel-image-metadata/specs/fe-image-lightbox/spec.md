@@ -1,3 +1,5 @@
+## MODIFIED Requirements
+
 ### Requirement: Clicking the right panel thumbnail opens the lightbox overlay
 
 The system SHALL open a full-screen lightbox Dialog when the user clicks the thumbnail image inside the right panel. The lightbox SHALL NOT open directly from an image card click in the gallery (that click opens the right panel instead).
