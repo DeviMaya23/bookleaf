@@ -1,19 +1,20 @@
-## ADDED Requirements
-
 ### Requirement: PATCH /images/:id — Edit Image Metadata
 
-The system SHALL expose a `PATCH /images/:id` endpoint on the protected route group that updates the `title` and/or `folder_id` of an existing image. Neither field is required; omitting a field means that field is left unchanged. The image binary (`r2_path`) SHALL NOT be modifiable via this endpoint.
+The system SHALL expose a `PATCH /images/:id` endpoint on the protected route group that updates the `title`, `folder_id`, and/or `source_url` of an existing image. No field is required; omitting a field means that field is left unchanged. The image binary (`r2_path`) SHALL NOT be modifiable via this endpoint.
 
 Request body:
 ```json
 {
   "title": "string (optional)",
-  "folder_id": "uuid | null (optional)"
+  "folder_id": "uuid | null (optional)",
+  "source_url": "string | null (optional)"
 }
 ```
 
 - A `null` `folder_id` in the request body SHALL move the image to the root (clear the folder association).
 - An absent `folder_id` field SHALL leave the current `folder_id` unchanged.
+- A `null` `source_url` SHALL clear the source URL on the image.
+- An absent `source_url` field SHALL leave the current `source_url` unchanged.
 - The handler SHALL distinguish absent from null using a presence flag or pointer-of-pointer decoding — not `omitempty` alone.
 - `title`, if present, MUST NOT be empty string.
 - The image MUST be owned by the authenticated user.
@@ -39,20 +40,33 @@ Response body (200):
 - **WHEN** an authenticated `PATCH /images/:id` request is made with `{"title": "new name"}`
 - **THEN** the response is `200 OK`
 - **AND** the returned image has `title` set to `"new name"`
-- **AND** the image's `folder_id` is unchanged
+- **AND** the image's `folder_id` and `source_url` are unchanged
 
 #### Scenario: Image is moved to a folder
 
 - **WHEN** an authenticated `PATCH /images/:id` request is made with `{"folder_id": "<uuid>"}`
 - **THEN** the response is `200 OK`
 - **AND** the returned image has `folder_id` set to the provided UUID
-- **AND** the image's `title` is unchanged
+- **AND** the image's `title` and `source_url` are unchanged
 
 #### Scenario: Image is moved to root with null folder_id
 
 - **WHEN** an authenticated `PATCH /images/:id` request is made with `{"folder_id": null}`
 - **THEN** the response is `200 OK`
 - **AND** the returned image has `folder_id` set to `null`
+
+#### Scenario: Source URL is updated
+
+- **WHEN** an authenticated `PATCH /images/:id` request is made with `{"source_url": "https://example.com"}`
+- **THEN** the response is `200 OK`
+- **AND** the returned image has `source_url` set to `"https://example.com"`
+- **AND** the image's `title` and `folder_id` are unchanged
+
+#### Scenario: Source URL is cleared with null
+
+- **WHEN** an authenticated `PATCH /images/:id` request is made with `{"source_url": null}`
+- **THEN** the response is `200 OK`
+- **AND** the returned image has `source_url` set to `null`
 
 #### Scenario: Empty title is rejected
 
@@ -77,19 +91,20 @@ The `ImageUsecase` interface SHALL include an `UpdateImage(ctx, id uuid.UUID, us
 
 `UpdateImageParams` SHALL use pointer fields so the usecase can distinguish absent from provided values:
 - `Title *string` — nil means unchanged; non-nil means update to this value
-- `FolderID **uuid.UUID` — nil outer pointer means unchanged; non-nil outer pointer with nil inner pointer means clear folder (move to root); non-nil inner pointer means set to that UUID
+- `FolderID **uuid.UUID` — nil outer pointer means unchanged; non-nil outer pointer with nil inner pointer means clear folder; non-nil inner pointer means set to that UUID
+- `SourceURL **string` — nil outer pointer means unchanged; non-nil outer pointer with nil inner pointer means clear source URL; non-nil inner pointer means set to that string
 
 The usecase SHALL:
 1. Fetch the existing image by `id` and `userID`; return `gorm.ErrRecordNotFound` if not found
 2. Build a map of only the fields that are non-nil in `params`
 3. Delegate to `ImageRepository.Update`
-4. Emit `image.mutated / moved_to_folder` log when `FolderID` is present in params AND the new value differs from the existing value (see observability-logging spec)
+4. Emit `image.mutated / moved_to_folder` log when `FolderID` is present in params AND the new value differs from the existing value
 
 #### Scenario: Only provided fields are updated
 
 - **WHEN** `UpdateImage` is called with `params.Title = nil` and `params.FolderID` pointing to a UUID
 - **THEN** only `folder_id` is written to the database
-- **AND** `title` retains its previous value
+- **AND** `title` and `source_url` retain their previous values
 
 #### Scenario: Not found returns error
 
@@ -111,8 +126,9 @@ The repository implementation SHALL:
 
 #### Scenario: Selective field update does not overwrite unrelated fields
 
-- **WHEN** `Update` is called with `fields = {"title": "new"}` on an image that has a non-null `thumbnail_path`
+- **WHEN** `Update` is called with `fields = {"source_url": "https://example.com"}` on an image that has a non-null `thumbnail_path`
 - **THEN** the database row retains its original `thumbnail_path` value
+- **AND** `source_url` is set to the new value
 
 #### Scenario: Update on non-existent image returns not found
 

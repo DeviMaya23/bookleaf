@@ -1,18 +1,18 @@
 ### Requirement: Root route displays unfoldered images
-The system SHALL fetch images with `folder_id=null` when the user is on the root path (`/`) and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
+The system SHALL fetch images with `unfiled=true` when the user is on the root path (`/`) and render them in the masonry gallery. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
 
 #### Scenario: Navigating to root loads unfoldered images
 - **WHEN** the authenticated user navigates to `/`
-- **THEN** the app calls `GET /images?folder_id=null`
-- **AND** the returned images are displayed in the gallery grid
+- **THEN** the app calls `GET /images?unfiled=true`
+- **AND** the returned images are displayed in the masonry gallery
 
 ### Requirement: Folder route displays folder images
-The system SHALL fetch images for a specific folder when the user is on `/folders/:folder_id` and render them in the gallery grid. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
+The system SHALL fetch images for a specific folder when the user is on `/folders/:folder_id` and render them in the masonry gallery. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
 
 #### Scenario: Navigating to a folder route loads that folder's images
 - **WHEN** the authenticated user navigates to `/folders/:folder_id`
 - **THEN** the app calls `GET /images?folder_id=<folder_id>`
-- **AND** the returned images for that folder are displayed in the gallery grid
+- **AND** the returned images for that folder are displayed in the masonry gallery
 
 ### Requirement: Folder sidebar navigates via URL
 The system SHALL navigate to `/folders/:folder_id` when the user clicks a folder in the sidebar, and navigate to `/` when the user clicks "Unsorted".
@@ -40,33 +40,40 @@ The system SHALL display an empty state message when the image list response is 
 #### Scenario: Empty state shown with no images
 - **WHEN** the image list response returns zero images
 - **THEN** the message "No images here yet" is displayed with an image icon
-- **AND** the gallery grid is not rendered
 
-### Requirement: Images displayed as thumbnail cards in a responsive grid
-The system SHALL render each image as a card showing its thumbnail and title. Long titles SHALL be truncated with an ellipsis. The grid SHALL use 6 columns on desktop and 2 columns on mobile.
+### Requirement: Images displayed in a Pinterest-style masonry layout
+The system SHALL render images in a CSS `column-count` masonry layout. Each image card SHALL display the thumbnail at its natural aspect ratio (no fixed height). Image cards SHALL NOT have a visible border. The column count SHALL be responsive: 2 columns on mobile, 3 on medium viewports, 4 on large viewports (≥ 1024px). Cards SHALL use `break-inside: avoid` to prevent column breaks within a card.
 
-#### Scenario: Image card displays thumbnail and title
-- **WHEN** the image list contains images
-- **THEN** each image is rendered as a card with its thumbnail and title visible
+#### Scenario: Image cards respect natural aspect ratio
+- **WHEN** the image list contains images with varying dimensions
+- **THEN** each card's thumbnail height reflects the image's natural aspect ratio
 
-#### Scenario: Long image titles are truncated
-- **WHEN** an image has a title longer than the card width
-- **THEN** the title is truncated with a trailing ellipsis
-
-#### Scenario: Grid is responsive
+#### Scenario: Masonry layout uses correct column counts
 - **WHEN** the viewport is desktop width (≥ 1024px)
-- **THEN** images are displayed in a 6-column grid
+- **THEN** images are displayed in 4 columns
 
-#### Scenario: Grid collapses on mobile
+#### Scenario: Masonry collapses on mobile
 - **WHEN** the viewport is mobile width (< 768px)
-- **THEN** images are displayed in a 2-column grid
+- **THEN** images are displayed in 2 columns
+
+#### Scenario: Cards have no border
+- **WHEN** the image list contains images
+- **THEN** no border is rendered around any image card
+
+### Requirement: Clicking an image card opens the right panel
+The system SHALL call the `onImageSelect` callback prop with the clicked image when the user left-clicks an image card. The gallery SHALL NOT directly manage the lightbox; the right panel is responsible for lightbox triggering.
+
+#### Scenario: Left-click on image card selects the image
+- **WHEN** the authenticated user left-clicks an image card
+- **THEN** the `onImageSelect` callback is called with that image
+- **AND** the right panel opens showing the selected image's metadata
 
 ### Requirement: Paginated image loading with "Load more"
 The system SHALL use `useInfiniteQuery` to fetch images in pages. A "Load more" button SHALL be shown when a `next_cursor` is present in the last page's response. Clicking it SHALL fetch the next page by passing `cursor=<next_cursor>` to `GET /images`. When switching folders (or navigating to root), the accumulated pages SHALL be reset.
 
 #### Scenario: Load more button shown when next page exists
 - **WHEN** the image list response contains a non-null `next_cursor`
-- **THEN** a "Load more" button is displayed below the image grid
+- **THEN** a "Load more" button is displayed below the masonry gallery
 
 #### Scenario: Load more button hidden on last page
 - **WHEN** the image list response contains `next_cursor: null`
@@ -75,7 +82,7 @@ The system SHALL use `useInfiniteQuery` to fetch images in pages. A "Load more" 
 #### Scenario: Clicking Load more fetches next page
 - **WHEN** the user clicks the "Load more" button
 - **THEN** the app calls `GET /images?folder_id=<current>&cursor=<next_cursor>`
-- **AND** the newly fetched images are appended to the existing grid
+- **AND** the newly fetched images are appended to the existing gallery
 
 #### Scenario: Changing folder resets pagination
 - **WHEN** the user navigates to a different folder
