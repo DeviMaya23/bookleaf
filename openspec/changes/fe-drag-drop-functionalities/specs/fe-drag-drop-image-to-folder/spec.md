@@ -58,6 +58,7 @@ When an image drag ends over a folder drop target, `AppLayout`'s `onDragEnd` han
 - **WHEN** the user drops an image card onto a sidebar folder item
 - **THEN** `PATCH /images/:imageId` is called with `{ "folder_id": "<folderId>" }`
 - **AND** the image list is refreshed
+- **AND** a success toast is shown
 
 #### Scenario: Dropping image onto its current folder is a no-op
 
@@ -81,6 +82,7 @@ The "Unsorted" sidebar entry SHALL be a `useDroppable` target carrying `{ type: 
 - **WHEN** the user drops an image card onto the "Unsorted" sidebar entry
 - **THEN** `PATCH /images/:imageId` is called with `{ "folder_id": null }`
 - **AND** the image list is refreshed
+- **AND** a success toast is shown
 
 #### Scenario: Dropping an already-unsorted image onto Unsorted is a no-op
 

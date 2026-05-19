@@ -36,6 +36,7 @@ When a folder drag ends over a valid folder drop target, `onDragEnd` SHALL first
 - **WHEN** the user drops folder A onto folder B (and B is not a descendant of A)
 - **THEN** `PUT /folders/:folderId` is called with `{ "name": "<A's name>", "parent_id": "<B's id>" }`
 - **AND** the folder list is refreshed
+- **AND** a success toast is shown
 
 #### Scenario: Dropping a folder onto its current parent is a no-op
 
@@ -72,6 +73,7 @@ A droppable zone with `{ type: 'root' }` SHALL be rendered below the last folder
 - **WHEN** the user drops a nested folder onto the root drop zone
 - **THEN** `PUT /folders/:folderId` is called with `{ "name": "<folder's name>", "parent_id": null }`
 - **AND** the folder list is refreshed
+- **AND** a success toast is shown
 
 #### Scenario: Dropping a root folder onto the root zone is a no-op
 

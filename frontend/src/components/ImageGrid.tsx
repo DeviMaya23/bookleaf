@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
+import { useDraggable } from '@dnd-kit/core'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,11 +30,21 @@ interface ImageCardProps {
 }
 
 function ImageCard({ image, isTrash, onAction, onSelect }: ImageCardProps) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `image-${image.id}`,
+    disabled: isTrash,
+    data: { type: 'image', imageId: image.id, currentFolderId: image.folder_id, thumbnailUrl: image.thumbnail_url },
+  })
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
         <div
+          ref={setNodeRef}
+          {...listeners}
+          {...attributes}
           className="cursor-pointer rounded-lg overflow-hidden bg-card break-inside-avoid mb-3"
+          style={{ opacity: isDragging ? 0.4 : 1 }}
           onClick={() => onSelect(image)}
         >
           <div className="bg-muted">

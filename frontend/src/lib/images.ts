@@ -70,6 +70,8 @@ export interface InitiateUploadParams {
   title: string
   mimeType: string
   folderId?: string
+  description?: string
+  sourceUrl?: string
 }
 
 export interface InitiateUploadResult {
@@ -87,6 +89,8 @@ export async function initiateUpload(
     mime_type: params.mimeType,
   }
   if (params.folderId) body.folder_id = params.folderId
+  if (params.description) body.description = params.description
+  if (params.sourceUrl) body.source_url = params.sourceUrl
   const res = await apiFetch('/images', getToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -134,6 +138,7 @@ export interface UpdateImageParams {
   title?: string
   description?: string | null
   source_url?: string | null
+  folder_id?: string | null
 }
 
 export async function updateImage(getToken: GetToken, id: string, params: UpdateImageParams): Promise<Image> {

@@ -31,9 +31,10 @@ function formatDate(iso: string): string {
 interface RightPanelProps {
   image: Image
   onClose: () => void
+  autoFocusTitle?: boolean
 }
 
-export default function RightPanel({ image, onClose }: RightPanelProps) {
+export default function RightPanel({ image, onClose, autoFocusTitle }: RightPanelProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
@@ -97,6 +98,14 @@ export default function RightPanel({ image, onClose }: RightPanelProps) {
       setIsDownloading(false)
     }
   }
+
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (autoFocusTitle) {
+      titleInputRef.current?.focus()
+    }
+  }, [image.id, autoFocusTitle])
 
   // Refs to track original values for change detection on blur
   const origTitle = useRef(image.title)
@@ -168,6 +177,7 @@ export default function RightPanel({ image, onClose }: RightPanelProps) {
         {/* Title */}
         <div className="px-4 pt-4 pb-3 border-b">
           <input
+            ref={titleInputRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={handleTitleBlur}
