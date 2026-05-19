@@ -220,12 +220,14 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
           active={view.type === 'unsorted'}
           onClick={() => navigate('/unsorted')}
         />
-        <SystemEntry
-          label="Trash"
-          active={view.type === 'trash'}
-          muted
-          onClick={() => navigate('/trash')}
-        />
+        <div className="mt-[8px]">
+          <SystemEntry
+            label="Trash"
+            active={view.type === 'trash'}
+            muted
+            onClick={() => navigate('/trash')}
+          />
+        </div>
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />
