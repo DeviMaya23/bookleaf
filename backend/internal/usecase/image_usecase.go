@@ -45,6 +45,7 @@ type UpdateImageParams struct {
 	Title       *string
 	FolderID    **uuid.UUID
 	Description *string
+	SourceURL   **string
 }
 
 type ImageDetail struct {
@@ -622,6 +623,9 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	}
 	if params.Description != nil {
 		fields["description"] = *params.Description
+	}
+	if params.SourceURL != nil {
+		fields["source_url"] = *params.SourceURL
 	}
 
 	updated, err := u.imageRepo.Update(ctx, id, userID, fields)

@@ -731,6 +731,14 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name: "updates source_url and returns 200",
+			body: `{"source_url":"https://example.com"}`,
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:          "returns 404 when image not found",
 			body:          `{"title":"updated title"}`,
 			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
@@ -762,6 +770,11 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			if tt.name == "updates image and returns 200 with updated image" {
 				require.NotNil(t, tt.mockUC.lastUpdateParams.Description)
 				assert.Equal(t, "new desc", *tt.mockUC.lastUpdateParams.Description)
+			}
+			if tt.name == "updates source_url and returns 200" {
+				require.NotNil(t, tt.mockUC.lastUpdateParams.SourceURL)
+				require.NotNil(t, *tt.mockUC.lastUpdateParams.SourceURL)
+				assert.Equal(t, "https://example.com", **tt.mockUC.lastUpdateParams.SourceURL)
 			}
 		})
 	}

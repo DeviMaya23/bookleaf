@@ -26,6 +26,7 @@ type updateImageRequest struct {
 	Title       *string         `json:"title"`
 	Description *string         `json:"description"`
 	FolderID    json.RawMessage `json:"folder_id"`
+	SourceURL   json.RawMessage `json:"source_url"`
 }
 
 type initiateImageUploadRequest struct {
@@ -444,6 +445,20 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 			inner := folderID
 			outer := &inner
 			params.FolderID = &outer
+		}
+	}
+
+	if len(req.SourceURL) > 0 {
+		if string(req.SourceURL) == "null" {
+			params.SourceURL = new(*string)
+		} else {
+			var sourceURL string
+			if err := json.Unmarshal(req.SourceURL, &sourceURL); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid source_url")
+			}
+			inner := sourceURL
+			outer := &inner
+			params.SourceURL = &outer
 		}
 	}
 

@@ -108,6 +108,29 @@ export async function getImage(getToken: GetToken, id: string): Promise<ImageDet
   return res.json()
 }
 
+export interface UpdateImageParams {
+  title?: string
+  description?: string | null
+  source_url?: string | null
+}
+
+export async function updateImage(getToken: GetToken, id: string, params: UpdateImageParams): Promise<Image> {
+  const res = await apiFetch(`/images/${id}`, getToken, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error('Failed to update image')
+  return res.json()
+}
+
+export async function downloadImage(getToken: GetToken, id: string): Promise<string> {
+  const res = await apiFetch(`/images/${id}/download`, getToken)
+  if (!res.ok) throw new Error('Failed to get download URL')
+  const data: { download_url: string } = await res.json()
+  return data.download_url
+}
+
 export async function acceptSuggestion(
   getToken: GetToken,
   id: string,

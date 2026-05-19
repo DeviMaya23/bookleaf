@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
 import {
@@ -17,29 +17,32 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, deleteImage, getImage } from '@/lib/images'
+import { getImages, deleteImage } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
 interface ImageCardProps {
   image: Image
   onDelete: (image: Image) => void
-  onOpen: (image: Image) => void
+  onSelect: (image: Image) => void
 }
 
-function ImageCard({ image, onDelete, onOpen }: ImageCardProps) {
+function ImageCard({ image, onDelete, onSelect }: ImageCardProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <div className="cursor-pointer rounded-lg overflow-hidden border bg-card" onClick={() => onOpen(image)}>
-          <div className="aspect-square bg-muted">
+        <div
+          className="cursor-pointer rounded-lg overflow-hidden bg-card break-inside-avoid mb-3"
+          onClick={() => onSelect(image)}
+        >
+          <div className="bg-muted">
             {image.thumbnail_url ? (
               <img
                 src={image.thumbnail_url}
                 alt={image.title}
-                className="w-full h-full object-cover"
+                className="w-full h-auto object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full aspect-square flex items-center justify-center">
                 <ImageIcon className="w-8 h-8 text-muted-foreground" />
               </div>
             )}
@@ -63,26 +66,19 @@ function ImageCard({ image, onDelete, onOpen }: ImageCardProps) {
 
 interface ImageGridProps {
   folderId: string | null
+  onImageSelect: (image: Image) => void
 }
 
-export default function ImageGrid({ folderId }: ImageGridProps) {
+export default function ImageGrid({ folderId, onImageSelect }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [deleteTarget, setDeleteTarget] = useState<Image | null>(null)
-  const [lightboxTarget, setLightboxTarget] = useState<Image | null>(null)
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ['images', folderId],
     queryFn: ({ pageParam }) => getImages(getToken, folderId, pageParam as string | undefined),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
-  })
-
-  const { data: imageDetail, isLoading: isLoadingDetail } = useQuery({
-    queryKey: ['image', lightboxTarget?.id],
-    queryFn: () => getImage(getToken, lightboxTarget!.id),
-    enabled: !!lightboxTarget,
-    staleTime: 0,
   })
 
   const deleteMutation = useMutation({
@@ -118,9 +114,9 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="columns-2 md:columns-3 lg:columns-4 gap-3">
         {allImages.map((image) => (
-          <ImageCard key={image.id} image={image} onDelete={setDeleteTarget} onOpen={setLightboxTarget} />
+          <ImageCard key={image.id} image={image} onDelete={setDeleteTarget} onSelect={onImageSelect} />
         ))}
       </div>
 
@@ -142,23 +138,6 @@ export default function ImageGrid({ folderId }: ImageGridProps) {
           </Button>
         </div>
       )}
-
-      <Dialog open={!!lightboxTarget} onOpenChange={(open) => { if (!open) setLightboxTarget(null) }}>
-        <DialogContent className="sm:max-w-fit p-0 overflow-hidden">
-          <DialogTitle className="sr-only">{lightboxTarget?.title}</DialogTitle>
-          {isLoadingDetail ? (
-            <div className="flex items-center justify-center w-64 h-64">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : imageDetail ? (
-            <img
-              src={imageDetail.image_url}
-              alt={lightboxTarget?.title}
-              className="max-h-[90vh] max-w-[90vw] object-contain"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
         <DialogContent>

@@ -1090,6 +1090,50 @@ func TestImageUsecase_UpdateImage_WithDescription(t *testing.T) {
 	assert.Equal(t, description, repo.updateFields["description"])
 }
 
+func TestImageUsecase_UpdateImage_WithSourceURL(t *testing.T) {
+	imageID := uuid.New()
+	sourceURL := "https://example.com"
+	inner := &sourceURL
+
+	tests := []struct {
+		name      string
+		repo      *mockImageRepository
+		sourceURL **string
+		wantErr   bool
+		checkURL  func(t *testing.T, fields map[string]any)
+	}{
+		{
+			name:      "sets source_url in update fields",
+			repo:      &mockImageRepository{image: &domain.Image{ID: imageID}},
+			sourceURL: &inner,
+			checkURL: func(t *testing.T, fields map[string]any) {
+				require.NotNil(t, fields["source_url"])
+				assert.Equal(t, &sourceURL, fields["source_url"])
+			},
+		},
+		{
+			name:    "propagates repository error",
+			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+				SourceURL: tt.sourceURL,
+			})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			tt.checkURL(t, tt.repo.updateFields)
+		})
+	}
+}
+
 func TestImageUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 	imageID := uuid.New()
 	tel, collect := makeMetricsTel(t)
