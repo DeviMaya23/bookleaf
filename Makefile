@@ -19,3 +19,6 @@ fe-install:
 
 fe-dev:
 	@cd frontend && npm run dev
+
+ext-build:
+	@cd extensions && npm run build

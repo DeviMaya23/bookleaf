@@ -42,7 +42,7 @@
 
 - [x] 6.1 Run `npm run type-check` in `/extensions` and confirm zero TypeScript errors
 - [x] 6.2 Run `npm run build` and confirm `dist/` contains `manifest.json` and popup/background entries
-- [ ] 6.3 Load the unpacked extension in Chrome (`dist/`) and verify the popup renders without console errors
-- [ ] 6.4 Complete a full login flow in the loaded extension and confirm the token is stored in `chrome.storage.local`
-- [ ] 6.5 Click "Logout" and confirm `bookleaf_auth` is cleared and the login button reappears
+- [x] 6.3 Load the unpacked extension in Chrome (`dist/`) and verify the popup renders without console errors
+- [x] 6.4 Complete a full login flow in the loaded extension and confirm the token is stored in `chrome.storage.local`
+- [x] 6.5 Click "Logout" and confirm `bookleaf_auth` is cleared and the login button reappears
 
