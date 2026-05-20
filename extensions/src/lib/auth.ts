@@ -23,6 +23,15 @@ function getRedirectUri(): string {
   return chrome.identity.getRedirectURL();
 }
 
+function generateState(): string {
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+}
+
 function buildAuthUrl(codeChallenge: string): string {
   const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL as string;
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID as string;
@@ -32,9 +41,10 @@ function buildAuthUrl(codeChallenge: string): string {
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: "openid profile email offline_access",
+    scope: "openid profile email",
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
+    state: generateState(),
   });
 
   return `${issuerUrl}/oauth2/auth?${params.toString()}`;
@@ -66,13 +76,13 @@ async function exchangeCodeForTokens(
 
   const json = (await response.json()) as {
     access_token: string;
-    refresh_token: string;
+    refresh_token?: string;
     expires_in: number;
   };
 
   return {
     accessToken: json.access_token,
-    refreshToken: json.refresh_token,
+    ...(json.refresh_token && { refreshToken: json.refresh_token }),
     expiresAt: Date.now() + json.expires_in * 1000,
   };
 }

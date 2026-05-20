@@ -2,7 +2,7 @@ import browser from "webextension-polyfill";
 
 export interface BookleafAuth {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   expiresAt: number;
 }
 
