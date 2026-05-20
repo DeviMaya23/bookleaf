@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Bookleaf",
+  "version": "0.1.0",
+  "description": "Save images to Bookleaf from any webpage.",
+  "permissions": ["storage", "identity"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_title": "Bookleaf"
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  }
+}
