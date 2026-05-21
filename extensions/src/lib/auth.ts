@@ -37,6 +37,8 @@ function buildAuthUrl(codeChallenge: string): string {
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID as string;
   const redirectUri = getRedirectUri();
 
+  const audience = import.meta.env.VITE_KINDE_AUDIENCE as string;
+
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
@@ -45,6 +47,7 @@ function buildAuthUrl(codeChallenge: string): string {
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
     state: generateState(),
+    ...(audience && { audience }),
   });
 
   return `${issuerUrl}/oauth2/auth?${params.toString()}`;
