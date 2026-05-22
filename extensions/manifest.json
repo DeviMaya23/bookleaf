@@ -3,7 +3,11 @@
   "name": "Bookleaf",
   "version": "0.1.0",
   "description": "Save images to Bookleaf from any webpage.",
-  "permissions": ["storage", "identity"],
+  "permissions": ["storage", "identity", "contextMenus", "notifications"],
+  "icons": {
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "src/popup/index.html",

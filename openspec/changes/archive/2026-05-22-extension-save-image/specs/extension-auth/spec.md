@@ -1,30 +1,4 @@
-# Spec: Extension Auth
-
-## Purpose
-
-Defines the authentication requirements for the Bookleaf browser extension, covering popup authentication state display, Kinde OAuth PKCE login flow, logout, and token storage schema.
-
-## Requirements
-
-### Requirement: Popup displays authentication state
-
-The extension popup SHALL display one of two states based on whether a valid token exists in `chrome.storage.local`:
-- **Unauthenticated**: A "Login with Bookleaf" button is shown
-- **Authenticated**: A "Logged in" message and a "Logout" button are shown
-
-The popup SHALL check `chrome.storage.local` on mount and render the appropriate state without a flash of incorrect content.
-
-#### Scenario: Unauthenticated user sees login button
-
-- **WHEN** the popup is opened and no token exists in `chrome.storage.local`
-- **THEN** the popup renders a "Login with Bookleaf" button
-- **AND** no logged-in content is shown
-
-#### Scenario: Authenticated user sees logged-in state
-
-- **WHEN** the popup is opened and a valid token exists in `chrome.storage.local`
-- **THEN** the popup renders a "Logged in" indicator and a "Logout" button
-- **AND** the login button is not shown
+## MODIFIED Requirements
 
 ### Requirement: Kinde OAuth login via PKCE
 
@@ -63,15 +37,7 @@ The `offline_access` scope SHALL NOT be requested. Kinde does not permit it on S
 - **THEN** the popup displays a brief error message (e.g., "Login failed. Please try again.")
 - **AND** no token is stored in `chrome.storage.local`
 
-### Requirement: Logout clears stored token
-
-When the user clicks "Logout", the extension SHALL remove the `bookleaf_auth` key from `chrome.storage.local` and update the popup to the unauthenticated state. No network request to Kinde is required.
-
-#### Scenario: Logout removes token and shows login button
-
-- **WHEN** the user clicks "Logout"
-- **THEN** `bookleaf_auth` is removed from `chrome.storage.local`
-- **AND** the popup renders the "Login with Bookleaf" button
+## MODIFIED Requirements
 
 ### Requirement: Auth token storage schema
 
