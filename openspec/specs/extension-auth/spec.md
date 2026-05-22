@@ -32,14 +32,17 @@ When the user clicks "Login with Bookleaf", the extension SHALL initiate a Kinde
 
 1. Generate a cryptographically random `code_verifier` (43–128 characters, URL-safe)
 2. Derive `code_challenge` as the Base64url-encoded SHA-256 hash of the `code_verifier`
-3. Construct the Kinde authorization URL with `response_type=code`, `client_id`, `redirect_uri`, `scope=openid profile email offline_access`, `code_challenge`, and `code_challenge_method=S256`
-4. Call `chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true })`
-5. Extract the `code` parameter from the redirect URI returned by the flow
-6. Exchange the code for tokens via a `POST` to `{VITE_KINDE_ISSUER_URL}/oauth2/token` with the `code`, `code_verifier`, `client_id`, `redirect_uri`, and `grant_type=authorization_code`
-7. Store the resulting `access_token`, `refresh_token`, and computed `expires_at` in `chrome.storage.local` under key `bookleaf_auth`
-8. Update the popup UI to the authenticated state
+3. Generate a cryptographically random `state` value (at least 16 URL-safe characters) for CSRF protection
+4. Construct the Kinde authorization URL with `response_type=code`, `client_id`, `redirect_uri`, `scope=openid profile email`, `code_challenge`, `code_challenge_method=S256`, `state`, and `audience` (from `VITE_KINDE_AUDIENCE`)
+5. Call `chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true })`
+6. Extract the `code` parameter from the redirect URI returned by the flow
+7. Exchange the code for tokens via a `POST` to `{VITE_KINDE_ISSUER_URL}/oauth2/token` with the `code`, `code_verifier`, `client_id`, `redirect_uri`, and `grant_type=authorization_code`
+8. Store the resulting `access_token`, optional `refresh_token`, and computed `expires_at` in `chrome.storage.local` under key `bookleaf_auth`
+9. Update the popup UI to the authenticated state
 
 The redirect URI SHALL be `https://<extension-id>.chromiumapp.org/` (obtained via `chrome.identity.getRedirectURL()`).
+
+The `offline_access` scope SHALL NOT be requested. Kinde does not permit it on SPA clients by default. The `refresh_token` field in storage is therefore optional.
 
 #### Scenario: Successful login stores token and updates UI
 
@@ -77,7 +80,7 @@ Tokens SHALL be stored in `chrome.storage.local` under the key `bookleaf_auth` a
 ```typescript
 interface BookleafAuth {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string; // optional — not issued by Kinde SPA clients by default
   expiresAt: number; // Unix timestamp in milliseconds
 }
 ```
@@ -91,6 +94,6 @@ A typed helper module (`src/lib/storage.ts`) SHALL provide `getAuth()` and `setA
 
 #### Scenario: setAuth persists the token object
 
-- **WHEN** `setAuth({ accessToken, refreshToken, expiresAt })` is called
+- **WHEN** `setAuth({ accessToken, expiresAt })` is called
 - **THEN** the object is stored in `chrome.storage.local` under `bookleaf_auth`
 - **AND** a subsequent `getAuth()` call returns the same object
