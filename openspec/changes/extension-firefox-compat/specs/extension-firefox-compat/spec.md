@@ -1,0 +1,50 @@
+## ADDED Requirements
+
+### Requirement: Extension builds for both Chrome and Firefox from a single codebase
+
+The extension project SHALL produce a working build for Chrome (`npm run build`) and a working build for Firefox (`npm run build:firefox`) from the same source files. All source `.ts` and `.tsx` files SHALL use `browser.*` APIs via `webextension-polyfill` exclusively — no direct `chrome.*` calls.
+
+The Firefox build SHALL inject `browser_specific_settings.gecko.id` into the output manifest via a `vite.config.ts` manifest override active only when `mode === "firefox"`. The gecko ID SHALL be `bookleaf@evimay.me`. This value SHALL NOT appear in `manifest.json` (the Chrome build must not include it).
+
+#### Scenario: Firefox build produces a manifest with gecko ID
+
+- **WHEN** `npm run build:firefox` is run
+- **THEN** the output `dist/manifest.json` contains `browser_specific_settings.gecko.id` set to `"bookleaf@evimay.me"`
+- **AND** the Chrome build's `dist/manifest.json` does not contain `browser_specific_settings`
+
+#### Scenario: Chrome build does not include gecko fields
+
+- **WHEN** `npm run build` is run
+- **THEN** the output `dist/manifest.json` does not contain `browser_specific_settings`
+
+### Requirement: Context menu registers on both browsers via polyfill
+
+The background script SHALL use `browser.contextMenus` and `browser.runtime` (from `webextension-polyfill`) for all context menu registration and runtime event handling. The `onInstalled` listener SHALL be declared `async` and SHALL `await browser.contextMenus.removeAll()` before calling `browser.contextMenus.create`.
+
+#### Scenario: Context menu item exists after install on Firefox
+
+- **WHEN** the Firefox extension is installed or updated
+- **THEN** a single context menu item "Save to Bookleaf" is registered for image elements
+- **AND** no duplicate menu items exist from a previous install
+
+#### Scenario: Context menu item exists after install on Chrome
+
+- **WHEN** the Chrome extension is installed or updated
+- **THEN** a single context menu item "Save to Bookleaf" is registered for image elements
+
+### Requirement: OffscreenCanvas unavailability is handled gracefully
+
+When a right-click save completes successfully but `OffscreenCanvas` is not available in the current execution context (i.e., Firefox's background script), the extension SHALL still record the save to recent saves storage with an empty `dataUrl`. Thumbnail generation SHALL only be attempted when `typeof OffscreenCanvas !== "undefined"`.
+
+#### Scenario: Save recorded without thumbnail when OffscreenCanvas is unavailable
+
+- **WHEN** an image is saved successfully on Firefox (where `OffscreenCanvas` is unavailable)
+- **THEN** a success notification is shown
+- **AND** `addRecentSave` is called with `dataUrl: ""`
+- **AND** the entry appears in the recent saves list in the popup
+
+#### Scenario: Thumbnail generated normally when OffscreenCanvas is available
+
+- **WHEN** an image is saved successfully on Chrome (where `OffscreenCanvas` is available)
+- **THEN** a 60×60 JPEG thumbnail is generated and stored as `dataUrl`
+- **AND** the thumbnail is displayed in the popup's recent saves strip
