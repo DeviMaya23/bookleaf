@@ -1,4 +1,4 @@
-import { getAuth, type BookleafAuth } from "../lib/storage";
+import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -40,14 +40,13 @@ async function saveImage({
   mimeType,
   title,
   pageUrl,
-  accessToken,
 }: {
   blob: Blob;
   mimeType: string;
   title: string;
   pageUrl: string;
   accessToken: string;
-}): Promise<void> {
+}): Promise<string> {
   const initRes = await apiFetch("/images", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,6 +75,36 @@ async function saveImage({
   });
   if (!completeRes.ok)
     throw new Error(`POST /complete failed: ${completeRes.status}`);
+
+  return image_id;
+}
+
+async function generateThumbnail(blob: Blob): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(60, 60);
+  const ctx = canvas.getContext("2d")!;
+
+  const { width, height } = bitmap;
+  const scale = Math.max(60 / width, 60 / height);
+  const sw = width * scale;
+  const sh = height * scale;
+  const dx = (60 - sw) / 2;
+  const dy = (60 - sh) / 2;
+
+  ctx.drawImage(bitmap, dx, dy, sw, sh);
+  bitmap.close();
+
+  const thumbBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.7 });
+  const buffer = await thumbBlob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  return `data:image/jpeg;base64,${btoa(binary)}`;
 }
 
 async function handleSave({
@@ -94,11 +123,15 @@ async function handleSave({
     return;
   }
 
+  let imageId: string | null = null;
+  let blob: Blob | null = null;
+
   try {
-    const { blob, mimeType } = await fetchImageBlob(srcUrl);
-    await saveImage({
+    const fetched = await fetchImageBlob(srcUrl);
+    blob = fetched.blob;
+    imageId = await saveImage({
       blob,
-      mimeType,
+      mimeType: fetched.mimeType,
       title,
       pageUrl,
       accessToken: auth.accessToken,
@@ -106,6 +139,16 @@ async function handleSave({
     notify("Bookleaf", "Saved to Bookleaf!");
   } catch {
     notify("Bookleaf", "Save failed. Please try again.");
+    return;
+  }
+
+  if (blob && imageId) {
+    try {
+      const dataUrl = await generateThumbnail(blob);
+      await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
+    } catch (err) {
+      console.error("[Bookleaf] Thumbnail generation failed:", err);
+    }
   }
 }
 
