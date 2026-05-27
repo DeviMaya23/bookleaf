@@ -4,18 +4,26 @@
 
 The extension project SHALL produce a working build for Chrome (`npm run build`) and a working build for Firefox (`npm run build:firefox`) from the same source files. All source `.ts` and `.tsx` files SHALL use `browser.*` APIs via `webextension-polyfill` exclusively — no direct `chrome.*` calls.
 
-The Firefox build SHALL inject `browser_specific_settings.gecko.id` into the output manifest via a `vite.config.ts` manifest override active only when `mode === "firefox"`. The gecko ID SHALL be `bookleaf@evimay.me`. This value SHALL NOT appear in `manifest.json` (the Chrome build must not include it).
+Chrome output SHALL be written to `dist/chrome/`. Firefox output SHALL be written to `dist/firefox/`. A `build:all` script SHALL run both builds in sequence. `make ext-build` SHALL invoke `build:all`.
 
-#### Scenario: Firefox build produces a manifest with gecko ID
+The Firefox build SHALL transform the manifest via `vite.config.ts`:
+- Inject `browser_specific_settings.gecko.id: "bookleaf@evimay.me"`
+- Convert `background.service_worker` to `background.scripts` (array containing the same path), removing `background.type`
+
+Neither transformation SHALL appear in the Chrome build.
+
+#### Scenario: Firefox build produces a manifest with gecko ID and scripts background
 
 - **WHEN** `npm run build:firefox` is run
-- **THEN** the output `dist/manifest.json` contains `browser_specific_settings.gecko.id` set to `"bookleaf@evimay.me"`
-- **AND** the Chrome build's `dist/manifest.json` does not contain `browser_specific_settings`
+- **THEN** the output at `dist/firefox/manifest.json` contains `browser_specific_settings.gecko.id` set to `"bookleaf@evimay.me"`
+- **AND** `dist/firefox/manifest.json` contains `background.scripts` as an array
+- **AND** `dist/firefox/manifest.json` does not contain `background.service_worker`
 
-#### Scenario: Chrome build does not include gecko fields
+#### Scenario: Chrome build does not include gecko fields or scripts background
 
 - **WHEN** `npm run build` is run
-- **THEN** the output `dist/manifest.json` does not contain `browser_specific_settings`
+- **THEN** the output at `dist/chrome/manifest.json` does not contain `browser_specific_settings`
+- **AND** `dist/chrome/manifest.json` contains `background.service_worker`
 
 ### Requirement: Context menu registers on both browsers via polyfill
 

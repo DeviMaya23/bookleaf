@@ -42,22 +42,31 @@ When `OffscreenCanvas` is NOT available (Firefox), the script SHALL call `addRec
 
 ### Requirement: Recently saved thumbnail strip in popup
 
-The popup SHALL read `recentSaves` from extension storage on mount. If the array is non-empty, it SHALL render up to 5 entries in a horizontal strip. For each entry:
-- If `dataUrl` is a non-empty string, render an `<img>` element with `src={dataUrl}`.
-- If `dataUrl` is an empty string, render a placeholder box with the same dimensions (flex: 1, aspectRatio: 1, borderRadius: 7) using the current theme's `divider` colour as the background. No `<img>` element is rendered for placeholder entries.
+The popup SHALL read `recentSaves` from extension storage on mount. If the array is non-empty, it SHALL always render exactly 5 slots in a horizontal strip, regardless of how many saves exist. This keeps the strip a consistent width at all fill levels.
 
-If the array is empty or absent, the empty state is shown instead.
+For each slot:
+- If a `recentSave` entry exists for that slot and its `dataUrl` is a non-empty string, render an `<img>` element with `src={dataUrl}`.
+- Otherwise (entry has `dataUrl: ""`, or the slot has no entry yet), render a themed placeholder box with the same dimensions (flex: 1, aspectRatio: 1, borderRadius: 7) using the current theme's `divider` colour as the background.
 
-#### Scenario: Thumbnail strip renders stored thumbnails
+A "View all" link SHALL appear in the section header when at least one save exists. Clicking it SHALL open the app at the `/all` path in a new tab.
 
-- **WHEN** the popup opens and `recentSaves` contains 3 entries with non-empty `dataUrl`
-- **THEN** 3 square thumbnail images are rendered in the strip
+If `recentSaves` is empty or absent, the empty state is shown instead (no strip, no "View all" link).
+
+#### Scenario: Strip always renders 5 slots
+
+- **WHEN** the popup opens and `recentSaves` contains 1 entry with a non-empty `dataUrl`
+- **THEN** 1 thumbnail image and 4 placeholder boxes are rendered in the strip
 
 #### Scenario: Placeholder rendered for entry with empty dataUrl
 
 - **WHEN** the popup opens and a `recentSave` entry has `dataUrl: ""`
 - **THEN** a themed placeholder box is rendered in place of an `<img>` for that entry
 - **AND** the placeholder uses the current theme's divider colour as its background
+
+#### Scenario: View all opens app at /all
+
+- **WHEN** the user clicks "View all" in the recently saved section
+- **THEN** a new tab opens to `VITE_APP_URL/all`
 
 #### Scenario: Empty state shown when no recent saves
 

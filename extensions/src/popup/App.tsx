@@ -128,6 +128,11 @@ export default function App() {
     browser.tabs.create({ url: appUrl });
   }
 
+  function handleViewAll() {
+    const appUrl = import.meta.env.VITE_APP_URL as string;
+    browser.tabs.create({ url: `${appUrl}/all` });
+  }
+
   if (authState === "loading") {
     return <div style={{ width: 320, background: "#fff" }} />;
   }
@@ -146,6 +151,7 @@ export default function App() {
       recentSaves={recentSaves}
       onToggleDark={handleToggleDark}
       onOpen={handleOpen}
+      onViewAll={handleViewAll}
       onLogout={handleLogout}
     />
   );
@@ -195,6 +201,7 @@ function LoggedIn({
   recentSaves,
   onToggleDark,
   onOpen,
+  onViewAll,
   onLogout,
 }: {
   c: Colors;
@@ -204,6 +211,7 @@ function LoggedIn({
   recentSaves: RecentSave[];
   onToggleDark: () => void;
   onOpen: () => void;
+  onViewAll: () => void;
   onLogout: () => void;
 }) {
   return (
@@ -336,6 +344,7 @@ function LoggedIn({
           </span>
           {recentSaves.length > 0 && (
             <span
+              onClick={onViewAll}
               style={{
                 fontSize: 11,
                 color: c.textSec,
@@ -381,27 +390,31 @@ function LoggedIn({
           </div>
         ) : (
           <div style={{ display: "flex", gap: 6 }}>
-            {recentSaves.map((save) =>
-              save.dataUrl ? (
-                <img
-                  key={save.imageId}
-                  src={save.dataUrl}
-                  title={save.title}
-                  alt={save.title}
-                  style={{
-                    flex: 1,
-                    aspectRatio: "1",
-                    borderRadius: 7,
-                    objectFit: "cover",
-                    border: `1px solid ${c.thumbBorder}`,
-                    cursor: "pointer",
-                    minWidth: 0,
-                  }}
-                />
-              ) : (
+            {Array.from({ length: 5 }).map((_, i) => {
+              const save = recentSaves[i];
+              if (save?.dataUrl) {
+                return (
+                  <img
+                    key={save.imageId}
+                    src={save.dataUrl}
+                    title={save.title}
+                    alt={save.title}
+                    style={{
+                      flex: 1,
+                      aspectRatio: "1",
+                      borderRadius: 7,
+                      objectFit: "cover",
+                      border: `1px solid ${c.thumbBorder}`,
+                      cursor: "pointer",
+                      minWidth: 0,
+                    }}
+                  />
+                );
+              }
+              return (
                 <div
-                  key={save.imageId}
-                  title={save.title}
+                  key={save?.imageId ?? `empty-${i}`}
+                  title={save?.title}
                   style={{
                     flex: 1,
                     aspectRatio: "1",
@@ -410,8 +423,8 @@ function LoggedIn({
                     minWidth: 0,
                   }}
                 />
-              )
-            )}
+              );
+            })}
           </div>
         )}
       </div>

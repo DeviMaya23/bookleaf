@@ -34,7 +34,19 @@ Firefox MV3 background scripts do not support `OffscreenCanvas` or `canvas.conve
 
 **Alternative considered**: Offload canvas drawing to a content script via `chrome.tabs.sendMessage`. Rejected for this iteration — adds a content script file, messaging complexity, and the tab may already be closed by the time the background processes the save.
 
-### 4. Gecko ID — hardcoded in `vite.config.ts`, Firefox mode only
+### 4. Firefox manifest — `service_worker` converted to `scripts`
+
+Firefox MV3 does not support the `service_worker` key in the background declaration (Chrome's format). The `transformManifest` function in `vite.config.ts` strips `background.service_worker` and `background.type` and replaces them with `background.scripts: [<worker path>]`. This is applied only in Firefox mode — the Chrome manifest retains `service_worker`.
+
+**Alternative considered**: Relying on `vite-plugin-web-extension` to handle this automatically when `browser: "firefox"` is set. Rejected — the plugin does not perform this transform; verified from build output.
+
+### 5. Separate output directories per browser
+
+Both browser builds write to distinct output directories: `dist/chrome/` and `dist/firefox/`. This is set via `build.outDir` in `vite.config.ts` based on mode. A unified `build:all` npm script runs both builds in sequence, and `make ext-build` (alias: `make ext-build-all`) runs both via Make.
+
+**Alternative considered**: Single `dist/` directory (original setup). Rejected — sequential builds overwrote each other, making it impossible to have both artifacts ready simultaneously for upload.
+
+### 6. Gecko ID — hardcoded in `vite.config.ts`, Firefox mode only
 
 `browser.identity.launchWebAuthFlow` on Firefox requires a stable extension ID. Without it, Firefox generates a random ID on each install, making the OAuth redirect URI non-deterministic.
 
@@ -42,11 +54,11 @@ The ID `bookleaf@evimay.me` is injected into the manifest only during the Firefo
 
 **Alternative considered**: A separate `manifest.firefox.json`. Rejected — the plugin's override merging keeps the single-manifest contract and avoids divergence.
 
-### 5. Kinde redirect URIs — manual registration step
+### 7. Kinde redirect URIs — manual registration step
 
 Each browser produces a different redirect URI format:
 - Chrome: `https://<extension-id>.chromiumapp.org/`
-- Firefox: `https://bookleaf@evimay.me.extensions.allizom.org/`
+- Firefox: Firefox hashes the gecko ID (`bookleaf@evimay.me`) to produce the subdomain, yielding `https://458bf7765fb46e32be2d2abe730687599c8f1265.extensions.allizom.org/`. This is deterministic — the same gecko ID always produces the same hash.
 
 Both must be added to Kinde's allowed redirect URI list. This is a one-time ops step, not a code change.
 
