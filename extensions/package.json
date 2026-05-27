@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:firefox": "vite build --mode firefox",
+    "build:all": "vite build && vite build --mode firefox",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {

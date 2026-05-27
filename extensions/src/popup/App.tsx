@@ -162,14 +162,14 @@ function LoggedOut({
     <div style={s.container}>
       {/* Header */}
       <div style={s.header}>
-        <img src="../icons/icon48.png" width={16} height={16} alt="" />
+        <img src="/icons/icon48.png" width={16} height={16} alt="" />
         <span style={s.wordmark}>Bookleaf</span>
       </div>
 
       {/* Body */}
       <div style={s.loggedOutBody}>
         <div style={{ marginBottom: 16, opacity: 0.28 }}>
-          <img src="../icons/icon48.png" width={38} height={38} alt="" />
+          <img src="/icons/icon48.png" width={38} height={38} alt="" />
         </div>
         <p style={s.tagline}>
           Save images to your Bookleaf collection as you browse the web.
@@ -228,7 +228,7 @@ function LoggedIn({
           gap: 7,
         }}
       >
-        <img src="../icons/icon48.png" width={16} height={16} alt="" />
+        <img src="/icons/icon48.png" width={16} height={16} alt="" />
         <span
           style={{
             fontSize: 14,
@@ -361,7 +361,7 @@ function LoggedIn({
             }}
           >
             <div style={{ opacity: 0.18 }}>
-              <img src="../icons/icon48.png" width={28} height={28} alt="" />
+              <img src="/icons/icon48.png" width={28} height={28} alt="" />
             </div>
             <p
               style={{
@@ -381,23 +381,37 @@ function LoggedIn({
           </div>
         ) : (
           <div style={{ display: "flex", gap: 6 }}>
-            {recentSaves.map((save) => (
-              <img
-                key={save.imageId}
-                src={save.dataUrl}
-                title={save.title}
-                alt={save.title}
-                style={{
-                  flex: 1,
-                  aspectRatio: "1",
-                  borderRadius: 7,
-                  objectFit: "cover",
-                  border: `1px solid ${c.thumbBorder}`,
-                  cursor: "pointer",
-                  minWidth: 0,
-                }}
-              />
-            ))}
+            {recentSaves.map((save) =>
+              save.dataUrl ? (
+                <img
+                  key={save.imageId}
+                  src={save.dataUrl}
+                  title={save.title}
+                  alt={save.title}
+                  style={{
+                    flex: 1,
+                    aspectRatio: "1",
+                    borderRadius: 7,
+                    objectFit: "cover",
+                    border: `1px solid ${c.thumbBorder}`,
+                    cursor: "pointer",
+                    minWidth: 0,
+                  }}
+                />
+              ) : (
+                <div
+                  key={save.imageId}
+                  title={save.title}
+                  style={{
+                    flex: 1,
+                    aspectRatio: "1",
+                    borderRadius: 7,
+                    background: c.divider,
+                    minWidth: 0,
+                  }}
+                />
+              )
+            )}
           </div>
         )}
       </div>

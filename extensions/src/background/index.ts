@@ -1,17 +1,17 @@
+import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: "save-to-bookleaf",
-      title: "Save to Bookleaf",
-      contexts: ["image"],
-    });
+browser.runtime.onInstalled.addListener(async () => {
+  await browser.contextMenus.removeAll();
+  browser.contextMenus.create({
+    id: "save-to-bookleaf",
+    title: "Save to Bookleaf",
+    contexts: ["image"],
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== "save-to-bookleaf") return;
   const srcUrl = info.srcUrl;
   const pageUrl = info.pageUrl;
@@ -143,19 +143,23 @@ async function handleSave({
   }
 
   if (blob && imageId) {
-    try {
-      const dataUrl = await generateThumbnail(blob);
-      await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
-    } catch (err) {
-      console.error("[Bookleaf] Thumbnail generation failed:", err);
+    if (typeof OffscreenCanvas !== "undefined") {
+      try {
+        const dataUrl = await generateThumbnail(blob);
+        await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
+      } catch (err) {
+        console.error("[Bookleaf] Thumbnail generation failed:", err);
+      }
+    } else {
+      await addRecentSave({ imageId, title, dataUrl: "", savedAt: Date.now() });
     }
   }
 }
 
 function notify(title: string, message: string): void {
-  chrome.notifications.create({
+  browser.notifications.create({
     type: "basic",
-    iconUrl: chrome.runtime.getURL("icons/icon48.png"),
+    iconUrl: browser.runtime.getURL("icons/icon48.png"),
     title,
     message,
   });

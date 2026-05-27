@@ -1,3 +1,4 @@
+import browser from "webextension-polyfill";
 import { setAuth, setUsername, setAvatar, type BookleafAuth } from "./storage";
 
 function generateCodeVerifier(): string {
@@ -20,7 +21,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 function getRedirectUri(): string {
-  return chrome.identity.getRedirectURL();
+  return browser.identity.getRedirectURL();
 }
 
 function generateState(): string {
@@ -109,7 +110,7 @@ export async function login(): Promise<void> {
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const authUrl = buildAuthUrl(codeChallenge);
 
-  const redirectUrl = await chrome.identity.launchWebAuthFlow({
+  const redirectUrl = await browser.identity.launchWebAuthFlow({
     url: authUrl,
     interactive: true,
   });
