@@ -1,4 +1,5 @@
-import { setAuth, type BookleafAuth } from "./storage";
+import browser from "webextension-polyfill";
+import { setAuth, setUsername, setAvatar, type BookleafAuth } from "./storage";
 
 function generateCodeVerifier(): string {
   const array = new Uint8Array(32);
@@ -20,7 +21,7 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
 }
 
 function getRedirectUri(): string {
-  return chrome.identity.getRedirectURL();
+  return browser.identity.getRedirectURL();
 }
 
 function generateState(): string {
@@ -53,10 +54,21 @@ function buildAuthUrl(codeChallenge: string): string {
   return `${issuerUrl}/oauth2/auth?${params.toString()}`;
 }
 
+export function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split(".");
+  if (parts.length < 2) return {};
+  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return JSON.parse(atob(payload)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
-): Promise<BookleafAuth> {
+): Promise<{ auth: BookleafAuth; idToken: string | null }> {
   const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL as string;
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID as string;
   const redirectUri = getRedirectUri();
@@ -79,15 +91,18 @@ async function exchangeCodeForTokens(
 
   const json = (await response.json()) as {
     access_token: string;
+    id_token?: string;
     refresh_token?: string;
     expires_in: number;
   };
 
-  return {
+  const auth: BookleafAuth = {
     accessToken: json.access_token,
     ...(json.refresh_token && { refreshToken: json.refresh_token }),
     expiresAt: Date.now() + json.expires_in * 1000,
   };
+
+  return { auth, idToken: json.id_token ?? null };
 }
 
 export async function login(): Promise<void> {
@@ -95,7 +110,7 @@ export async function login(): Promise<void> {
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const authUrl = buildAuthUrl(codeChallenge);
 
-  const redirectUrl = await chrome.identity.launchWebAuthFlow({
+  const redirectUrl = await browser.identity.launchWebAuthFlow({
     url: authUrl,
     interactive: true,
   });
@@ -106,6 +121,18 @@ export async function login(): Promise<void> {
   const code = url.searchParams.get("code");
   if (!code) return;
 
-  const auth = await exchangeCodeForTokens(code, codeVerifier);
+  const { auth, idToken } = await exchangeCodeForTokens(code, codeVerifier);
   await setAuth(auth);
+
+  if (idToken) {
+    const payload = decodeJwtPayload(idToken);
+    const username =
+      (payload.given_name as string) ||
+      (payload.name as string) ||
+      (payload.email as string) ||
+      null;
+    if (username) await setUsername(username);
+    const picture = payload.picture as string | undefined;
+    if (picture) await setAvatar(picture);
+  }
 }

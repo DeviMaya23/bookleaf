@@ -13,14 +13,19 @@ The system SHALL provide a browser extension project under `/extensions` at the 
 #### Scenario: Project builds successfully for Chrome
 
 - **WHEN** `npm run build` is run in `/extensions`
-- **THEN** a production build is produced in `/extensions/dist/` with a valid `manifest.json`
+- **THEN** a production build is produced in `/extensions/dist/chrome/` with a valid `manifest.json`
 - **AND** the manifest declares `manifest_version: 3`
 
 #### Scenario: Project builds successfully for Firefox
 
 - **WHEN** `npm run build:firefox` is run in `/extensions`
-- **THEN** a build is produced targeting Firefox MV3
-- **AND** the manifest is valid for Firefox
+- **THEN** a production build is produced in `/extensions/dist/firefox/` with a valid `manifest.json`
+- **AND** the manifest is valid for Firefox MV3
+
+#### Scenario: Both builds produced in one command
+
+- **WHEN** `npm run build:all` is run in `/extensions`
+- **THEN** both `dist/chrome/` and `dist/firefox/` are populated with their respective builds
 
 ### Requirement: Manifest V3 configuration
 
@@ -59,6 +64,7 @@ The project SHALL read configuration from environment variables via Vite's `impo
 - `VITE_KINDE_ISSUER_URL`: The Kinde issuer base URL (e.g., `https://<domain>.kinde.com`)
 - `VITE_KINDE_AUDIENCE`: The API audience value expected by the Bookleaf backend JWT middleware
 - `VITE_API_BASE_URL`: The Bookleaf backend base URL
+- `VITE_APP_URL`: The Bookleaf web app base URL (e.g., `http://localhost:5173` for dev, production URL for prod). Used to open the app from the popup.
 
 An `.env.example` file SHALL be provided listing all required variables.
 

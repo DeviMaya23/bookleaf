@@ -95,6 +95,36 @@ Always use `onClick` on `ContextMenuItem`. When in doubt, check the wrapper in `
 
 All direct `@base-ui/react` and `@radix-ui/*` imports must stay inside `src/components/ui/`. Application code imports only from `@/components/ui/`.
 
+## Browser Extension
+
+The extension lives under `/extensions`. It targets Chrome MV3 by default and is built with Firefox compatibility in mind.
+
+### Cross-browser API usage
+
+All extension code MUST use `browser.*` from `webextension-polyfill` instead of raw `chrome.*` APIs. The polyfill maps `browser.*` to the correct implementation on each target.
+
+```ts
+// Correct
+import browser from 'webextension-polyfill'
+await browser.storage.local.get(key)
+await browser.tabs.create({ url })
+
+// Wrong — breaks Firefox build
+chrome.storage.local.get(key)
+chrome.tabs.create({ url })
+```
+
+**Exception:** `chrome.identity` has no Firefox equivalent. Firefox auth requires a separate implementation and is tracked as a future proposal — use `chrome.identity` only there.
+
+### Build targets
+
+```bash
+npm run build           # Chrome (default)
+npm run build:firefox   # Firefox MV3
+```
+
+The Vite config (`vite.config.ts`) passes the browser target to `vite-plugin-web-extension` via `--mode`.
+
 ## Environment Variables
 
 | Variable | Default | Purpose |

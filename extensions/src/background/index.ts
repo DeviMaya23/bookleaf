@@ -1,23 +1,23 @@
-import { getAuth, type BookleafAuth } from "../lib/storage";
+import browser from "webextension-polyfill";
+import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: "save-to-bookleaf",
-      title: "Save to Bookleaf",
-      contexts: ["image"],
-    });
+browser.runtime.onInstalled.addListener(async () => {
+  await browser.contextMenus.removeAll();
+  browser.contextMenus.create({
+    id: "save-to-bookleaf",
+    title: "Save to Bookleaf",
+    contexts: ["image"],
   });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== "save-to-bookleaf") return;
   const srcUrl = info.srcUrl;
   const pageUrl = info.pageUrl;
   const title = tab?.title ?? pageUrl ?? "Untitled";
   if (!srcUrl) return;
-  handleSave({ srcUrl, pageUrl: pageUrl ?? "", title });
+  handleSave({ srcUrl, pageUrl: pageUrl ?? "", title, tabId: tab?.id });
 });
 
 function isTokenValid(auth: BookleafAuth | null): auth is BookleafAuth {
@@ -40,14 +40,13 @@ async function saveImage({
   mimeType,
   title,
   pageUrl,
-  accessToken,
 }: {
   blob: Blob;
   mimeType: string;
   title: string;
   pageUrl: string;
   accessToken: string;
-}): Promise<void> {
+}): Promise<string> {
   const initRes = await apiFetch("/images", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,44 +75,99 @@ async function saveImage({
   });
   if (!completeRes.ok)
     throw new Error(`POST /complete failed: ${completeRes.status}`);
+
+  return image_id;
+}
+
+async function generateThumbnail(blob: Blob): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(60, 60);
+  const ctx = canvas.getContext("2d")!;
+
+  const { width, height } = bitmap;
+  const scale = Math.max(60 / width, 60 / height);
+  const sw = width * scale;
+  const sh = height * scale;
+  const dx = (60 - sw) / 2;
+  const dy = (60 - sh) / 2;
+
+  ctx.drawImage(bitmap, dx, dy, sw, sh);
+  bitmap.close();
+
+  const thumbBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.7 });
+  const buffer = await thumbBlob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+
+  return `data:image/jpeg;base64,${btoa(binary)}`;
 }
 
 async function handleSave({
   srcUrl,
   pageUrl,
   title,
+  tabId,
 }: {
   srcUrl: string;
   pageUrl: string;
   title: string;
+  tabId: number | undefined;
 }): Promise<void> {
   const auth = await getAuth();
 
   if (!isTokenValid(auth)) {
-    notify("Bookleaf", "Please log in first");
+    await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
     return;
   }
 
+  let imageId: string | null = null;
+  let blob: Blob | null = null;
+
   try {
-    const { blob, mimeType } = await fetchImageBlob(srcUrl);
-    await saveImage({
+    const fetched = await fetchImageBlob(srcUrl);
+    blob = fetched.blob;
+    imageId = await saveImage({
       blob,
-      mimeType,
+      mimeType: fetched.mimeType,
       title,
       pageUrl,
       accessToken: auth.accessToken,
     });
-    notify("Bookleaf", "Saved to Bookleaf!");
+    await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
   } catch {
-    notify("Bookleaf", "Save failed. Please try again.");
+    await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
+    return;
+  }
+
+  if (blob && imageId) {
+    if (typeof OffscreenCanvas !== "undefined") {
+      try {
+        const dataUrl = await generateThumbnail(blob);
+        await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
+      } catch (err) {
+        console.error("[Bookleaf] Thumbnail generation failed:", err);
+      }
+    } else {
+      await addRecentSave({ imageId, title, dataUrl: "", savedAt: Date.now() });
+    }
   }
 }
 
-function notify(title: string, message: string): void {
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: chrome.runtime.getURL("icons/icon48.png"),
-    title,
-    message,
-  });
+async function sendToast(
+  tabId: number | undefined,
+  variant: "success" | "error",
+  title: string,
+  body: string,
+): Promise<void> {
+  if (tabId === undefined) return;
+  try {
+    await browser.tabs.sendMessage(tabId, { type: "toast", variant, title, body });
+  } catch {
+    // tab may have navigated away — silently ignore
+  }
 }
