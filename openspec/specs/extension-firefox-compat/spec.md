@@ -46,19 +46,26 @@ The background script SHALL use `browser.contextMenus` and `browser.runtime` (fr
 - **WHEN** the Chrome extension is installed or updated
 - **THEN** a single context menu item "Save to Bookleaf" is registered for image elements
 
-### Requirement: OffscreenCanvas unavailability is handled gracefully
+### Requirement: Thumbnail generation uses a capability guard for OffscreenCanvas
 
-When a right-click save completes successfully but `OffscreenCanvas` is not available in the current execution context (i.e., Firefox's background script), the extension SHALL still record the save to recent saves storage with an empty `dataUrl`. Thumbnail generation SHALL only be attempted when `typeof OffscreenCanvas !== "undefined"`.
+`OffscreenCanvas` is supported in Firefox 105+ (released Sept 2022) and is available in background scripts on both Chrome and modern Firefox. Thumbnail generation SHALL be wrapped in a `typeof OffscreenCanvas !== "undefined"` guard as a defensive fallback for environments where it may be absent. When the guard evaluates to false, the extension SHALL still record the save to recent saves storage with an empty `dataUrl`.
+
+#### Scenario: Thumbnail generated on Chrome
+
+- **WHEN** an image is saved successfully on Chrome
+- **THEN** a 60×60 JPEG thumbnail is generated and stored as `dataUrl`
+- **AND** the thumbnail is displayed in the popup's recent saves strip
+
+#### Scenario: Thumbnail generated on modern Firefox (105+)
+
+- **WHEN** an image is saved successfully on Firefox 105+
+- **THEN** `typeof OffscreenCanvas !== "undefined"` evaluates to true
+- **AND** a 60×60 JPEG thumbnail is generated and stored as `dataUrl`
+- **AND** the thumbnail is displayed in the popup's recent saves strip
 
 #### Scenario: Save recorded without thumbnail when OffscreenCanvas is unavailable
 
-- **WHEN** an image is saved successfully on Firefox (where `OffscreenCanvas` is unavailable)
+- **WHEN** an image is saved successfully in an environment where `OffscreenCanvas` is unavailable
 - **THEN** a success notification is shown
 - **AND** `addRecentSave` is called with `dataUrl: ""`
 - **AND** the entry appears in the recent saves list in the popup
-
-#### Scenario: Thumbnail generated normally when OffscreenCanvas is available
-
-- **WHEN** an image is saved successfully on Chrome (where `OffscreenCanvas` is available)
-- **THEN** a 60×60 JPEG thumbnail is generated and stored as `dataUrl`
-- **AND** the thumbnail is displayed in the popup's recent saves strip
