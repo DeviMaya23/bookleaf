@@ -17,7 +17,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   const pageUrl = info.pageUrl;
   const title = tab?.title ?? pageUrl ?? "Untitled";
   if (!srcUrl) return;
-  handleSave({ srcUrl, pageUrl: pageUrl ?? "", title });
+  handleSave({ srcUrl, pageUrl: pageUrl ?? "", title, tabId: tab?.id });
 });
 
 function isTokenValid(auth: BookleafAuth | null): auth is BookleafAuth {
@@ -111,15 +111,17 @@ async function handleSave({
   srcUrl,
   pageUrl,
   title,
+  tabId,
 }: {
   srcUrl: string;
   pageUrl: string;
   title: string;
+  tabId: number | undefined;
 }): Promise<void> {
   const auth = await getAuth();
 
   if (!isTokenValid(auth)) {
-    notify("Bookleaf", "Please log in first");
+    await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
     return;
   }
 
@@ -136,9 +138,9 @@ async function handleSave({
       pageUrl,
       accessToken: auth.accessToken,
     });
-    notify("Bookleaf", "Saved to Bookleaf!");
+    await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
   } catch {
-    notify("Bookleaf", "Save failed. Please try again.");
+    await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
     return;
   }
 
@@ -156,11 +158,16 @@ async function handleSave({
   }
 }
 
-function notify(title: string, message: string): void {
-  browser.notifications.create({
-    type: "basic",
-    iconUrl: browser.runtime.getURL("icons/icon48.png"),
-    title,
-    message,
-  });
+async function sendToast(
+  tabId: number | undefined,
+  variant: "success" | "error",
+  title: string,
+  body: string,
+): Promise<void> {
+  if (tabId === undefined) return;
+  try {
+    await browser.tabs.sendMessage(tabId, { type: "toast", variant, title, body });
+  } catch {
+    // tab may have navigated away — silently ignore
+  }
 }
