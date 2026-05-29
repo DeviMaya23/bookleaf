@@ -18,3 +18,9 @@ This file will detail development conventions only.
 
 ### Others to keep in mind during proposals
 - When creating tasks for a new endpoint, always include a bruno file creation.
+
+## Frontend UI Primitives
+
+- UI components use `@base-ui/react`, NOT Radix UI
+- `asChild` is a Radix UI pattern — it does not exist in this codebase and will cause a TypeScript error
+- To render a trigger or wrapper with button styling, apply `buttonVariants()` via `className` directly on the component instead of wrapping it in `<Button asChild>`
