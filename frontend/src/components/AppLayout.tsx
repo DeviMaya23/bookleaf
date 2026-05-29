@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
-import { Plus, UploadCloud } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -15,9 +15,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import FolderSidebar from './FolderSidebar'
 import ImageGrid from './ImageGrid'
 import UploadModal from './UploadModal'
+import BatchUploadModal from './BatchUploadModal'
 import RightPanel from './RightPanel'
 import { useQuery } from '@tanstack/react-query'
 import { getFolders } from '@/lib/folders'
@@ -54,6 +61,8 @@ export default function AppLayout() {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [batchUploadOpen, setBatchUploadOpen] = useState(false)
+  const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([])
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [isAutoUploading, setIsAutoUploading] = useState(false)
@@ -128,9 +137,16 @@ export default function AppLayout() {
     e.preventDefault()
     setIsFileDragOver(false)
 
-    const file = e.dataTransfer.files[0]
-    if (!file) return
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
 
+    if (files.length > 1) {
+      setBatchInitialFiles(files)
+      setBatchUploadOpen(true)
+      return
+    }
+
+    const file = files[0]
     setIsAutoUploading(true)
     try {
       const imageDetail = await handleFileAutoUpload(getToken, file, folderId)
@@ -169,10 +185,25 @@ export default function AppLayout() {
           <ScrollArea className="h-full">
             <div className="p-6">
               <div className="flex justify-end mb-4">
-                <Button onClick={() => setUploadOpen(true)}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  Image
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Image
+                      <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                      <UploadCloud className="w-4 h-4" />
+                      Upload image
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
+                      <Images className="w-4 h-4" />
+                      Upload multiple images
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <ImageGrid
                 view={view}
@@ -192,6 +223,12 @@ export default function AppLayout() {
           open={uploadOpen}
           onOpenChange={setUploadOpen}
           folderId={folderId}
+        />
+        <BatchUploadModal
+          open={batchUploadOpen}
+          onOpenChange={setBatchUploadOpen}
+          folderId={folderId}
+          initialFiles={batchInitialFiles}
         />
       </div>
       <DragOverlay dropAnimation={null}>

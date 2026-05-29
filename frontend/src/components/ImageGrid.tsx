@@ -1,4 +1,4 @@
-import { useState } from 'react'
+
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
@@ -9,13 +9,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage } from '@/lib/images'
@@ -111,7 +104,6 @@ interface ImageGridProps {
 export default function ImageGrid({ view, onImageSelect }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
-  const [deleteTarget, setDeleteTarget] = useState<Image | null>(null)
   const isTrash = view.type === 'trash'
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
@@ -125,8 +117,7 @@ export default function ImageGrid({ view, onImageSelect }: ImageGridProps) {
     mutationFn: (id: string) => deleteImage(getToken, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['images'] })
-      setDeleteTarget(null)
-      toast.success('Image deleted')
+      toast.success('Image moved to trash')
     },
     onError: () => {
       toast.error('Failed to delete image')
@@ -148,7 +139,7 @@ export default function ImageGrid({ view, onImageSelect }: ImageGridProps) {
     if (isTrash) {
       restoreMutation.mutate(image.id)
     } else {
-      setDeleteTarget(image)
+      deleteMutation.mutate(image.id)
     }
   }
 
@@ -204,30 +195,6 @@ export default function ImageGrid({ view, onImageSelect }: ImageGridProps) {
         </div>
       )}
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete image</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete{' '}
-            <span className="font-medium text-foreground">"{deleteTarget?.title}"</span>? This
-            cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-              disabled={deleteMutation.isPending}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

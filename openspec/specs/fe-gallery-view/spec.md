@@ -96,19 +96,17 @@ The system SHALL show a context menu with a "Delete" option when the user right-
 - **WHEN** the user right-clicks an image card
 - **THEN** a context menu appears with a "Delete" option
 
-### Requirement: Delete image with confirmation dialog
-The system SHALL show a confirmation dialog before deleting an image. Upon confirmation, the system SHALL call `DELETE /images/:id` and refresh the image list.
+### Requirement: Delete image moves it to trash
+Selecting "Delete" from the context menu SHALL immediately call `DELETE /images/:id` (no confirmation dialog) and refresh the image list. A success toast reading "Image moved to trash" SHALL be shown on success.
 
-#### Scenario: Confirming delete removes the image
+#### Scenario: Delete moves the image to trash
 - **WHEN** the user selects "Delete" from the image context menu
-- **AND** a confirmation dialog appears
-- **AND** the user confirms the deletion
 - **THEN** the app calls `DELETE /images/<id>`
-- **AND** the image list is refreshed and the deleted image no longer appears
+- **AND** the image list is refreshed and the image no longer appears
+- **AND** a success toast "Image moved to trash" is shown
 
-#### Scenario: Cancelling delete keeps the image
+#### Scenario: Delete fails with an error toast
 - **WHEN** the user selects "Delete" from the image context menu
-- **AND** a confirmation dialog appears
-- **AND** the user cancels
-- **THEN** no delete request is made
-- **AND** the image remains in the gallery
+- **AND** the `DELETE /images/<id>` request fails
+- **THEN** the image remains in the gallery
+- **AND** an error toast is shown
