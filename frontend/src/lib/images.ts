@@ -11,6 +11,7 @@ export interface Image {
   width: number | null
   height: number | null
   file_size: number | null
+  tags: { id: string; name: string }[]
   created_at: string
   updated_at: string
 }
@@ -139,6 +140,7 @@ export interface UpdateImageParams {
   description?: string | null
   source_url?: string | null
   folder_id?: string | null
+  tags?: string[]
 }
 
 export async function updateImage(getToken: GetToken, id: string, params: UpdateImageParams): Promise<Image> {

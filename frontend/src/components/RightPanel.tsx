@@ -11,7 +11,10 @@ import {
 } from '@/components/ui/dialog'
 import { getImage, updateImage, downloadImage } from '@/lib/images'
 import { getFolders } from '@/lib/folders'
+import { getTags, createTag } from '@/lib/tags'
+import TagInput from '@/components/TagInput'
 import type { Image } from '@/lib/images'
+import type { Tag } from '@/lib/tags'
 
 function formatFileSize(bytes: number | null): string {
   if (bytes === null) return '—'
@@ -42,12 +45,14 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const [title, setTitle] = useState(image.title)
   const [description, setDescription] = useState(image.description ?? '')
   const [sourceUrl, setSourceUrl] = useState(image.source_url ?? '')
+  const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
 
   // Reset local state when a different image is selected
   useEffect(() => {
     setTitle(image.title)
     setDescription(image.description ?? '')
     setSourceUrl(image.source_url ?? '')
+    setTags(image.tags ?? [])
     setLightboxOpen(false)
   }, [image.id])
 
@@ -61,6 +66,12 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const { data: folders } = useQuery({
     queryKey: ['folders'],
     queryFn: () => getFolders(getToken),
+    staleTime: 60_000,
+  })
+
+  const { data: allTags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => getTags(getToken),
     staleTime: 60_000,
   })
 
@@ -79,6 +90,55 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
       toast.error('Failed to save')
     },
   })
+
+  const tagSaveMutation = useMutation({
+    mutationFn: (tagIds: string[]) =>
+      updateImage(getToken, image.id, { tags: tagIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['images'] })
+      toast.success('Saved')
+    },
+    onError: () => {
+      toast.error('Failed to save tags')
+    },
+  })
+
+  const handleTagsChange = async (incoming: Tag[]) => {
+    // Resolve any tag that has no ID (newly typed by user)
+    const resolved: Tag[] = []
+    for (const t of incoming) {
+      if (t.id) {
+        resolved.push(t)
+        continue
+      }
+      const existing = allTags.find(
+        (a) => a.name.toLowerCase() === t.name.toLowerCase(),
+      )
+      if (existing) {
+        resolved.push(existing)
+      } else {
+        try {
+          const created = await createTag(getToken, t.name)
+          if (created === null) {
+            // 409: race — another tab created the same tag; re-fetch to get real ID
+            const fresh = await getTags(getToken)
+            queryClient.setQueryData<Tag[]>(['tags'], fresh)
+            const found = fresh.find((a) => a.name.toLowerCase() === t.name.toLowerCase())
+            if (found) { resolved.push(found); continue }
+            toast.error(`Failed to resolve tag "${t.name}"`)
+            return
+          }
+          queryClient.setQueryData<Tag[]>(['tags'], (prev = []) => [...prev, created])
+          resolved.push(created)
+        } catch {
+          toast.error(`Failed to create tag "${t.name}"`)
+          return
+        }
+      }
+    }
+    setTags(resolved)
+    tagSaveMutation.mutate(resolved.map((t) => t.id))
+  }
 
   const [isDownloading, setIsDownloading] = useState(false)
 
@@ -223,6 +283,17 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
               Open <ExternalLink className="w-3 h-3" />
             </a>
           </div>
+        </div>
+
+        {/* Tags */}
+        <div className="px-4 py-3 border-b">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Tags</p>
+          <TagInput
+            tags={tags}
+            onChange={handleTagsChange}
+            disabled={tagSaveMutation.isPending}
+            suggestions={allTags.filter((t) => !tags.some((applied) => applied.id === t.id))}
+          />
         </div>
 
         {/* Details */}
