@@ -135,6 +135,27 @@ describe('RightPanel tags — success scenario', () => {
     })
     expect(createTag).not.toHaveBeenCalled()
   })
+
+  it('calls createTag then patches the image when adding a new tag name', async () => {
+    vi.mocked(getTags).mockResolvedValue([])
+    vi.mocked(createTag).mockResolvedValue({ id: 'tag-new', name: 'concept' })
+
+    renderPanel(makeImage())
+
+    const input = await screen.findByPlaceholderText('Add tags…')
+    await userEvent.type(input, 'concept{Enter}')
+
+    await waitFor(() => {
+      expect(createTag).toHaveBeenCalledWith(expect.any(Function), 'concept')
+    })
+    await waitFor(() => {
+      expect(updateImage).toHaveBeenCalledWith(
+        expect.any(Function),
+        'img-1',
+        expect.objectContaining({ tags: ['tag-new'] }),
+      )
+    })
+  })
 })
 
 describe('RightPanel tags — failure scenario', () => {

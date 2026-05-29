@@ -13,12 +13,14 @@ export async function getTags(getToken: GetToken): Promise<Tag[]> {
   return res.json()
 }
 
-export async function createTag(getToken: GetToken, name: string): Promise<Tag> {
+// Returns null on 409 (tag already exists for this user — caller resolves via re-fetch)
+export async function createTag(getToken: GetToken, name: string): Promise<Tag | null> {
   const res = await apiFetch('/tags', getToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
   })
+  if (res.status === 409) return null
   if (!res.ok) throw new Error('Failed to create tag')
   return res.json()
 }

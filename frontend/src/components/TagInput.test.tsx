@@ -18,6 +18,40 @@ describe('TagInput — success scenario', () => {
     expect(onChange).toHaveBeenCalledWith([{ id: '', name: 'nature' }])
   })
 
+  it('calls onChange with the new tag when comma is pressed', async () => {
+    const onChange = vi.fn()
+    render(<TagInput tags={[]} onChange={onChange} />)
+
+    const input = screen.getByPlaceholderText('Add tags…')
+    await userEvent.type(input, 'nature,')
+
+    expect(onChange).toHaveBeenCalledWith([{ id: '', name: 'nature' }])
+  })
+
+  it('calls onChange removing last tag when Backspace is pressed on empty input', async () => {
+    const tags = makeTags(['nature', 'landscape'])
+    const onChange = vi.fn()
+    render(<TagInput tags={tags} onChange={onChange} />)
+
+    const input = screen.getByRole('textbox')
+    await userEvent.click(input)
+    await userEvent.keyboard('{Backspace}')
+
+    expect(onChange).toHaveBeenCalledWith([tags[0]])
+  })
+
+  it('calls onChange when input loses focus with a non-empty value', async () => {
+    const onChange = vi.fn()
+    render(<TagInput tags={[]} onChange={onChange} />)
+
+    const input = screen.getByPlaceholderText('Add tags…')
+    await userEvent.click(input)
+    await userEvent.type(input, 'nature')
+    await userEvent.tab()
+
+    expect(onChange).toHaveBeenCalledWith([{ id: '', name: 'nature' }])
+  })
+
   it('calls onChange removing the tag when the remove button is clicked', async () => {
     const tags = makeTags(['nature', 'landscape'])
     const onChange = vi.fn()

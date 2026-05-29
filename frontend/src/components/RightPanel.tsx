@@ -119,6 +119,15 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
       } else {
         try {
           const created = await createTag(getToken, t.name)
+          if (created === null) {
+            // 409: race — another tab created the same tag; re-fetch to get real ID
+            const fresh = await getTags(getToken)
+            queryClient.setQueryData<Tag[]>(['tags'], fresh)
+            const found = fresh.find((a) => a.name.toLowerCase() === t.name.toLowerCase())
+            if (found) { resolved.push(found); continue }
+            toast.error(`Failed to resolve tag "${t.name}"`)
+            return
+          }
           queryClient.setQueryData<Tag[]>(['tags'], (prev = []) => [...prev, created])
           resolved.push(created)
         } catch {
