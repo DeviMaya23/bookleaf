@@ -14,7 +14,7 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -186,12 +186,10 @@ export default function AppLayout() {
             <div className="p-6">
               <div className="flex justify-end mb-4">
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button>
-                      <Plus className="w-4 h-4 mr-1" />
-                      Image
-                      <ChevronDown className="w-3.5 h-3.5 ml-1" />
-                    </Button>
+                  <DropdownMenuTrigger className={buttonVariants()}>
+                    <Plus className="w-4 h-4 mr-1" />
+                    Image
+                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setUploadOpen(true)}>
