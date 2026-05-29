@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/devi/bookleaf/internal/config"
@@ -35,7 +39,6 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init logger: %w", err))
 	}
-	defer logger.Sync()
 
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
@@ -48,18 +51,21 @@ func main() {
 	}))
 
 	var tel *observability.Telemetry
+	var tp interface{ Shutdown(context.Context) error }
+	var mp interface{ Shutdown(context.Context) error }
 	if cfg.Obs.OTELEnabled {
-		tp, tracerProviderErr := observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
+		var tracerProviderErr error
+		tp, tracerProviderErr = observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
 		if tracerProviderErr != nil {
 			logger.Fatal("init tracer provider", zap.Error(tracerProviderErr))
 		}
-		defer tp.Shutdown(ctx)
 
-		mp, metricsHandler, meterProviderErr := observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
+		var meterProviderErr error
+		var metricsHandler http.Handler
+		mp, metricsHandler, meterProviderErr = observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
 		if meterProviderErr != nil {
 			logger.Fatal("init meter provider", zap.Error(meterProviderErr))
 		}
-		defer mp.Shutdown(ctx)
 
 		tel = observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
 		e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
@@ -154,7 +160,29 @@ func main() {
 		}
 	}()
 
-	if err := e.Start(":" + cfg.Port); err != nil {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-quit
+		logger.Info("shutting down")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if tp != nil {
+			tp.Shutdown(shutdownCtx)
+		}
+		if mp != nil {
+			mp.Shutdown(shutdownCtx)
+		}
+		if err := e.Shutdown(shutdownCtx); err != nil {
+			logger.Error("echo shutdown", zap.Error(err))
+		}
+		logger.Sync()
+	}()
+
+	if err := e.Start(":" + cfg.Port); err != nil && err != http.ErrServerClosed {
 		logger.Fatal("server stopped", zap.Error(err))
 	}
 }
