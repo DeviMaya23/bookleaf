@@ -206,7 +206,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   return (
     <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
       {/* Thumbnail */}
-      <div className="relative flex-shrink-0">
+      <div className="relative flex-shrink-0 max-h-[33vh]">
         <div
           className="cursor-pointer"
           onClick={() => setLightboxOpen(true)}
@@ -215,7 +215,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
             <img
               src={image.thumbnail_url}
               alt={image.title}
-              className="w-full h-auto object-cover"
+              className="max-h-[33vh] w-auto mx-auto block"
             />
           ) : (
             <div className="w-full aspect-video flex items-center justify-center bg-muted">
