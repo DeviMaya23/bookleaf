@@ -1,0 +1,23 @@
+meta {
+  name: Create Tag
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/tags
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "landscape"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("tagId", res.body.id);
+  }
+}

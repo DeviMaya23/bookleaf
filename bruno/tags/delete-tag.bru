@@ -1,0 +1,15 @@
+meta {
+  name: Delete Tag
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/tags/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: {{tagId}}
+}

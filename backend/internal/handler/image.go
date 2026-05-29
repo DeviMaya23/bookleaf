@@ -27,6 +27,7 @@ type updateImageRequest struct {
 	Description *string         `json:"description"`
 	FolderID    json.RawMessage `json:"folder_id"`
 	SourceURL   json.RawMessage `json:"source_url"`
+	Tags        json.RawMessage `json:"tags"`
 }
 
 type initiateImageUploadRequest struct {
@@ -44,34 +45,36 @@ type initiateImageUploadResponse struct {
 }
 
 type imageResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	Title        string     `json:"title"`
-	Description  *string    `json:"description"`
-	MIMEType     string     `json:"mime_type"`
-	SourceURL    *string    `json:"source_url"`
-	FolderID     *uuid.UUID `json:"folder_id"`
-	ThumbnailURL *string    `json:"thumbnail_url"`
-	Width        *int       `json:"width"`
-	Height       *int       `json:"height"`
-	FileSize     *int64     `json:"file_size"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID           uuid.UUID     `json:"id"`
+	Title        string        `json:"title"`
+	Description  *string       `json:"description"`
+	MIMEType     string        `json:"mime_type"`
+	SourceURL    *string       `json:"source_url"`
+	FolderID     *uuid.UUID    `json:"folder_id"`
+	ThumbnailURL *string       `json:"thumbnail_url"`
+	Width        *int          `json:"width"`
+	Height       *int          `json:"height"`
+	FileSize     *int64        `json:"file_size"`
+	Tags         []tagResponse `json:"tags"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type imageDetailResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	Title        string     `json:"title"`
-	Description  *string    `json:"description"`
-	MIMEType     string     `json:"mime_type"`
-	SourceURL    *string    `json:"source_url"`
-	FolderID     *uuid.UUID `json:"folder_id"`
-	ThumbnailURL *string    `json:"thumbnail_url"`
-	Width        *int       `json:"width"`
-	Height       *int       `json:"height"`
-	FileSize     *int64     `json:"file_size"`
-	ImageURL     string     `json:"image_url"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID           uuid.UUID     `json:"id"`
+	Title        string        `json:"title"`
+	Description  *string       `json:"description"`
+	MIMEType     string        `json:"mime_type"`
+	SourceURL    *string       `json:"source_url"`
+	FolderID     *uuid.UUID    `json:"folder_id"`
+	ThumbnailURL *string       `json:"thumbnail_url"`
+	Width        *int          `json:"width"`
+	Height       *int          `json:"height"`
+	FileSize     *int64        `json:"file_size"`
+	Tags         []tagResponse `json:"tags"`
+	ImageURL     string        `json:"image_url"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type downloadImageResponse struct {
@@ -214,6 +217,14 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		folderID = &parsedFolderID
 	}
 	unfiled := c.QueryParam("unfiled") == "true"
+	var tagID *uuid.UUID
+	if tagIDParam := c.QueryParam("tag_id"); tagIDParam != "" {
+		parsedTagID, err := uuid.Parse(tagIDParam)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
+		}
+		tagID = &parsedTagID
+	}
 
 	limit, cursor, err := parsePaginationParams(c)
 	if err != nil {
@@ -223,6 +234,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
 		FolderID: folderID,
 		Unfiled:  unfiled,
+		TagID:    tagID,
 		Cursor:   cursor,
 		Limit:    limit,
 	})
@@ -282,6 +294,7 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		Width:        item.Width,
 		Height:       item.Height,
 		FileSize:     item.FileSize,
+		Tags:         item.Tags,
 		ImageURL:     result.ImageURL,
 		CreatedAt:    item.CreatedAt,
 		UpdatedAt:    item.UpdatedAt,
@@ -462,6 +475,24 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		}
 	}
 
+	if len(req.Tags) > 0 {
+		if string(req.Tags) != "null" {
+			var tagIDsRaw []string
+			if err := json.Unmarshal(req.Tags, &tagIDsRaw); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid tags")
+			}
+			tagIDs := make([]uuid.UUID, 0, len(tagIDsRaw))
+			for _, raw := range tagIDsRaw {
+				parsed, err := uuid.Parse(raw)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
+				}
+				tagIDs = append(tagIDs, parsed)
+			}
+			params.Tags = &tagIDs
+		}
+	}
+
 	item, err := h.imageUsecase.UpdateImage(ctx, imageID, userID, params)
 	if err != nil {
 		span.RecordError(err)
@@ -497,6 +528,13 @@ func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCurs
 }
 
 func toImageResponse(item usecase.ImageItem) imageResponse {
+	tags := make([]tagResponse, 0, len(item.Image.Tags))
+	for _, tag := range item.Image.Tags {
+		tags = append(tags, tagResponse{
+			ID:   tag.ID,
+			Name: tag.Name,
+		})
+	}
 	return imageResponse{
 		ID:           item.Image.ID,
 		Title:        item.Image.Title,
@@ -508,6 +546,7 @@ func toImageResponse(item usecase.ImageItem) imageResponse {
 		Width:        item.Image.Width,
 		Height:       item.Image.Height,
 		FileSize:     item.Image.FileSize,
+		Tags:         tags,
 		CreatedAt:    item.Image.CreatedAt,
 		UpdatedAt:    item.Image.UpdatedAt,
 	}

@@ -22,10 +22,20 @@ Fields (all DB columns use snake_case):
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
+Associations:
+- `User User` — belongs-to
+- `Folder *Folder` — belongs-to (nullable)
+- `Tags []Tag` — many-to-many via `image_tags` join table: `gorm:"many2many:image_tags;foreignKey:ID;joinForeignKey:ImageID;References:ID;joinReferences:TagID"`
+
 #### Scenario: Image struct compiles with GORM tags
 
 - **WHEN** the Go package is compiled
 - **THEN** `Image` has a `gorm:"primaryKey"` UUID field and FK references to `users` and `folders`
+
+#### Scenario: Image struct includes Tags association
+
+- **WHEN** the Go package is compiled
+- **THEN** `Image` has a `Tags []Tag` field with a GORM many2many tag referencing the `image_tags` join table
 
 #### Scenario: Image struct compiles with all metadata fields
 

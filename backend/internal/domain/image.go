@@ -29,6 +29,7 @@ type Image struct {
 
 	User   User    `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
 	Folder *Folder `gorm:"foreignKey:FolderID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
+	Tags   []Tag   `gorm:"many2many:image_tags;foreignKey:ID;joinForeignKey:ImageID;References:ID;joinReferences:TagID"`
 }
 
 func (i *Image) BeforeCreate(*gorm.DB) error {

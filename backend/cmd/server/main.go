@@ -90,13 +90,16 @@ func main() {
 	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
+	tagRepository := repository.NewTagRepository(db)
 	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
+	tagUsecase := usecase.NewTagUsecase(tagRepository, tel)
+	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	var visionService vision.VisionService
 	if cfg.Vision.APIKey != "" {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
-	imageUsecase := usecase.NewImageUsecase(imageRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
@@ -116,6 +119,10 @@ func main() {
 	protected.GET("/folders/:id", folderHandler.GetFolder)
 	protected.PUT("/folders/:id", folderHandler.UpdateFolder)
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
+	protected.POST("/tags", tagHandler.CreateTag)
+	protected.GET("/tags", tagHandler.ListTags)
+	protected.PUT("/tags/:id", tagHandler.UpdateTag)
+	protected.DELETE("/tags/:id", tagHandler.DeleteTag)
 	protected.POST("/images", imageHandler.InitiateUpload)
 	protected.POST("/images/:id/complete", imageHandler.CompleteUpload)
 	protected.POST("/images/:id/accept-suggestion", imageHandler.AcceptSuggestion)

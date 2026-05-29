@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -295,6 +296,8 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 }
 
 func TestImageHandler_ListImages(t *testing.T) {
+	tagID := uuid.New()
+
 	tests := []struct {
 		name          string
 		mockUC        *mockImageUsecase
@@ -314,6 +317,7 @@ func TestImageHandler_ListImages(t *testing.T) {
 							Width:       func() *int { v := 640; return &v }(),
 							Height:      func() *int { v := 480; return &v }(),
 							FileSize:    func() *int64 { v := int64(1024); return &v }(),
+							Tags:        []domain.Tag{{ID: tagID, Name: "travel"}},
 						}},
 						{Image: &domain.Image{ID: uuid.New(), Title: "photo 2"}},
 					},
@@ -348,6 +352,22 @@ func TestImageHandler_ListImages(t *testing.T) {
 			images, ok := resp["images"].([]any)
 			require.True(t, ok)
 			assert.Len(t, images, tt.wantLen)
+			if tt.name == "returns paginated image list" {
+				firstImage, ok := images[0].(map[string]any)
+				require.True(t, ok)
+				tags, ok := firstImage["tags"].([]any)
+				require.True(t, ok)
+				require.Len(t, tags, 1)
+				tagItem, ok := tags[0].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "travel", tagItem["name"])
+
+				secondImage, ok := images[1].(map[string]any)
+				require.True(t, ok)
+				emptyTags, ok := secondImage["tags"].([]any)
+				require.True(t, ok)
+				assert.Len(t, emptyTags, 0)
+			}
 			_, hasCursor := resp["next_cursor"]
 			assert.True(t, hasCursor)
 		})
@@ -418,8 +438,33 @@ func TestImageHandler_ListImages_Unfiled(t *testing.T) {
 	})
 }
 
+func TestImageHandler_ListImages_TagFilter(t *testing.T) {
+	t.Run("returns 400 for invalid tag_id param", func(t *testing.T) {
+		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id=not-a-uuid", "")
+
+		err := h.ListImages(c)
+
+		assertHTTPError(t, err, http.StatusBadRequest)
+	})
+
+	t.Run("sets TagID on params when tag_id is provided", func(t *testing.T) {
+		tagID := uuid.New()
+		mockUC := &mockImageUsecase{}
+		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
+		c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id="+tagID.String(), "")
+
+		err := h.ListImages(c)
+
+		require.NoError(t, err)
+		require.NotNil(t, mockUC.lastListImagesParams.TagID)
+		assert.Equal(t, tagID, *mockUC.lastListImagesParams.TagID)
+	})
+}
+
 func TestImageHandler_GetImage(t *testing.T) {
 	imageID := uuid.New()
+	tagID := uuid.New()
 	now := time.Now().UTC()
 
 	tests := []struct {
@@ -440,6 +485,7 @@ func TestImageHandler_GetImage(t *testing.T) {
 						Width:       func() *int { v := 640; return &v }(),
 						Height:      func() *int { v := 480; return &v }(),
 						FileSize:    func() *int64 { v := int64(1024); return &v }(),
+						Tags:        []domain.Tag{{ID: tagID, Name: "travel"}},
 						CreatedAt:   now,
 						UpdatedAt:   now,
 					},
@@ -484,6 +530,12 @@ func TestImageHandler_GetImage(t *testing.T) {
 			assert.True(t, hasWidth)
 			assert.True(t, hasHeight)
 			assert.True(t, hasFileSize)
+			tags, ok := resp["tags"].([]any)
+			require.True(t, ok)
+			require.Len(t, tags, 1)
+			tagItem, ok := tags[0].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, "travel", tagItem["name"])
 		})
 	}
 }
@@ -714,6 +766,8 @@ func TestImageHandler_Restore(t *testing.T) {
 func TestImageHandler_UpdateImage(t *testing.T) {
 	imageID := uuid.New()
 	title := "updated title"
+	tagIDOne := uuid.New()
+	tagIDTwo := uuid.New()
 
 	tests := []struct {
 		name          string
@@ -739,10 +793,32 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
+			name: "updates tags and returns 200",
+			body: fmt.Sprintf(`{"tags":["%s","%s"]}`, tagIDOne.String(), tagIDTwo.String()),
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "clears tags with empty array",
+			body: `{"tags":[]}`,
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:          "returns 404 when image not found",
 			body:          `{"title":"updated title"}`,
 			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 400 for invalid tag id",
+			body:          `{"tags":["not-a-uuid"]}`,
+			mockUC:        &mockImageUsecase{},
+			wantErrStatus: http.StatusBadRequest,
 		},
 	}
 
@@ -775,6 +851,16 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 				require.NotNil(t, tt.mockUC.lastUpdateParams.SourceURL)
 				require.NotNil(t, *tt.mockUC.lastUpdateParams.SourceURL)
 				assert.Equal(t, "https://example.com", **tt.mockUC.lastUpdateParams.SourceURL)
+			}
+			if tt.name == "updates tags and returns 200" {
+				require.NotNil(t, tt.mockUC.lastUpdateParams.Tags)
+				require.Len(t, *tt.mockUC.lastUpdateParams.Tags, 2)
+				assert.Equal(t, tagIDOne, (*tt.mockUC.lastUpdateParams.Tags)[0])
+				assert.Equal(t, tagIDTwo, (*tt.mockUC.lastUpdateParams.Tags)[1])
+			}
+			if tt.name == "clears tags with empty array" {
+				require.NotNil(t, tt.mockUC.lastUpdateParams.Tags)
+				assert.Len(t, *tt.mockUC.lastUpdateParams.Tags, 0)
 			}
 		})
 	}

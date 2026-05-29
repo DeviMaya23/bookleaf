@@ -4,21 +4,39 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/` th
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx context.Context, userID string, folderID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows so the caller can detect next-page existence; `folderID` nil means no filter; `cursor` nil means first page
-- `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only
+- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows so the caller can detect next-page existence; `folderID` nil means no folder filter; `tagID` nil means no tag filter; `unfiled` true limits to images with no folder; images are returned with their `Tags` preloaded
+- `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` preloaded
 - `GetDeletedByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns soft-deleted images only
 - `UpdateThumbnailPath(ctx, id uuid.UUID, thumbnailPath string) error` — updates `thumbnail_path`; no ownership check (called internally by goroutine)
 - `UpdateAILabels(ctx, id uuid.UUID, labels json.RawMessage) error`
-- `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied fields for the image owned by `userID`
+- `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied fields for the image owned by `userID`; result has `Tags` preloaded
 - `SoftDelete(ctx, id uuid.UUID, userID string) error`
 - `Restore(ctx, id uuid.UUID, userID string) error`
-- `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` nil means first page
+- `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(deleted_at ASC, id ASC)`; fetches `limit + 1` rows; `cursor` nil means first page
 - `CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)` — counts non-deleted images belonging to the given folder
+- `ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)`
+- `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)`
+- `HardDelete(ctx context.Context, id uuid.UUID, userID string) error`
 
 #### Scenario: Repository interface is satisfied by SQL implementation
 
 - **WHEN** the Go package is compiled
 - **THEN** `imageRepository` in `internal/repository/` implements `usecase.ImageRepository` without compilation errors
+
+#### Scenario: List preloads tags for each image
+
+- **WHEN** `List` is called and images have associated tags
+- **THEN** each returned `domain.Image` has its `Tags` slice populated
+
+#### Scenario: List filters by tagID when provided
+
+- **WHEN** `List` is called with a non-nil `tagID`
+- **THEN** only images associated with that tag are returned
+
+#### Scenario: GetByID preloads tags
+
+- **WHEN** `GetByID` is called for an image that has tags
+- **THEN** the returned `domain.Image` has its `Tags` slice populated
 
 ---
 
@@ -60,13 +78,15 @@ AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggeste
 InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
 ```
 
-`UpdateImageParams` SHALL include a `Description` field:
+`UpdateImageParams` SHALL include `Description`, `SourceURL`, and `Tags` fields:
 
 ```go
 type UpdateImageParams struct {
     Title       *string
     FolderID    **uuid.UUID
     Description *string
+    SourceURL   **string
+    Tags        *[]uuid.UUID  // nil = no change; non-nil (including empty slice) = replace tag set
 }
 ```
 
@@ -77,6 +97,18 @@ type CompleteUploadResult struct {
     ImageID              uuid.UUID
     SuggestedFolderName  *string
     Warning              string
+}
+```
+
+`ListImagesParams` SHALL include a `TagID` field:
+
+```go
+type ListImagesParams struct {
+    FolderID *uuid.UUID
+    Unfiled  bool
+    TagID    *uuid.UUID
+    Cursor   *ImageCursor
+    Limit    int
 }
 ```
 
@@ -117,10 +149,32 @@ type ImageDetail struct {
 
 All other method signatures are unchanged.
 
+When `UpdateImageParams.Tags` is non-nil, `UpdateImage` SHALL call `tagRepo.ReplaceImageTags` with the image ID and the given tag IDs after the scalar field update.
+
 #### Scenario: Usecase interface is satisfied by concrete implementation
 
 - **WHEN** the Go package is compiled
 - **THEN** `imageUsecase` implements `usecase.ImageUsecase` without compilation errors
+
+#### Scenario: UpdateImage replaces tags when Tags param is non-nil
+
+- **WHEN** `UpdateImage` is called with `Tags` set to a slice of tag UUIDs
+- **THEN** the image's tag associations are replaced with that set
+
+#### Scenario: UpdateImage does not touch tags when Tags param is nil
+
+- **WHEN** `UpdateImage` is called without a `Tags` param (nil)
+- **THEN** the image's existing tag associations are unchanged
+
+#### Scenario: UpdateImage clears all tags when Tags is an empty slice
+
+- **WHEN** `UpdateImage` is called with `Tags` set to an empty slice
+- **THEN** all tag associations for the image are removed
+
+#### Scenario: ListImages passes TagID to repository
+
+- **WHEN** `ListImages` is called with a non-nil `TagID` param
+- **THEN** only images associated with that tag are returned
 
 ---
 
@@ -340,6 +394,122 @@ Updated request body (all fields optional):
 - **WHEN** an authenticated `PATCH /images/:id` request sets `description` to `null`
 - **THEN** the response is `200 OK`
 - **AND** the image record's `description` is set to NULL
+
+---
+
+### Requirement: Image Response Types Include Tags
+
+The system SHALL include tag data in image response types returned by the image handler.
+
+```go
+type tagResponse struct {
+    ID   uuid.UUID `json:"id"`
+    Name string    `json:"name"`
+}
+
+type imageResponse struct {
+    ID           uuid.UUID     `json:"id"`
+    Title        string        `json:"title"`
+    Description  *string       `json:"description"`
+    MIMEType     string        `json:"mime_type"`
+    SourceURL    *string       `json:"source_url"`
+    FolderID     *uuid.UUID    `json:"folder_id"`
+    ThumbnailURL *string       `json:"thumbnail_url"`
+    Width        *int          `json:"width"`
+    Height       *int          `json:"height"`
+    FileSize     *int64        `json:"file_size"`
+    Tags         []tagResponse `json:"tags"`
+    CreatedAt    time.Time     `json:"created_at"`
+    UpdatedAt    time.Time     `json:"updated_at"`
+}
+
+type imageDetailResponse struct {
+    // all fields of imageResponse, plus:
+    ImageURL string `json:"image_url"`
+}
+```
+
+`toImageResponse` SHALL map `item.Image.Tags` to `[]tagResponse`. If `Tags` is nil, it SHALL return an empty slice (never `null` in JSON).
+
+#### Scenario: ListImages response includes tags array
+
+- **WHEN** `GET /images` is called and images have associated tags
+- **THEN** each image object in the response contains a `tags` array with `id` and `name` for each tag
+
+#### Scenario: ListImages response has empty tags array for untagged images
+
+- **WHEN** `GET /images` is called and an image has no tags
+- **THEN** the image object contains `"tags": []`
+
+#### Scenario: GetImage response includes tags
+
+- **WHEN** `GET /images/:id` is called for an image with tags
+- **THEN** the response contains a `tags` array with `id` and `name` for each associated tag
+
+---
+
+### Requirement: UpdateImage Accepts Tags Field
+
+The system SHALL accept an optional `tags` field in `PATCH /images/:id` request body to replace the image's tag set.
+
+```go
+type updateImageRequest struct {
+    Title       *string         `json:"title"`
+    Description *string         `json:"description"`
+    FolderID    json.RawMessage `json:"folder_id"`
+    SourceURL   json.RawMessage `json:"source_url"`
+    Tags        json.RawMessage `json:"tags"`
+}
+```
+
+Parsing rules for `Tags`:
+- Field absent or JSON `null` → `params.Tags` is nil (no change to tags)
+- `[]` → `params.Tags` is a pointer to an empty slice (clear all tags)
+- `["uuid1", "uuid2"]` → `params.Tags` is a pointer to the parsed UUID slice
+
+The handler SHALL return `400 Bad Request` if a tag ID in the array is not a valid UUID.
+
+#### Scenario: PATCH with tags replaces image tag set
+
+- **WHEN** `PATCH /images/:id` is sent with `{"tags": ["<uuid>"]}`
+- **THEN** the image's tags are replaced with the specified tag
+- **AND** the response body contains the updated tags array
+
+#### Scenario: PATCH without tags does not modify tags
+
+- **WHEN** `PATCH /images/:id` is sent without a `tags` field
+- **THEN** the image's existing tags are unchanged
+
+#### Scenario: PATCH with empty tags array clears all tags
+
+- **WHEN** `PATCH /images/:id` is sent with `{"tags": []}`
+- **THEN** all tags are removed from the image
+
+#### Scenario: PATCH with invalid tag UUID returns 400
+
+- **WHEN** `PATCH /images/:id` is sent with `{"tags": ["not-a-uuid"]}`
+- **THEN** the response is `400 Bad Request`
+
+---
+
+### Requirement: ListImages Accepts tag_id Filter
+
+The system SHALL accept an optional `tag_id` query parameter on `GET /images` to filter images by a single tag.
+
+#### Scenario: GET /images with tag_id returns only tagged images
+
+- **WHEN** `GET /images?tag_id=<uuid>` is called
+- **THEN** only images associated with that tag are returned
+
+#### Scenario: GET /images with invalid tag_id returns 400
+
+- **WHEN** `GET /images?tag_id=not-a-uuid` is called
+- **THEN** the response is `400 Bad Request`
+
+#### Scenario: GET /images without tag_id returns all images
+
+- **WHEN** `GET /images` is called without a `tag_id` parameter
+- **THEN** images are returned regardless of their tag associations
 
 ---
 
