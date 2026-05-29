@@ -220,8 +220,9 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 
 	thumbnailBytes, width, height, fileSize, err := u.prepareThumbnail(ctx, image)
 	if err != nil {
-		result.Warning = "thumbnail generation failed"
-		return result, nil
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("prepare thumbnail: %w", err)
 	}
 
 	updateFields := map[string]any{
