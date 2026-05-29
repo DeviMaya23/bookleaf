@@ -64,16 +64,18 @@ interface TagInputProps {
   tags: { id: string; name: string }[]
   onChange: (tags: { id: string; name: string }[]) => void
   disabled?: boolean
+  suggestions?: { id: string; name: string }[]
 }
 ```
 
 Behaviour:
 - Renders current tags as removable pill chips
 - An inline text input allows typing a new tag name
-- Pressing **Enter** or **comma** commits the typed value (trimmed, lowercased)
+- Pressing **Enter** or **comma** commits the typed value (trimmed, lowercased), unless a suggestion is highlighted — in that case Enter commits the highlighted suggestion
 - Pressing **Backspace** when the input is empty removes the last tag
 - Blurring the input with a non-empty value commits it
 - The component calls `onChange` with the updated list; it does not know about the API
+- When `suggestions` is provided and the input is non-empty, a filtered dropdown is shown below the container (see `fe-tag-suggestions` spec)
 
 #### Scenario: Existing tags render as pills
 
@@ -83,6 +85,7 @@ Behaviour:
 #### Scenario: Pressing Enter commits a new tag
 
 - **WHEN** the user types a name and presses Enter
+- **AND** no suggestion is highlighted
 - **THEN** `onChange` is called with the new tag appended
 
 #### Scenario: Pressing comma commits a new tag

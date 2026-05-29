@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect } from 'vitest'
 import TagInput from './TagInput'
@@ -49,7 +49,9 @@ describe('TagInput — success scenario', () => {
     await userEvent.type(input, 'nature')
     await userEvent.tab()
 
-    expect(onChange).toHaveBeenCalledWith([{ id: '', name: 'nature' }])
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith([{ id: '', name: 'nature' }])
+    })
   })
 
   it('calls onChange removing the tag when the remove button is clicked', async () => {
@@ -73,5 +75,55 @@ describe('TagInput — failure scenario', () => {
     await userEvent.type(input, 'nature{Enter}')
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('TagInput suggestions — success scenario', () => {
+  it('clicking a suggestion calls onChange with the suggestion ID (not a blank placeholder)', async () => {
+    const onChange = vi.fn()
+    const suggestions = [{ id: 'tag-abc', name: 'nature' }]
+    render(<TagInput tags={[]} onChange={onChange} suggestions={suggestions} />)
+
+    const input = screen.getByPlaceholderText('Add tags…')
+    await userEvent.type(input, 'nat')
+
+    const suggestion = await screen.findByText('nature')
+    await userEvent.click(suggestion)
+
+    expect(onChange).toHaveBeenCalledWith([{ id: 'tag-abc', name: 'nature' }])
+  })
+
+  it('pressing ArrowDown then Enter commits the first suggestion', async () => {
+    const onChange = vi.fn()
+    const suggestions = [
+      { id: 'tag-1', name: 'nature' },
+      { id: 'tag-2', name: 'narrative' },
+    ]
+    render(<TagInput tags={[]} onChange={onChange} suggestions={suggestions} />)
+
+    const input = screen.getByPlaceholderText('Add tags…')
+    await userEvent.type(input, 'na')
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith([{ id: 'tag-1', name: 'nature' }])
+  })
+})
+
+describe('TagInput suggestions — failure scenario', () => {
+  it('already-applied tags are not shown in the suggestion dropdown', async () => {
+    const appliedTags = [{ id: 'tag-abc', name: 'nature' }]
+    // nature is applied, so it should not appear even if passed in suggestions
+    render(
+      <TagInput
+        tags={appliedTags}
+        onChange={vi.fn()}
+        suggestions={appliedTags}
+      />,
+    )
+
+    const input = screen.getByRole('textbox')
+    await userEvent.type(input, 'nat')
+
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument()
   })
 })

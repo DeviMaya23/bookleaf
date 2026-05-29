@@ -292,6 +292,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
             tags={tags}
             onChange={handleTagsChange}
             disabled={tagSaveMutation.isPending}
+            suggestions={allTags.filter((t) => !tags.some((applied) => applied.id === t.id))}
           />
         </div>
 
