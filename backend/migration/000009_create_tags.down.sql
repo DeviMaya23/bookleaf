@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS image_tags;
+DROP TABLE IF EXISTS tags;

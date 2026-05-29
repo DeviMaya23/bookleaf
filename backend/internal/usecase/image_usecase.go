@@ -46,6 +46,7 @@ type UpdateImageParams struct {
 	FolderID    **uuid.UUID
 	Description *string
 	SourceURL   **string
+	Tags        *[]uuid.UUID
 }
 
 type ImageDetail struct {
@@ -82,6 +83,7 @@ type ImageUsecase interface {
 
 type imageUsecase struct {
 	imageRepo         ImageRepository
+	tagRepo           TagRepository
 	store             storage.StorageService
 	thumbnails        thumbnail.ThumbnailService
 	visionService     vision.VisionService
@@ -95,6 +97,7 @@ type imageUsecase struct {
 
 func NewImageUsecase(
 	imageRepo ImageRepository,
+	tagRepo TagRepository,
 	store storage.StorageService,
 	thumbnails thumbnail.ThumbnailService,
 	visionService vision.VisionService,
@@ -118,6 +121,7 @@ func NewImageUsecase(
 
 	return &imageUsecase{
 		imageRepo:         imageRepo,
+		tagRepo:           tagRepo,
 		store:             store,
 		thumbnails:        thumbnails,
 		visionService:     visionService,
@@ -461,7 +465,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.TagID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -634,6 +638,20 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
+	}
+
+	if params.Tags != nil {
+		if err := u.tagRepo.ReplaceImageTags(ctx, id, *params.Tags); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("replace image tags: %w", err)
+		}
+		updated, err = u.imageRepo.GetByID(ctx, id, userID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
 	}
 
 	if params.FolderID != nil {

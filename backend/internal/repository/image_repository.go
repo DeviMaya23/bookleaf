@@ -30,22 +30,27 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
-		Where("user_id = ? AND is_uploaded = true", userID).
-		Order("created_at DESC, id DESC").
-		Limit(limit + 1)
+		Where("images.user_id = ? AND images.is_uploaded = true", userID).
+		Order("images.created_at DESC, images.id DESC").
+		Limit(limit + 1).
+		Preload("Tags")
 
 	if unfiled {
-		query = query.Where("folder_id IS NULL")
+		query = query.Where("images.folder_id IS NULL")
 	} else if folderID != nil {
-		query = query.Where("folder_id = ?", *folderID)
+		query = query.Where("images.folder_id = ?", *folderID)
+	}
+
+	if tagID != nil {
+		query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
 	}
 
 	if cursor != nil {
-		query = query.Where("(created_at, id) < (?, ?)", cursor.CreatedAt, cursor.ID)
+		query = query.Where("(images.created_at, images.id) < (?, ?)", cursor.CreatedAt, cursor.ID)
 	}
 
 	if err := query.Find(&images).Error; err != nil {
@@ -58,6 +63,7 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 func (r *imageRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {
 	var image domain.Image
 	if err := r.db.WithContext(ctx).
+		Preload("Tags").
 		Where("id = ? AND user_id = ?", id, userID).
 		First(&image).Error; err != nil {
 		return nil, fmt.Errorf("select image: %w", err)
@@ -120,7 +126,7 @@ func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID strin
 		return nil, fmt.Errorf("update image: %w", gorm.ErrRecordNotFound)
 	}
 
-	return r.GetByID(ctx, id, userID)
+	return r.GetByID(ctx, id, userID) // includes Preload("Tags")
 }
 
 func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {

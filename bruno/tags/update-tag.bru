@@ -1,0 +1,21 @@
+meta {
+  name: Update Tag
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/tags/:id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: {{tagId}}
+}
+
+body:json {
+  {
+    "name": "renamed tag"
+  }
+}

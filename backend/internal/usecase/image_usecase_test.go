@@ -45,7 +45,7 @@ func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*d
 	return m.image, m.err
 }
 
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, unfiled bool, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, unfiled bool, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastUnfiled = unfiled
 	return m.images, m.err
 }
@@ -355,7 +355,7 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			result, err := uc.InitiateUpload(context.Background(), "kp_abc123", tt.title, tt.mimeType, nil, nil, nil)
 
@@ -373,7 +373,7 @@ func TestImageUsecase_InitiateUpload(t *testing.T) {
 func TestImageUsecase_InitiateUpload_WithDescription(t *testing.T) {
 	imageID := uuid.New()
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-	uc := NewImageUsecase(repo, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	uc := NewImageUsecase(repo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 	description := "cover image"
 
 	result, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, nil, &description)
@@ -397,6 +397,7 @@ func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
 		}
 		uc := NewImageUsecase(
 			repo,
+			nil,
 			&mockStorageService{putURL: "https://r2.example.com/upload"},
 			&mockThumbnailService{},
 			nil,
@@ -420,6 +421,7 @@ func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
 		}
 		uc := NewImageUsecase(
 			repo,
+			nil,
 			&mockStorageService{putURL: "https://r2.example.com/upload"},
 			&mockThumbnailService{},
 			nil,
@@ -473,7 +475,7 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, tt.store, tt.thumbnails, nil, nil, defaultMockUserRepo(), noopTel())
+			uc := NewImageUsecase(tt.repo, nil, tt.store, tt.thumbnails, nil, nil, defaultMockUserRepo(), noopTel())
 
 			result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -502,7 +504,7 @@ func TestImageUsecase_CompleteUpload_PersistsMetadata(t *testing.T) {
 		image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.png"},
 	}
 	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -520,7 +522,7 @@ func TestImageUsecase_CompleteUpload_DecodeFailureStillPersistsFileSize(t *testi
 		image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.bin"},
 	}
 	store := &mockStorageService{objectBytes: []byte("not-an-image")}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -541,6 +543,7 @@ func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 
 		uc := NewImageUsecase(
 			&mockImageRepository{image: baseImage},
+			nil,
 			&mockStorageService{},
 			&mockThumbnailService{},
 			visionSvc, nil, userRepo, noopTel(),
@@ -561,6 +564,7 @@ func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 
 		uc := NewImageUsecase(
 			&mockImageRepository{image: baseImage},
+			nil,
 			&mockStorageService{},
 			&mockThumbnailService{},
 			visionSvc, &mockFolderRepository{}, userRepo, noopTel(),
@@ -580,6 +584,7 @@ func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
 
 		uc := NewImageUsecase(
 			&mockImageRepository{image: baseImage},
+			nil,
 			&mockStorageService{},
 			&mockThumbnailService{},
 			visionSvc, &mockFolderRepository{}, userRepo, noopTel(),
@@ -603,7 +608,7 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 		folderRepo := &mockAcceptSuggestionFolderRepository{
 			findResult: &domain.Folder{ID: existingFolderID, Name: "Nature"},
 		}
-		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+		uc := NewImageUsecase(imageRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
 
 		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
 
@@ -619,7 +624,7 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 		folderRepo := &mockAcceptSuggestionFolderRepository{
 			createResult: &domain.Folder{ID: newFolderID, Name: "Nature"},
 		}
-		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+		uc := NewImageUsecase(imageRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
 
 		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
 
@@ -636,7 +641,7 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 	t.Run("returns error when image is not found", func(t *testing.T) {
 		imageRepo := &mockImageRepository{err: gorm.ErrRecordNotFound}
 		folderRepo := &mockAcceptSuggestionFolderRepository{}
-		uc := NewImageUsecase(imageRepo, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+		uc := NewImageUsecase(imageRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
 
 		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
 
@@ -673,7 +678,7 @@ func TestImageUsecase_ListImages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
 
@@ -700,7 +705,7 @@ func TestImageUsecase_ListImages_Pagination(t *testing.T) {
 	t.Run("returns next_cursor when more results exist", func(t *testing.T) {
 		// repo returns limit+1 rows
 		repo := &mockImageRepository{images: makeImages(11)}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
 
@@ -712,7 +717,7 @@ func TestImageUsecase_ListImages_Pagination(t *testing.T) {
 
 	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
 		repo := &mockImageRepository{images: makeImages(5)}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
 
@@ -730,7 +735,7 @@ func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
 			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
 		}
 		store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
-		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
 
@@ -744,7 +749,7 @@ func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
 		repo := &mockImageRepository{
 			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: nil}},
 		}
-		uc := NewImageUsecase(repo, &mockStorageService{getURL: "https://r2.example.com/thumb"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{getURL: "https://r2.example.com/thumb"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
 
@@ -758,7 +763,7 @@ func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
 			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
 		}
 		store := &mockStorageService{err: errors.New("presign failed")}
-		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
 
@@ -773,7 +778,7 @@ func TestImageUsecase_ListImages_Unfiled(t *testing.T) {
 		repo := &mockImageRepository{
 			images: []*domain.Image{{ID: uuid.New(), Title: "unfoldered photo"}},
 		}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: true})
 
@@ -786,7 +791,7 @@ func TestImageUsecase_ListImages_Unfiled(t *testing.T) {
 		repo := &mockImageRepository{
 			images: []*domain.Image{{ID: uuid.New(), Title: "any photo"}},
 		}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: false})
 
@@ -832,7 +837,7 @@ func TestImageUsecase_GetImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
 
@@ -866,7 +871,7 @@ func TestImageUsecase_DownloadImage(t *testing.T) {
 			},
 		}
 		store := &mockStorageService{downloadURL: "https://r2.example.com/download"}
-		uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
 
@@ -879,7 +884,7 @@ func TestImageUsecase_DownloadImage(t *testing.T) {
 
 	t.Run("returns error when image not found", func(t *testing.T) {
 		repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
 
@@ -909,7 +914,7 @@ func TestImageUsecase_SoftDelete(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			err := uc.SoftDelete(context.Background(), imageID, "kp_abc123")
 
@@ -947,7 +952,7 @@ func TestImageUsecase_ListTrashed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{})
 
@@ -979,7 +984,7 @@ func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
 
 	t.Run("cursor carries deleted_at of last item", func(t *testing.T) {
 		repo := &mockImageRepository{images: makeImages(11)}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
 
@@ -993,7 +998,7 @@ func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
 
 	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
 		repo := &mockImageRepository{images: makeImages(3)}
-		uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
 
@@ -1026,7 +1031,7 @@ func TestImageUsecase_Restore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			item, err := uc.Restore(context.Background(), imageID, "kp_abc123")
 
@@ -1069,7 +1074,7 @@ func TestImageUsecase_UpdateImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 
 			item, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", tt.params)
 
@@ -1086,7 +1091,7 @@ func TestImageUsecase_UpdateImage(t *testing.T) {
 func TestImageUsecase_UpdateImage_WithDescription(t *testing.T) {
 	imageID := uuid.New()
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 	description := "new description"
 
 	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
@@ -1128,7 +1133,7 @@ func TestImageUsecase_UpdateImage_WithSourceURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+			uc := NewImageUsecase(tt.repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
 			_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
 				SourceURL: tt.sourceURL,
 			})
@@ -1147,7 +1152,7 @@ func TestImageUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 	tel, collect := makeMetricsTel(t)
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}}
 
-	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), tel)
+	uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), tel)
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.NoError(t, err)
 
@@ -1166,7 +1171,7 @@ func TestImageUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	tel, collect := makeMetricsTel(t)
 	repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
 
-	uc := NewImageUsecase(repo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, tel)
+	uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, tel)
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.Error(t, err)
 
@@ -1189,7 +1194,7 @@ func TestImageUsecase_CleanupStaleUploads_Success(t *testing.T) {
 	}
 	repo := &mockImageRepository{images: staleImages}
 	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
 
@@ -1203,7 +1208,7 @@ func TestImageUsecase_CleanupStaleUploads_Success(t *testing.T) {
 func TestImageUsecase_CleanupStaleUploads_ListError(t *testing.T) {
 	repo := &mockImageRepository{err: errors.New("db unavailable")}
 	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
 
@@ -1219,7 +1224,7 @@ func TestImageUsecase_PurgeExpiredTrash_Success(t *testing.T) {
 	}
 	repo := &mockImageRepository{images: expiredImages}
 	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
 
@@ -1234,10 +1239,59 @@ func TestImageUsecase_PurgeExpiredTrash_Success(t *testing.T) {
 func TestImageUsecase_PurgeExpiredTrash_ListError(t *testing.T) {
 	repo := &mockImageRepository{err: errors.New("db unavailable")}
 	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	uc := NewImageUsecase(repo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
 
 	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
 
 	require.Error(t, err)
 	assert.Equal(t, 0, store.deleteCalls)
+}
+
+func TestImageUsecase_UpdateImage_WithTags_ReplacesCalled(t *testing.T) {
+	imageID := uuid.New()
+	tag1 := uuid.New()
+	tag2 := uuid.New()
+
+	img := &domain.Image{ID: imageID, UserID: "kp_abc123", Title: "img"}
+	repo := &mockImageRepository{image: img}
+	tagRepo := &mockTagRepository{}
+
+	uc := NewImageUsecase(repo, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+	tags := []uuid.UUID{tag1, tag2}
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+		Tags: &tags,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, tagRepo.replaceCalls)
+	assert.Equal(t, imageID, tagRepo.lastReplaceImageID)
+	assert.Equal(t, tags, tagRepo.lastReplaceTagIDs)
+}
+
+func TestImageUsecase_UpdateImage_NilTags_NoReplace(t *testing.T) {
+	imageID := uuid.New()
+	img := &domain.Image{ID: imageID, UserID: "kp_abc123", Title: "img"}
+	repo := &mockImageRepository{image: img}
+	tagRepo := &mockTagRepository{}
+
+	uc := NewImageUsecase(repo, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+		Tags: nil,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, tagRepo.replaceCalls)
+}
+
+func TestImageUsecase_ListImages_PassesTagID(t *testing.T) {
+	tagID := uuid.New()
+	img := &domain.Image{ID: uuid.New(), UserID: "kp_abc123", Title: "tagged"}
+	repo := &mockImageRepository{images: []*domain.Image{img}}
+	uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{TagID: &tagID})
+
+	require.NoError(t, err)
 }
