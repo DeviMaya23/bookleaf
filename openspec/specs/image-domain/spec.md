@@ -7,7 +7,6 @@ The system SHALL define an `Image` GORM struct in `internal/domain/image.go` rep
 Fields (all DB columns use snake_case):
 - `ID` — UUID primary key (`id`)
 - `UserID` — FK to users table; will be Kinde's user ID string (`user_id`)
-- `FolderID` — FK to folders table (nullable; nil means root) (`folder_id`)
 - `Title` — display name, required (`title`)
 - `Description` — user-supplied annotation, nullable (`description`)
 - `SourceURL` — original source URL the image was saved from (nullable) (`source_url`)
@@ -22,15 +21,28 @@ Fields (all DB columns use snake_case):
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
+The `FolderID *uuid.UUID` column and `Folder *Folder` belongs-to association are REMOVED. The `images` table no longer has a `folder_id` column.
+
 Associations:
 - `User User` — belongs-to
-- `Folder *Folder` — belongs-to (nullable)
+- `ImageFolders []ImageFolder` — has-many via `image_folders` table: `gorm:"foreignKey:ImageID"`
 - `Tags []Tag` — many-to-many via `image_tags` join table: `gorm:"many2many:image_tags;foreignKey:ID;joinForeignKey:ImageID;References:ID;joinReferences:TagID"`
+
+#### Scenario: Image struct compiles without FolderID field
+
+- **WHEN** the Go package is compiled
+- **THEN** `Image` has no `FolderID` field and no `Folder *Folder` association
+- **AND** there is no GORM column tag referencing `folder_id` on the `Image` struct
+
+#### Scenario: Image struct includes ImageFolders association
+
+- **WHEN** the Go package is compiled
+- **THEN** `Image` has an `ImageFolders []ImageFolder` field with a GORM `foreignKey:ImageID` tag
 
 #### Scenario: Image struct compiles with GORM tags
 
 - **WHEN** the Go package is compiled
-- **THEN** `Image` has a `gorm:"primaryKey"` UUID field and FK references to `users` and `folders`
+- **THEN** `Image` has a `gorm:"primaryKey"` UUID field and a FK reference to `users`
 
 #### Scenario: Image struct includes Tags association
 
