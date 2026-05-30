@@ -39,6 +39,9 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init logger: %w", err))
 	}
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logger.Error("otel error", zap.Error(err))
+	}))
 
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
