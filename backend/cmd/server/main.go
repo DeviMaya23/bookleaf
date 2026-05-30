@@ -58,7 +58,7 @@ func main() {
 	var mp interface{ Shutdown(context.Context) error }
 	if cfg.Obs.OTELEnabled {
 		var tracerProviderErr error
-		tp, tracerProviderErr = observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter)
+		tp, tracerProviderErr = observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter, cfg.Obs.SampleRatio)
 		if tracerProviderErr != nil {
 			logger.Fatal("init tracer provider", zap.Error(tracerProviderErr))
 		}

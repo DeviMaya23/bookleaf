@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -39,6 +40,7 @@ type ObsConfig struct {
 	OTELExporter        string
 	OTELMetricsExporter string
 	LogFormat           string
+	SampleRatio         float64
 }
 
 type VisionConfig struct {
@@ -160,6 +162,12 @@ func loadFromEnv() (*Config, error) {
 	visionAPIKey := envWithDefault("GOOGLE_VISION_API_KEY", "")
 	port := envWithDefault("PORT", "8080")
 
+	sampleRatioStr := envWithDefault("OTEL_SAMPLE_RATIO", "0.1")
+	sampleRatio, err := strconv.ParseFloat(sampleRatioStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("OTEL_SAMPLE_RATIO must be a float: %w", err)
+	}
+
 	return &Config{
 		Kinde: KindeConfig{
 			IssuerURL: kindeIssuerURL,
@@ -185,6 +193,7 @@ func loadFromEnv() (*Config, error) {
 			OTELExporter:        otelExporter,
 			OTELMetricsExporter: otelMetricsExporter,
 			LogFormat:           logFormat,
+			SampleRatio:         sampleRatio,
 		},
 		Vision: VisionConfig{
 			APIKey: visionAPIKey,
