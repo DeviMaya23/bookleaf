@@ -553,6 +553,7 @@ Response shape:
 - `image_id` SHALL always be present
 - `suggested_folder_name` SHALL be `null` when the user does not have `vision_enabled`, when the Vision API returns no labels, or when Vision is not configured
 - `warning` SHALL be omitted from the response when empty (`omitempty`)
+- If thumbnail generation fails, the handler SHALL return a non-2xx error response. The `warning` field SHALL NOT be used for thumbnail failures.
 
 #### Scenario: Vision enabled and suggestion resolved
 
@@ -574,6 +575,12 @@ Response shape:
 - **THEN** the response is `200 OK`
 - **AND** `suggested_folder_name` is `null`
 - **AND** `warning` is absent
+
+#### Scenario: Thumbnail generation fails
+
+- **WHEN** `prepareThumbnail` returns an error during `CompleteUpload`
+- **THEN** the response is `500 Internal Server Error`
+- **AND** `is_uploaded` remains false on the image record
 
 ---
 
