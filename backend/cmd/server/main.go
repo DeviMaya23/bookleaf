@@ -99,6 +99,7 @@ func main() {
 	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
+	pendingUploadRepository := repository.NewPendingUploadRepository(db)
 	tagRepository := repository.NewTagRepository(db)
 	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
@@ -108,7 +109,7 @@ func main() {
 	if cfg.Vision.APIKey != "" {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
-	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, pendingUploadRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)

@@ -8,10 +8,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type ImageFolder struct {
+	ImageID  uuid.UUID `gorm:"primaryKey;column:image_id"`
+	FolderID uuid.UUID `gorm:"primaryKey;column:folder_id"`
+	Position string    `gorm:"column:position;not null;default:''"`
+	Folder   Folder    `gorm:"foreignKey:FolderID;references:ID"`
+}
+
 type Image struct {
 	ID            uuid.UUID       `gorm:"type:uuid;primaryKey"`
 	UserID        string          `gorm:"column:user_id;type:text;not null;index"`
-	FolderID      *uuid.UUID      `gorm:"column:folder_id;type:uuid;index"`
 	Title         string          `gorm:"column:title;not null"`
 	Description   *string         `gorm:"column:description"`
 	SourceURL     *string         `gorm:"column:source_url"`
@@ -22,14 +28,13 @@ type Image struct {
 	Height        *int            `gorm:"column:height"`
 	FileSize      *int64          `gorm:"column:file_size"`
 	AILabels      json.RawMessage `gorm:"column:ai_labels;type:jsonb"`
-	IsUploaded    bool            `gorm:"column:is_uploaded;not null;default:false"`
 	CreatedAt     time.Time       `gorm:"column:created_at"`
 	UpdatedAt     time.Time       `gorm:"column:updated_at"`
 	DeletedAt     gorm.DeletedAt  `gorm:"column:deleted_at;index"`
 
-	User   User    `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
-	Folder *Folder `gorm:"foreignKey:FolderID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
-	Tags   []Tag   `gorm:"many2many:image_tags;foreignKey:ID;joinForeignKey:ImageID;References:ID;joinReferences:TagID"`
+	User         User          `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT"`
+	ImageFolders []ImageFolder `gorm:"foreignKey:ImageID"`
+	Tags         []Tag         `gorm:"many2many:image_tags;foreignKey:ID;joinForeignKey:ImageID;References:ID;joinReferences:TagID"`
 }
 
 func (i *Image) BeforeCreate(*gorm.DB) error {

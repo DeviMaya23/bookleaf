@@ -88,15 +88,15 @@ func (m *mockFolderImageRepository) CountByFolderID(_ context.Context, _ uuid.UU
 	return m.count, m.err
 }
 
-func (m *mockFolderImageRepository) ListStaleUploads(_ context.Context, _ time.Time) ([]*domain.Image, error) {
-	return nil, m.err
-}
-
 func (m *mockFolderImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
 	return nil, m.err
 }
 
 func (m *mockFolderImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+
+func (m *mockFolderImageRepository) SetImageFolder(_ context.Context, _ uuid.UUID, _ *uuid.UUID) error {
 	return m.err
 }
 

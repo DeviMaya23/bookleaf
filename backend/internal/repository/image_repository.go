@@ -34,15 +34,18 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
-		Where("images.user_id = ? AND images.is_uploaded = true", userID).
+		Where("images.user_id = ?", userID).
 		Order("images.created_at DESC, images.id DESC").
 		Limit(limit + 1).
-		Preload("Tags")
+		Preload("Tags").
+		Preload("ImageFolders")
 
 	if unfiled {
-		query = query.Where("images.folder_id IS NULL")
+		query = query.
+			Joins("LEFT JOIN image_folders ON image_folders.image_id = images.id").
+			Where("image_folders.image_id IS NULL")
 	} else if folderID != nil {
-		query = query.Where("images.folder_id = ?", *folderID)
+		query = query.Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", *folderID)
 	}
 
 	if tagID != nil {
@@ -60,10 +63,44 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 	return images, nil
 }
 
+func (r *imageRepository) SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error {
+	if folderID == nil {
+		if err := r.db.WithContext(ctx).
+			Where("image_id = ?", imageID).
+			Delete(&domain.ImageFolder{}).Error; err != nil {
+			return fmt.Errorf("delete image folder: %w", err)
+		}
+		return nil
+	}
+
+	var position string
+	var maxPos int
+	r.db.WithContext(ctx).
+		Model(&domain.ImageFolder{}).
+		Where("folder_id = ?", *folderID).
+		Select("COALESCE(MAX(position::int), 0)").
+		Scan(&maxPos)
+	position = fmt.Sprintf("%d", maxPos+1)
+
+	row := domain.ImageFolder{
+		ImageID:  imageID,
+		FolderID: *folderID,
+		Position: position,
+	}
+	if err := r.db.WithContext(ctx).
+		Where(domain.ImageFolder{ImageID: imageID, FolderID: *folderID}).
+		Assign(domain.ImageFolder{Position: position}).
+		FirstOrCreate(&row).Error; err != nil {
+		return fmt.Errorf("upsert image folder: %w", err)
+	}
+	return nil
+}
+
 func (r *imageRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {
 	var image domain.Image
 	if err := r.db.WithContext(ctx).
 		Preload("Tags").
+		Preload("ImageFolders").
 		Where("id = ? AND user_id = ?", id, userID).
 		First(&image).Error; err != nil {
 		return nil, fmt.Errorf("select image: %w", err)
@@ -76,6 +113,7 @@ func (r *imageRepository) GetDeletedByID(ctx context.Context, id uuid.UUID, user
 	var image domain.Image
 	if err := r.db.WithContext(ctx).
 		Unscoped().
+		Preload("ImageFolders").
 		Where("id = ? AND user_id = ? AND deleted_at IS NOT NULL", id, userID).
 		First(&image).Error; err != nil {
 		return nil, fmt.Errorf("select deleted image: %w", err)
@@ -183,7 +221,8 @@ func (r *imageRepository) CountByFolderID(ctx context.Context, folderID uuid.UUI
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&domain.Image{}).
-		Where("folder_id = ?", folderID).
+		Joins("JOIN image_folders ON image_folders.image_id = images.id").
+		Where("image_folders.folder_id = ?", folderID).
 		Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count images by folder: %w", err)
 	}
@@ -214,16 +253,6 @@ func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID s
 		return fmt.Errorf("hard delete image: %w", gorm.ErrRecordNotFound)
 	}
 	return nil
-}
-
-func (r *imageRepository) ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error) {
-	var images []*domain.Image
-	if err := r.db.WithContext(ctx).
-		Where("is_uploaded = false AND created_at < ?", olderThan).
-		Find(&images).Error; err != nil {
-		return nil, fmt.Errorf("list stale uploads: %w", err)
-	}
-	return images, nil
 }
 
 var _ usecase.ImageRepository = (*imageRepository)(nil)

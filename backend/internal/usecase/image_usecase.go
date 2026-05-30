@@ -37,8 +37,9 @@ const (
 )
 
 type UploadInitResult struct {
-	Image     *domain.Image
+	ID        uuid.UUID
 	UploadURL string
+	R2Path    string
 }
 
 type UpdateImageParams struct {
@@ -83,6 +84,7 @@ type ImageUsecase interface {
 
 type imageUsecase struct {
 	imageRepo         ImageRepository
+	pendingUploadRepo PendingUploadRepository
 	tagRepo           TagRepository
 	store             storage.StorageService
 	thumbnails        thumbnail.ThumbnailService
@@ -97,6 +99,7 @@ type imageUsecase struct {
 
 func NewImageUsecase(
 	imageRepo ImageRepository,
+	pendingUploadRepo PendingUploadRepository,
 	tagRepo TagRepository,
 	store storage.StorageService,
 	thumbnails thumbnail.ThumbnailService,
@@ -121,6 +124,7 @@ func NewImageUsecase(
 
 	return &imageUsecase{
 		imageRepo:         imageRepo,
+		pendingUploadRepo: pendingUploadRepo,
 		tagRepo:           tagRepo,
 		store:             store,
 		thumbnails:        thumbnails,
@@ -161,25 +165,25 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 		}
 	}
 
-	created, err := u.imageRepo.Create(ctx, &domain.Image{
+	pending, err := u.pendingUploadRepo.Create(ctx, &domain.PendingUpload{
 		ID:          id,
 		UserID:      userID,
 		Title:       title,
 		Description: description,
 		MIMEType:    mimeType,
 		SourceURL:   sourceURL,
-		FolderID:    folderID,
 		R2Path:      r2Path,
+		FolderID:    folderID,
 	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("create image record: %w", err)
+		return nil, fmt.Errorf("create pending upload record: %w", err)
 	}
 
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("upload initiated",
 		zap.String("event", "r2.upload.started"),
-		zap.String("image_id", created.ID.String()),
+		zap.String("image_id", pending.ID.String()),
 		zap.String("user_id", userID),
 		zap.String("mime_type", mimeType),
 		zap.String("r2_key", r2Path),
@@ -192,7 +196,7 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 		return nil, fmt.Errorf("generate upload url: %w", err)
 	}
 
-	return &UploadInitResult{Image: created, UploadURL: uploadURL}, nil
+	return &UploadInitResult{ID: pending.ID, UploadURL: uploadURL, R2Path: r2Path}, nil
 }
 
 func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error) {
@@ -202,7 +206,7 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 	start := time.Now()
 	result := &CompleteUploadResult{ImageID: id}
 
-	image, err := u.imageRepo.GetByID(ctx, id, userID)
+	pending, err := u.pendingUploadRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -218,45 +222,72 @@ func (u *imageUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID 
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	thumbnailBytes, width, height, fileSize, err := u.prepareThumbnail(ctx, image)
+	thumbnailBytes, width, height, fileSize, err := u.prepareThumbnail(ctx, pending.ID, pending.UserID, pending.R2Path)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("prepare thumbnail: %w", err)
 	}
 
-	updateFields := map[string]any{
-		"file_size":   fileSize,
-		"is_uploaded": true,
-		"width":       nil,
-		"height":      nil,
+	fileSizeValue := fileSize
+	image := &domain.Image{
+		ID:          pending.ID,
+		UserID:      pending.UserID,
+		Title:       pending.Title,
+		Description: pending.Description,
+		SourceURL:   pending.SourceURL,
+		R2Path:      pending.R2Path,
+		MIMEType:    pending.MIMEType,
+		FileSize:    &fileSizeValue,
 	}
 	if width > 0 {
-		updateFields["width"] = width
+		widthValue := width
+		image.Width = &widthValue
 	}
 	if height > 0 {
-		updateFields["height"] = height
+		heightValue := height
+		image.Height = &heightValue
 	}
-	if _, err := u.imageRepo.Update(ctx, id, userID, updateFields); err != nil {
+
+	var created *domain.Image
+	if err := u.pendingUploadRepo.Transaction(ctx, func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error {
+		createdImage, createErr := imageRepo.Create(ctx, image)
+		if createErr != nil {
+			return createErr
+		}
+		created = createdImage
+		if pending.FolderID != nil {
+			if setErr := imageRepo.SetImageFolder(ctx, createdImage.ID, pending.FolderID); setErr != nil {
+				return setErr
+			}
+		}
+		if deleteErr := pendingRepo.Delete(ctx, pending.ID); deleteErr != nil {
+			return deleteErr
+		}
+		return nil
+	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
-	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", image.UserID, image.ID.String())
-	go u.uploadThumbnail(image, thumbnailKey, thumbnailBytes)
+	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
+	if created == nil {
+		created = image
+	}
+	go u.uploadThumbnail(created, thumbnailKey, thumbnailBytes)
 
 	result.SuggestedFolderName, result.Warning = u.runVisionFlow(ctx, id, userID, thumbnailBytes)
 	return result, nil
 }
 
-func (u *imageUsecase) prepareThumbnail(ctx context.Context, img *domain.Image) ([]byte, int, int, int64, error) {
+func (u *imageUsecase) prepareThumbnail(ctx context.Context, imageID uuid.UUID, userID, r2Path string) ([]byte, int, int, int64, error) {
 	logger := observability.LoggerFromContext(ctx, u.tel.Logger).With(
-		zap.String("image_id", img.ID.String()),
-		zap.String("user_id", img.UserID),
+		zap.String("image_id", imageID.String()),
+		zap.String("user_id", userID),
 	)
 
-	src, err := u.store.GetObject(ctx, img.R2Path)
+	src, err := u.store.GetObject(ctx, r2Path)
 	if err != nil {
 		logger.Error("prepare thumbnail failed",
 			zap.String("event", "thumbnail.prepare.failed"),
@@ -393,7 +424,7 @@ func (u *imageUsecase) AcceptSuggestion(ctx context.Context, imageID uuid.UUID, 
 		}
 	}
 
-	if _, err := u.imageRepo.Update(ctx, imageID, userID, map[string]any{"folder_id": folder.ID}); err != nil {
+	if err := u.imageRepo.SetImageFolder(ctx, imageID, &folder.ID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
@@ -624,9 +655,6 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	if params.Title != nil {
 		fields["title"] = *params.Title
 	}
-	if params.FolderID != nil {
-		fields["folder_id"] = *params.FolderID
-	}
 	if params.Description != nil {
 		fields["description"] = *params.Description
 	}
@@ -657,7 +685,22 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 
 	if params.FolderID != nil {
 		newFolderID := *params.FolderID
-		oldFolderID := existing.FolderID
+		if err := u.imageRepo.SetImageFolder(ctx, id, newFolderID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		updated, err = u.imageRepo.GetByID(ctx, id, userID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+
+		var oldFolderID *uuid.UUID
+		if len(existing.ImageFolders) > 0 {
+			oldFolderID = &existing.ImageFolders[0].FolderID
+		}
 		folderChanged := (newFolderID == nil) != (oldFolderID == nil) ||
 			(newFolderID != nil && oldFolderID != nil && *newFolderID != *oldFolderID)
 		if folderChanged {
@@ -699,7 +742,7 @@ func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.D
 
 	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
 
-	stale, err := u.imageRepo.ListStaleUploads(ctx, time.Now().Add(-threshold))
+	stale, err := u.pendingUploadRepo.ListStale(ctx, time.Now().Add(-threshold))
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -715,9 +758,9 @@ func (u *imageUsecase) CleanupStaleUploads(ctx context.Context, threshold time.D
 				zap.Error(err),
 			)
 		}
-		if err := u.imageRepo.HardDelete(ctx, img.ID, img.UserID); err != nil {
-			logger.Warn("failed to hard delete stale image record",
-				zap.String("event", "r2.stale.hard_delete_failed"),
+		if err := u.pendingUploadRepo.Delete(ctx, img.ID); err != nil {
+			logger.Warn("failed to delete stale pending upload record",
+				zap.String("event", "r2.stale.pending_delete_failed"),
 				zap.String("image_id", img.ID.String()),
 				zap.Error(err),
 			)
