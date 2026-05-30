@@ -442,13 +442,11 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
-		name         string
-		repo         *mockImageRepository
-		store        *mockStorageService
-		thumbnails   *mockThumbnailService
-		wantErr      bool
-		wantWarning  bool
-		wantPutCalls *int
+		name       string
+		repo       *mockImageRepository
+		store      *mockStorageService
+		thumbnails *mockThumbnailService
+		wantErr    bool
 	}{
 		{
 			name:       "verifies ownership and returns upload result",
@@ -457,12 +455,18 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 			thumbnails: &mockThumbnailService{},
 		},
 		{
-			name:         "get object failure sets warning and skips goroutine",
-			repo:         &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}},
-			store:        &mockStorageService{getObjectErr: errors.New("r2 unavailable")},
-			thumbnails:   &mockThumbnailService{},
-			wantWarning:  true,
-			wantPutCalls: func() *int { v := 0; return &v }(),
+			name:       "get object failure returns error",
+			repo:       &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}},
+			store:      &mockStorageService{getObjectErr: errors.New("r2 unavailable")},
+			thumbnails: &mockThumbnailService{},
+			wantErr:    true,
+		},
+		{
+			name:       "generate failure returns error",
+			repo:       &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg"}},
+			store:      &mockStorageService{},
+			thumbnails: &mockThumbnailService{err: errors.New("unsupported format")},
+			wantErr:    true,
 		},
 		{
 			name:       "returns error when image not found",
@@ -486,14 +490,6 @@ func TestImageUsecase_CompleteUpload(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			assert.Equal(t, imageID, result.ImageID)
-			if tt.wantWarning {
-				assert.NotEmpty(t, result.Warning)
-			} else {
-				assert.Empty(t, result.Warning)
-			}
-			if tt.wantPutCalls != nil {
-				assert.Equal(t, *tt.wantPutCalls, tt.store.putCalls)
-			}
 		})
 	}
 }
