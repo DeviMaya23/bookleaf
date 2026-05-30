@@ -89,8 +89,9 @@ func (r *folderRepository) Update(ctx context.Context, folder *domain.Folder) (*
 func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID, userID string) (int, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).
-		Table("images").
-		Where("folder_id = ? AND user_id = ?", id, userID).
+		Model(&domain.Image{}).
+		Joins("JOIN image_folders ON image_folders.image_id = images.id").
+		Where("image_folders.folder_id = ? AND images.user_id = ?", id, userID).
 		Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count folder images: %w", err)
 	}
@@ -104,12 +105,6 @@ func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, 
 			Where("parent_id = ? AND user_id = ?", id, userID).
 			Update("parent_id", nil).Error; err != nil {
 			return fmt.Errorf("clear child folders parent: %w", err)
-		}
-
-		if err := tx.Table("images").
-			Where("folder_id = ? AND user_id = ?", id, userID).
-			Update("folder_id", nil).Error; err != nil {
-			return fmt.Errorf("clear images folder: %w", err)
 		}
 
 		result := tx.Where("id = ? AND user_id = ?", id, userID).Delete(&domain.Folder{})

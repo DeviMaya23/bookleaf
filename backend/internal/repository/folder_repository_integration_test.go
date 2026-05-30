@@ -8,6 +8,8 @@ import (
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -189,7 +191,7 @@ func TestFolderRepository_DeleteWithCascade_Success(t *testing.T) {
 	createUser(t, tx, userID)
 	target := createFolder(t, tx, userID, "target", nil)
 	child := createFolder(t, tx, userID, "child", &target.ID)
-	image := createImage(t, tx, userID, &target.ID)
+	img := createImage(t, tx, userID, &target.ID)
 	repo := NewFolderRepository(tx)
 
 	err := repo.DeleteWithCascade(context.Background(), target.ID, userID)
@@ -211,12 +213,17 @@ func TestFolderRepository_DeleteWithCascade_Success(t *testing.T) {
 		t.Fatalf("expected child parent_id nil, got: %v", gotChild.ParentID)
 	}
 
-	var gotImage domain.Image
-	if err := tx.Where("id = ?", image.ID).First(&gotImage).Error; err != nil {
-		t.Fatalf("expected image to exist, got: %v", err)
+	// image_folders row should be gone via ON DELETE CASCADE on folder_id FK
+	var count int64
+	tx.Table("image_folders").Where("image_id = ?", img.ID).Count(&count)
+	if count != 0 {
+		t.Fatalf("expected image_folders row removed by cascade, got count: %d", count)
 	}
-	if gotImage.FolderID != nil {
-		t.Fatalf("expected image folder_id nil, got: %v", gotImage.FolderID)
+
+	// image itself should still exist (only the folder membership is removed)
+	var gotImage domain.Image
+	if err := tx.Where("id = ?", img.ID).First(&gotImage).Error; err != nil {
+		t.Fatalf("expected image to still exist, got: %v", err)
 	}
 }
 
@@ -260,15 +267,41 @@ func createFolder(t *testing.T, db *gorm.DB, userID, name string, parentID *uuid
 
 func createImage(t *testing.T, db *gorm.DB, userID string, folderID *uuid.UUID) *domain.Image {
 	t.Helper()
-	image := &domain.Image{
+	img := &domain.Image{
 		UserID:   userID,
-		FolderID: folderID,
 		Title:    "test image",
 		R2Path:   "users/kp_abc123/images/test.jpg",
 		MIMEType: "image/jpeg",
 	}
-	if err := db.Create(image).Error; err != nil {
+	if err := db.Create(img).Error; err != nil {
 		t.Fatalf("create image: %v", err)
 	}
-	return image
+	if folderID != nil {
+		imageRepo := NewImageRepository(db)
+		if err := imageRepo.SetImageFolder(context.Background(), img.ID, folderID); err != nil {
+			t.Fatalf("set image folder: %v", err)
+		}
+	}
+	return img
+}
+
+func TestFolderRepository_CountImagesByFolder(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userID := "kp_countimgs"
+	createUser(t, tx, userID)
+	folder := createFolder(t, tx, userID, "target", nil)
+
+	imageRepo := NewImageRepository(tx)
+	img1 := createImage(t, tx, userID, &folder.ID)
+	img2 := createImage(t, tx, userID, &folder.ID)
+	createImage(t, tx, userID, nil) // no folder — should not count
+
+	// soft-delete img2 — should be excluded
+	require.NoError(t, imageRepo.SoftDelete(context.Background(), img2.ID, userID))
+
+	repo := NewFolderRepository(tx)
+	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, userID)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	_ = img1
 }

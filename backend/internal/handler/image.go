@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
@@ -527,6 +528,14 @@ func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCurs
 	return limit, cursor, nil
 }
 
+func firstFolderID(imageFolders []domain.ImageFolder) *uuid.UUID {
+	if len(imageFolders) == 0 {
+		return nil
+	}
+	id := imageFolders[0].FolderID
+	return &id
+}
+
 func toImageResponse(item usecase.ImageItem) imageResponse {
 	tags := make([]tagResponse, 0, len(item.Image.Tags))
 	for _, tag := range item.Image.Tags {
@@ -541,7 +550,7 @@ func toImageResponse(item usecase.ImageItem) imageResponse {
 		Description:  item.Image.Description,
 		MIMEType:     item.Image.MIMEType,
 		SourceURL:    item.Image.SourceURL,
-		FolderID:     item.Image.FolderID,
+		FolderID:     firstFolderID(item.Image.ImageFolders),
 		ThumbnailURL: item.ThumbnailURL,
 		Width:        item.Image.Width,
 		Height:       item.Image.Height,

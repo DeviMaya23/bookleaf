@@ -88,10 +88,9 @@ func TestImageRepository_List_FilterByFolder(t *testing.T) {
 
 	repo := NewImageRepository(tx)
 
-	img1 := newTestImage(user.ID)
-	img1.FolderID = &folder.ID
-	_, err = repo.Create(context.Background(), img1)
+	img1, err := repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img1.ID, &folder.ID))
 
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
@@ -100,7 +99,8 @@ func TestImageRepository_List_FilterByFolder(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
-	assert.Equal(t, &folder.ID, images[0].FolderID)
+	require.Len(t, images[0].ImageFolders, 1)
+	assert.Equal(t, folder.ID, images[0].ImageFolders[0].FolderID)
 }
 
 func TestImageRepository_GetByID_Success(t *testing.T) {
@@ -443,29 +443,119 @@ func TestImageRepository_CountByFolderID(t *testing.T) {
 	require.NoError(t, err)
 
 	repo := NewImageRepository(tx)
-	img1 := newTestImage(user.ID)
-	img1.FolderID = &folder.ID
-	_, err = repo.Create(context.Background(), img1)
-	require.NoError(t, err)
 
-	img2 := newTestImage(user.ID)
-	img2.FolderID = &folder.ID
-	_, err = repo.Create(context.Background(), img2)
+	img1, err := repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img1.ID, &folder.ID))
+
+	img2, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img2.ID, &folder.ID))
 
 	otherFolder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "other"})
 	require.NoError(t, err)
-	img3 := newTestImage(user.ID)
-	img3.FolderID = &otherFolder.ID
-	_, err = repo.Create(context.Background(), img3)
+	img3, err := repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img3.ID, &otherFolder.ID))
 
-	err = repo.SoftDelete(context.Background(), img2.ID, user.ID)
-	require.NoError(t, err)
+	// soft-delete img2 — should be excluded from count
+	require.NoError(t, repo.SoftDelete(context.Background(), img2.ID, user.ID))
 
 	count, err := repo.CountByFolderID(context.Background(), folder.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, count)
+}
+
+func TestImageRepository_SetImageFolder_Success(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_setfolder")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "assigned"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	err = repo.SetImageFolder(context.Background(), img.ID, &folder.ID)
+	require.NoError(t, err)
+
+	found, err := repo.GetByID(context.Background(), img.ID, user.ID)
+	require.NoError(t, err)
+	require.Len(t, found.ImageFolders, 1)
+	assert.Equal(t, folder.ID, found.ImageFolders[0].FolderID)
+	assert.Equal(t, "1", found.ImageFolders[0].Position)
+}
+
+func TestImageRepository_SetImageFolder_Unfile(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_unfile")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "toremove"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, &folder.ID))
+	require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, nil))
+
+	found, err := repo.GetByID(context.Background(), img.ID, user.ID)
+	require.NoError(t, err)
+	assert.Empty(t, found.ImageFolders)
+}
+
+func TestImageRepository_SetImageFolder_NoopWhenUnfilingImageWithNoFolder(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_noop")
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	err = repo.SetImageFolder(context.Background(), img.ID, nil)
+	require.NoError(t, err)
+}
+
+func TestImageRepository_List_Unfiled(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_unfiled")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "assigned"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	filed, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), filed.ID, &folder.ID))
+
+	_, err = repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	images, err := repo.List(context.Background(), user.ID, nil, true, nil, nil, 200)
+
+	require.NoError(t, err)
+	assert.Len(t, images, 1)
+	for _, img := range images {
+		assert.Empty(t, img.ImageFolders)
+	}
 }
 
 func TestImageRepository_List_PreloadsTags(t *testing.T) {

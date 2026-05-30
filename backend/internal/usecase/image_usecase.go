@@ -168,13 +168,20 @@ func (u *imageUsecase) InitiateUpload(ctx context.Context, userID, title, mimeTy
 		Description: description,
 		MIMEType:    mimeType,
 		SourceURL:   sourceURL,
-		FolderID:    folderID,
 		R2Path:      r2Path,
 	})
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("create image record: %w", err)
+	}
+
+	if folderID != nil {
+		if err := u.imageRepo.SetImageFolder(ctx, created.ID, folderID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("set image folder: %w", err)
+		}
 	}
 
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("upload initiated",
@@ -393,7 +400,7 @@ func (u *imageUsecase) AcceptSuggestion(ctx context.Context, imageID uuid.UUID, 
 		}
 	}
 
-	if _, err := u.imageRepo.Update(ctx, imageID, userID, map[string]any{"folder_id": folder.ID}); err != nil {
+	if err := u.imageRepo.SetImageFolder(ctx, imageID, &folder.ID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
@@ -624,9 +631,6 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	if params.Title != nil {
 		fields["title"] = *params.Title
 	}
-	if params.FolderID != nil {
-		fields["folder_id"] = *params.FolderID
-	}
 	if params.Description != nil {
 		fields["description"] = *params.Description
 	}
@@ -657,7 +661,22 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 
 	if params.FolderID != nil {
 		newFolderID := *params.FolderID
-		oldFolderID := existing.FolderID
+		if err := u.imageRepo.SetImageFolder(ctx, id, newFolderID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		updated, err = u.imageRepo.GetByID(ctx, id, userID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+
+		var oldFolderID *uuid.UUID
+		if len(existing.ImageFolders) > 0 {
+			oldFolderID = &existing.ImageFolders[0].FolderID
+		}
 		folderChanged := (newFolderID == nil) != (oldFolderID == nil) ||
 			(newFolderID != nil && oldFolderID != nil && *newFolderID != *oldFolderID)
 		if folderChanged {

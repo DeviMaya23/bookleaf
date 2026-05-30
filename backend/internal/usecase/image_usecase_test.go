@@ -28,16 +28,20 @@ import (
 // --- mocks ---
 
 type mockImageRepository struct {
-	image           *domain.Image
-	images          []*domain.Image
-	err             error
-	count           int64
-	updateFields    map[string]any
-	lastUpdateID    uuid.UUID
-	lastUpdateBy    string
-	createdImage    *domain.Image
-	lastUnfiled     bool
-	hardDeleteCalls int
+	image                *domain.Image
+	images               []*domain.Image
+	err                  error
+	setImageFolderErr    error
+	count                int64
+	updateFields         map[string]any
+	lastUpdateID         uuid.UUID
+	lastUpdateBy         string
+	createdImage         *domain.Image
+	lastUnfiled          bool
+	hardDeleteCalls      int
+	setFolderImageID     uuid.UUID
+	setFolderFolderID    *uuid.UUID
+	setFolderCalls       int
 }
 
 func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
@@ -100,6 +104,13 @@ func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) (
 func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	m.hardDeleteCalls++
 	return m.err
+}
+
+func (m *mockImageRepository) SetImageFolder(_ context.Context, imageID uuid.UUID, folderID *uuid.UUID) error {
+	m.setFolderCalls++
+	m.setFolderImageID = imageID
+	m.setFolderFolderID = folderID
+	return m.setImageFolderErr
 }
 
 func _mapCopy(fields map[string]any) map[string]any {
@@ -390,7 +401,7 @@ func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
 	validFolderID := uuid.New()
 	invalidFolderID := uuid.New()
 
-	t.Run("keeps folder_id when folder exists for user", func(t *testing.T) {
+	t.Run("calls SetImageFolder when folder exists for user", func(t *testing.T) {
 		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 		folderRepo := &mockFolderRepository{
 			folder: &domain.Folder{ID: validFolderID, UserID: "kp_abc123", Name: "Nature"},
@@ -409,12 +420,12 @@ func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
 		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &validFolderID, nil)
 
 		require.NoError(t, err)
-		require.NotNil(t, repo.createdImage)
-		require.NotNil(t, repo.createdImage.FolderID)
-		assert.Equal(t, validFolderID, *repo.createdImage.FolderID)
+		assert.Equal(t, 1, repo.setFolderCalls)
+		require.NotNil(t, repo.setFolderFolderID)
+		assert.Equal(t, validFolderID, *repo.setFolderFolderID)
 	})
 
-	t.Run("nulls folder_id when folder is not found", func(t *testing.T) {
+	t.Run("does not call SetImageFolder when folder is not found", func(t *testing.T) {
 		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 		folderRepo := &mockFolderRepository{
 			err: gorm.ErrRecordNotFound,
@@ -433,8 +444,7 @@ func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
 		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &invalidFolderID, nil)
 
 		require.NoError(t, err)
-		require.NotNil(t, repo.createdImage)
-		assert.Nil(t, repo.createdImage.FolderID)
+		assert.Equal(t, 0, repo.setFolderCalls)
 	})
 }
 
@@ -611,8 +621,9 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 1, folderRepo.findCalls)
 		assert.Equal(t, 0, folderRepo.createCalls)
-		require.NotNil(t, imageRepo.updateFields)
-		assert.Equal(t, existingFolderID, imageRepo.updateFields["folder_id"])
+		assert.Equal(t, 1, imageRepo.setFolderCalls)
+		require.NotNil(t, imageRepo.setFolderFolderID)
+		assert.Equal(t, existingFolderID, *imageRepo.setFolderFolderID)
 	})
 
 	t.Run("creates folder when no match is found", func(t *testing.T) {
@@ -630,8 +641,9 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 		require.NotNil(t, folderRepo.lastCreatedData)
 		assert.Equal(t, "kp_abc123", folderRepo.lastCreatedData.UserID)
 		assert.Equal(t, "Nature", folderRepo.lastCreatedData.Name)
-		require.NotNil(t, imageRepo.updateFields)
-		assert.Equal(t, newFolderID, imageRepo.updateFields["folder_id"])
+		assert.Equal(t, 1, imageRepo.setFolderCalls)
+		require.NotNil(t, imageRepo.setFolderFolderID)
+		assert.Equal(t, newFolderID, *imageRepo.setFolderFolderID)
 	})
 
 	t.Run("returns error when image is not found", func(t *testing.T) {
@@ -644,7 +656,74 @@ func TestImageUsecase_AcceptSuggestion(t *testing.T) {
 		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 		assert.Equal(t, 0, folderRepo.findCalls)
 		assert.Equal(t, 0, folderRepo.createCalls)
-		assert.Nil(t, imageRepo.updateFields)
+		assert.Equal(t, 0, imageRepo.setFolderCalls)
+	})
+
+	t.Run("returns error when SetImageFolder fails", func(t *testing.T) {
+		imageRepo := &mockImageRepository{
+			image:             &domain.Image{ID: imageID, UserID: "kp_abc123"},
+			setImageFolderErr: errors.New("db error"),
+		}
+		folderRepo := &mockAcceptSuggestionFolderRepository{
+			findResult: &domain.Folder{ID: existingFolderID, Name: "Nature"},
+		}
+		uc := NewImageUsecase(imageRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+
+		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+		require.Error(t, err)
+	})
+}
+
+func TestImageUsecase_InitiateUpload_SetImageFolder_Failure(t *testing.T) {
+	imageID := uuid.New()
+	validFolderID := uuid.New()
+	repo := &mockImageRepository{
+		image:             &domain.Image{ID: imageID},
+		setImageFolderErr: errors.New("db error"),
+	}
+	folderRepo := &mockFolderRepository{
+		folder: &domain.Folder{ID: validFolderID, UserID: "kp_abc123", Name: "Nature"},
+	}
+	uc := NewImageUsecase(repo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
+
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &validFolderID, nil)
+
+	require.Error(t, err)
+}
+
+func TestImageUsecase_UpdateImage_WithFolderID(t *testing.T) {
+	imageID := uuid.New()
+	folderID := uuid.New()
+
+	t.Run("calls SetImageFolder when folder_id provided", func(t *testing.T) {
+		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		folderIDPtr := &folderID
+		_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+			FolderID: &folderIDPtr,
+		})
+
+		require.NoError(t, err)
+		assert.Equal(t, 1, repo.setFolderCalls)
+		require.NotNil(t, repo.setFolderFolderID)
+		assert.Equal(t, folderID, *repo.setFolderFolderID)
+	})
+
+	t.Run("returns error when SetImageFolder fails", func(t *testing.T) {
+		repo := &mockImageRepository{
+			image:             &domain.Image{ID: imageID},
+			setImageFolderErr: errors.New("db error"),
+		}
+		uc := NewImageUsecase(repo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+
+		folderIDPtr := &folderID
+		_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+			FolderID: &folderIDPtr,
+		})
+
+		require.Error(t, err)
 	})
 }
 

@@ -100,6 +100,10 @@ func (m *mockFolderImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _
 	return m.err
 }
 
+func (m *mockFolderImageRepository) SetImageFolder(_ context.Context, _ uuid.UUID, _ *uuid.UUID) error {
+	return m.err
+}
+
 func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) FolderUsecase {
 	return NewFolderUsecase(folderRepo, imageRepo, observability.NewTelemetry(nil, nil, nil))
 }

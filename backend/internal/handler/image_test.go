@@ -295,6 +295,27 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 	}
 }
 
+func TestImageHandler_toImageResponse_FolderID(t *testing.T) {
+	folderID := uuid.New()
+
+	t.Run("returns null folder_id when ImageFolders is empty", func(t *testing.T) {
+		item := usecase.ImageItem{Image: &domain.Image{ID: uuid.New(), Title: "photo"}}
+		resp := toImageResponse(item)
+		assert.Nil(t, resp.FolderID)
+	})
+
+	t.Run("returns folder_id from first ImageFolders entry", func(t *testing.T) {
+		item := usecase.ImageItem{Image: &domain.Image{
+			ID:           uuid.New(),
+			Title:        "photo",
+			ImageFolders: []domain.ImageFolder{{ImageID: uuid.New(), FolderID: folderID, Position: "1"}},
+		}}
+		resp := toImageResponse(item)
+		require.NotNil(t, resp.FolderID)
+		assert.Equal(t, folderID, *resp.FolderID)
+	})
+}
+
 func TestImageHandler_ListImages(t *testing.T) {
 	tagID := uuid.New()
 
