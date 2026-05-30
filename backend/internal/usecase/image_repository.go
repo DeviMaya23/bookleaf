@@ -31,7 +31,6 @@ type ImageRepository interface {
 	// CountByFolderID counts non-deleted images with a row in image_folders for the given folder.
 	// Queries via Model(&domain.Image{}) + JOIN image_folders so soft-delete scope applies automatically.
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
-	ListStaleUploads(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
 	ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
 	HardDelete(ctx context.Context, id uuid.UUID, userID string) error
 }

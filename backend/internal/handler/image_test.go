@@ -124,8 +124,9 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 			body: `{"title":"sunset","mime_type":"image/jpeg","description":"cover"}`,
 			mockUC: &mockImageUsecase{
 				uploadResult: &usecase.UploadInitResult{
-					Image:     &domain.Image{ID: imageID, Title: "sunset"},
+					ID:        imageID,
 					UploadURL: "https://r2.example.com/upload",
+					R2Path:    "users/kp_abc123/images/" + imageID.String() + ".jpg",
 				},
 			},
 			wantStatus: http.StatusCreated,
@@ -156,6 +157,7 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/upload", resp["upload_url"])
+			assert.Equal(t, "users/kp_abc123/images/"+imageID.String()+".jpg", resp["r2_path"])
 			if tt.name == "creates image and returns 201 with upload url" {
 				require.NotNil(t, tt.mockUC.lastDescription)
 				assert.Equal(t, "cover", *tt.mockUC.lastDescription)

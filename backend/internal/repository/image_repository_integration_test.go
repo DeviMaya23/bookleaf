@@ -33,7 +33,6 @@ func newTestImage(userID string) *domain.Image {
 		Title:      "test image",
 		MIMEType:   "image/jpeg",
 		R2Path:     "users/" + userID + "/images/" + id.String() + ".jpg",
-		IsUploaded: true,
 	}
 }
 

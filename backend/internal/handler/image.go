@@ -129,9 +129,9 @@ func (h *ImageHandler) InitiateUpload(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, initiateImageUploadResponse{
-		ID:        result.Image.ID,
+		ID:        result.ID,
 		UploadURL: result.UploadURL,
-		R2Path:    result.Image.R2Path,
+		R2Path:    result.R2Path,
 	})
 }
 

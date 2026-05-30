@@ -103,6 +103,7 @@ Methods:
 - `GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.PendingUpload, error)` — returns the row for the given id and userID; returns an error if not found
 - `Delete(ctx context.Context, id uuid.UUID) error` — hard-deletes the row; no-op if not found
 - `ListStale(ctx context.Context, olderThan time.Time) ([]*domain.PendingUpload, error)` — returns all rows where `created_at < olderThan`
+- `Transaction(ctx context.Context, fn func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error) error` — executes `fn` inside a DB transaction; both `pendingRepo` and `imageRepo` passed to `fn` are scoped to the same transaction. Used by `CompleteUpload` to atomically create the image, assign the folder, and delete the pending row. The method accepts `imageRepo` to keep the transaction unit-testable without a real database.
 
 #### Scenario: Repository interface is satisfied by SQL implementation
 
