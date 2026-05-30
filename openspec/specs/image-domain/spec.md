@@ -17,7 +17,6 @@ Fields (all DB columns use snake_case):
 - `Height` — image height in pixels, nullable; populated server-side at upload completion (`height`)
 - `FileSize` — file size in bytes, nullable; populated server-side at upload completion (`file_size`)
 - `AILabels` — JSON-serialised array of AI-generated labels (nullable, BYOV only) (`ai_labels`)
-- `IsUploaded` — boolean flag, `false` when record is created by `InitiateUpload`, set to `true` by `CompleteUpload`; used to detect abandoned upload attempts (`is_uploaded`)
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
@@ -54,10 +53,10 @@ Associations:
 - **WHEN** the Go package is compiled
 - **THEN** `Image` has nullable pointer fields `Description *string`, `Width *int`, `Height *int`, and `FileSize *int64` with correct GORM column tags
 
-#### Scenario: Image struct includes IsUploaded field
+#### Scenario: Image struct has no IsUploaded field
 
 - **WHEN** the Go package is compiled
-- **THEN** `Image` has a `IsUploaded bool` field with GORM tag `column:is_uploaded;not null;default:false`
+- **THEN** `Image` has no `IsUploaded` field and no `is_uploaded` GORM column tag
 
 ### Requirement: Images DB Migration
 
@@ -98,18 +97,4 @@ Columns added:
 
 ### Requirement: is_uploaded DB Migration
 
-The system SHALL include a `golang-migrate` SQL migration that adds the `is_uploaded` column to the existing `images` table.
-
-Column:
-- `is_uploaded boolean NOT NULL DEFAULT false`
-
-#### Scenario: Migration adds is_uploaded column
-
-- **WHEN** the up migration is applied
-- **THEN** the `images` table gains an `is_uploaded` boolean column with `NOT NULL DEFAULT false`
-- **AND** existing rows have `is_uploaded = false`
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `is_uploaded` column is dropped from `images` without error
+> **REMOVED** — Replaced by migration 000011 in the `pending-uploads` capability, which drops the `is_uploaded` column as part of introducing the `pending_uploads` table. See `pending-uploads` spec, Requirement: pending_uploads DB Migration.

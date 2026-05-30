@@ -1,41 +1,64 @@
 ## ADDED Requirements
 
-### Requirement: CompleteUpload marks image as uploaded
+### Requirement: CompleteUpload commits pending upload to images table
 
-The system SHALL set `is_uploaded = true` on the Image record when `CompleteUpload` is called successfully.
+The system SHALL commit a pending upload to the `images` table when `CompleteUpload` is called successfully.
 
-#### Scenario: Successful CompleteUpload updates is_uploaded
+`CompleteUpload` SHALL:
+1. Fetch the `PendingUpload` record via `pendingUploadRepo.GetByID(ctx, id, userID)` — return error if not found
+2. Generate the thumbnail and extract image dimensions and file size (`prepareThumbnail`)
+3. Execute a single DB transaction:
+   a. `imageRepo.Create` with all fields from the `PendingUpload` plus server-derived metadata (width, height, file_size, thumbnail_path)
+   b. If `pendingUpload.FolderID` is non-nil: call `imageRepo.SetImageFolder(ctx, image.ID, pendingUpload.FolderID)`
+   c. `pendingUploadRepo.Delete(ctx, id)` — hard-delete the pending row
+4. Return the committed image result
 
-- **WHEN** `CompleteUpload` is called with a valid image ID and user ID
-- **THEN** the image record's `is_uploaded` field is set to `true` in the database
+If any step fails, the transaction is rolled back and the `pending_uploads` row survives; the stale cleaner will remove it after the threshold.
 
-#### Scenario: CompleteUpload on non-existent image does not update is_uploaded
+#### Scenario: Successful CompleteUpload commits image and removes pending row
 
-- **WHEN** `CompleteUpload` is called with an image ID that does not exist for the given user
-- **THEN** the operation returns an error and no `is_uploaded` update is performed
+- **WHEN** `CompleteUpload` is called with a valid pending upload ID and matching user ID
+- **THEN** a row is inserted into `images` with all metadata from `pending_uploads` plus thumbnail, width, height, and file_size
+- **AND** the corresponding `pending_uploads` row is deleted
+- **AND** if `pending_uploads.folder_id` was non-nil, a row exists in `image_folders` for the new image
 
-### Requirement: CleanupStaleUploads removes abandoned upload records
+#### Scenario: CompleteUpload on non-existent pending upload returns error
 
-The system SHALL provide a `CleanupStaleUploads(ctx context.Context, threshold time.Duration)` method on `imageUsecase` that identifies and removes Image records where the upload was never completed.
+- **WHEN** `CompleteUpload` is called with an ID that does not exist in `pending_uploads` for the given user
+- **THEN** the operation returns an error
+- **AND** no row is inserted into `images`
+
+#### Scenario: CompleteUpload transaction is atomic
+
+- **WHEN** `CompleteUpload` fails during the transaction (e.g. DB error on INSERT)
+- **THEN** no row is inserted into `images`
+- **AND** the `pending_uploads` row remains and will be cleaned up by the stale cleaner
+
+---
+
+### Requirement: CleanupStaleUploads removes abandoned pending upload records
+
+The system SHALL provide a `CleanupStaleUploads(ctx context.Context, threshold time.Duration)` method on `imageUsecase` that identifies and removes `pending_uploads` records where the upload was never completed.
 
 A record is considered stale when:
-- `is_uploaded = false`
 - `created_at < now() - threshold`
 
 For each stale record, the method SHALL:
 1. Attempt to delete the R2 object at `r2_path` (best-effort; log a warning on failure but continue)
-2. Soft-delete the Image record
+2. Call `pendingUploadRepo.Delete(ctx, id)` to hard-delete the `pending_uploads` row
 
-#### Scenario: Stale records are soft-deleted and R2 objects are removed
+#### Scenario: Stale pending uploads are deleted and R2 objects are removed
 
-- **WHEN** `CleanupStaleUploads` runs and finds Image records with `is_uploaded = false` older than the threshold
+- **WHEN** `CleanupStaleUploads` runs and finds `pending_uploads` rows older than the threshold
 - **THEN** the R2 object at each record's `r2_path` is deleted
-- **AND** each Image record is soft-deleted (GORM `DeletedAt` is set)
+- **AND** each `pending_uploads` row is hard-deleted
 
 #### Scenario: No stale records results in no-op
 
-- **WHEN** `CleanupStaleUploads` runs and finds no Image records matching the stale criteria
+- **WHEN** `CleanupStaleUploads` runs and finds no `pending_uploads` rows matching the stale criteria
 - **THEN** no records are modified and no R2 deletes are attempted
+
+---
 
 ### Requirement: Background goroutine runs cleanup on a ticker
 
