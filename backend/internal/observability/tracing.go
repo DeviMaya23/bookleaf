@@ -51,6 +51,7 @@ func NewTracerProvider(ctx context.Context, exporter string) (*sdktrace.TracerPr
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
 	)
 
 	otel.SetTracerProvider(tp)
