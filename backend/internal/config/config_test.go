@@ -55,6 +55,7 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	assert.True(t, cfg.Obs.OTELEnabled)
 	assert.Equal(t, "jaeger", cfg.Obs.OTELExporter)
 	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
+	assert.Equal(t, 0.1, cfg.Obs.SampleRatio)
 	assert.Equal(t, "abc123", cfg.Vision.APIKey)
 	assert.Equal(t, "9090", cfg.Port)
 }
@@ -170,6 +171,39 @@ func TestLoad_OTELEnabledWithExportersSet(t *testing.T) {
 	assert.True(t, cfg.Obs.OTELEnabled)
 	assert.Equal(t, "tempo", cfg.Obs.OTELExporter)
 	assert.Equal(t, "prometheus", cfg.Obs.OTELMetricsExporter)
+}
+
+func TestLoad_SampleRatio(t *testing.T) {
+	tests := []struct {
+		name        string
+		ratioEnv    *string
+		wantRatio   float64
+		wantErr     bool
+	}{
+		{"unset defaults to 0.1", nil, 0.1, false},
+		{"explicit value", func() *string { s := "0.5"; return &s }(), 0.5, false},
+		{"invalid value returns error", func() *string { s := "not-a-float"; return &s }(), 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			setRequiredEnvVars(t)
+			if tt.ratioEnv != nil {
+				t.Setenv("OTEL_SAMPLE_RATIO", *tt.ratioEnv)
+			}
+
+			cfg, err := Load()
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "OTEL_SAMPLE_RATIO")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantRatio, cfg.Obs.SampleRatio)
+		})
+	}
 }
 
 func TestLoad_LogFormat(t *testing.T) {

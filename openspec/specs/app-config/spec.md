@@ -73,13 +73,19 @@ The `Config` struct SHALL include an `Obs ObsConfig` field. `ObsConfig` SHALL ha
 - `OTELExporter string` — loaded from `OTEL_EXPORTER`; **conditionally required**: only validated as non-empty when `OTELEnabled` is `true`
 - `OTELMetricsExporter string` — loaded from `OTEL_METRICS_EXPORTER`; **conditionally required**: only validated as non-empty when `OTELEnabled` is `true`
 - `LogFormat string` — loaded from `LOG_FORMAT`; optional, defaults to `"json"`
+- `SampleRatio float64` — loaded from `OTEL_SAMPLE_RATIO`; optional, defaults to `0.1`
 
-When `OTELEnabled` is `false`, `OTEL_EXPORTER` and `OTEL_METRICS_EXPORTER` SHALL be loaded as empty strings without error, even if unset.
+When `OTELEnabled` is `false`, `OTEL_EXPORTER`, `OTEL_METRICS_EXPORTER`, and `OTEL_SAMPLE_RATIO` SHALL be loaded with their defaults without error, even if unset.
 
 #### Scenario: All observability vars are set with OTel enabled
 
-- **WHEN** `OTEL_ENABLED=true`, `OTEL_EXPORTER=tempo`, `OTEL_METRICS_EXPORTER=prometheus`, and `LOG_FORMAT=json` are set
-- **THEN** `cfg.Obs.OTELEnabled` is `true`, `cfg.Obs.OTELExporter` is `"tempo"`, `cfg.Obs.OTELMetricsExporter` is `"prometheus"`, and `cfg.Obs.LogFormat` is `"json"`
+- **WHEN** `OTEL_ENABLED=true`, `OTEL_EXPORTER=gcp`, `OTEL_METRICS_EXPORTER=gcp`, `LOG_FORMAT=json`, and `OTEL_SAMPLE_RATIO=0.2` are set
+- **THEN** `cfg.Obs.OTELEnabled` is `true`, `cfg.Obs.OTELExporter` is `"gcp"`, `cfg.Obs.OTELMetricsExporter` is `"gcp"`, `cfg.Obs.LogFormat` is `"json"`, and `cfg.Obs.SampleRatio` is `0.2`
+
+#### Scenario: OTEL_SAMPLE_RATIO defaults to 0.1
+
+- **WHEN** `OTEL_SAMPLE_RATIO` is not set
+- **THEN** `cfg.Obs.SampleRatio` is `0.1`
 
 #### Scenario: LOG_FORMAT defaults to json
 
