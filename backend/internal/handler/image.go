@@ -74,6 +74,7 @@ type imageDetailResponse struct {
 	MIMEType     string        `json:"mime_type"`
 	SourceURL    *string       `json:"source_url"`
 	FolderID     *uuid.UUID    `json:"folder_id"`
+	Position     *string       `json:"position"`
 	ThumbnailURL *string       `json:"thumbnail_url"`
 	Width        *int          `json:"width"`
 	Height       *int          `json:"height"`
@@ -304,6 +305,7 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		MIMEType:     item.MIMEType,
 		SourceURL:    item.SourceURL,
 		FolderID:     item.FolderID,
+		Position:     item.Position,
 		ThumbnailURL: item.ThumbnailURL,
 		Width:        item.Width,
 		Height:       item.Height,
