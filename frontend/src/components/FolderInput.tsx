@@ -1,10 +1,6 @@
 import { useRef, useState } from 'react'
 import { X } from 'lucide-react'
-
-interface Folder {
-  id: string
-  name: string
-}
+import type { Folder } from '@/lib/folders'
 
 interface FolderInputProps {
   folders: Folder[]

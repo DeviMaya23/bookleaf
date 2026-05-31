@@ -3,8 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect } from 'vitest'
 import FolderInput from './FolderInput'
 
-const nature = { id: 'folder-nature', name: 'Nature' }
-const travel = { id: 'folder-travel', name: 'Travel' }
+const nature = { id: 'folder-nature', name: 'Nature', description: null, parent_id: null, created_at: '', updated_at: '' }
+const travel = { id: 'folder-travel', name: 'Travel', description: null, parent_id: null, created_at: '', updated_at: '' }
 
 describe('FolderInput — success scenario', () => {
   it('selecting a suggestion calls onChange with folder appended', async () => {

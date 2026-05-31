@@ -186,7 +186,7 @@ describe('RightPanel tags — failure scenario', () => {
 describe('RightPanel folders — success scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature' }])
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, parent_id: null, created_at: '', updated_at: '' }])
     vi.mocked(updateImage).mockResolvedValue(makeImage())
   })
 
@@ -212,7 +212,7 @@ describe('RightPanel folders — success scenario', () => {
 describe('RightPanel folders — failure scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature' }])
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, parent_id: null, created_at: '', updated_at: '' }])
     vi.mocked(updateImage).mockRejectedValue(new Error('Server error'))
   })
 
