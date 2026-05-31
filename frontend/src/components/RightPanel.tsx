@@ -12,9 +12,11 @@ import {
 import { getImage, updateImage, downloadImage } from '@/lib/images'
 import { getFolders } from '@/lib/folders'
 import { getTags, createTag } from '@/lib/tags'
+import FolderInput from '@/components/FolderInput'
 import TagInput from '@/components/TagInput'
 import type { Image } from '@/lib/images'
 import type { Tag } from '@/lib/tags'
+import type { Folder } from '@/lib/folders'
 
 function formatFileSize(bytes: number | null): string {
   if (bytes === null) return '—'
@@ -46,6 +48,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const [description, setDescription] = useState(image.description ?? '')
   const [sourceUrl, setSourceUrl] = useState(image.source_url ?? '')
   const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
+  const [selectedFolders, setSelectedFolders] = useState<Folder[]>([])
 
   // Reset local state when a different image is selected
   useEffect(() => {
@@ -63,7 +66,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     staleTime: 0,
   })
 
-  const { data: folders } = useQuery({
+  const { data: allFolders } = useQuery({
     queryKey: ['folders'],
     queryFn: () => getFolders(getToken),
     staleTime: 60_000,
@@ -75,9 +78,14 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     staleTime: 60_000,
   })
 
-  const folderName = image.folder_id
-    ? (folders?.find((f) => f.id === image.folder_id)?.name ?? '—')
-    : 'Unsorted'
+  // Sync selectedFolders when image or allFolders data changes
+  useEffect(() => {
+    if (!allFolders) return
+    const resolved = image.folder_ids
+      .map((id) => allFolders.find((f) => f.id === id))
+      .filter((f): f is Folder => f !== undefined)
+    setSelectedFolders(resolved)
+  }, [image.id, allFolders])
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateImage>[2]) =>
@@ -102,6 +110,23 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
       toast.error('Failed to save tags')
     },
   })
+
+  const folderSaveMutation = useMutation({
+    mutationFn: (folderIds: string[]) =>
+      updateImage(getToken, image.id, { folder_ids: folderIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['images'] })
+      toast.success('Saved')
+    },
+    onError: () => {
+      toast.error('Failed to save folders')
+    },
+  })
+
+  const handleFoldersChange = (incoming: Folder[]) => {
+    setSelectedFolders(incoming)
+    folderSaveMutation.mutate(incoming.map((f) => f.id))
+  }
 
   const handleTagsChange = async (incoming: Tag[]) => {
     // Resolve any tag that has no ID (newly typed by user)
@@ -285,6 +310,17 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
           </div>
         </div>
 
+        {/* Folders */}
+        <div className="px-4 py-3 border-b">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Folders</p>
+          <FolderInput
+            folders={selectedFolders}
+            onChange={handleFoldersChange}
+            disabled={folderSaveMutation.isPending}
+            suggestions={(allFolders ?? []).filter((f) => !selectedFolders.some((s) => s.id === f.id))}
+          />
+        </div>
+
         {/* Tags */}
         <div className="px-4 py-3 border-b">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Tags</p>
@@ -303,7 +339,6 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
             {[
               ['Size', formatFileSize(image.file_size)],
               ['Dimensions', image.width && image.height ? `${image.width} × ${image.height}` : '—'],
-              ['Folder', folderName],
               ['Added', formatDate(image.created_at)],
             ].map(([label, value]) => (
               <div key={label}>

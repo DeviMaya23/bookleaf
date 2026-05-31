@@ -487,7 +487,7 @@ func TestImageRepository_SetImageFolder_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found.ImageFolders, 1)
 	assert.Equal(t, folder.ID, found.ImageFolders[0].FolderID)
-	assert.Equal(t, "1", found.ImageFolders[0].Position)
+	assert.Equal(t, "a0", found.ImageFolders[0].Position)
 }
 
 func TestImageRepository_SetImageFolder_Unfile(t *testing.T) {
@@ -620,4 +620,111 @@ func TestImageRepository_GetByID_PreloadsTags(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, found.Tags, 1)
 	assert.Equal(t, tag.ID, found.Tags[0].ID)
+}
+
+func TestImageRepository_UpdateImageFolderPosition_Success(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_updpos")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "reorder"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, &folder.ID))
+
+	err = repo.UpdateImageFolderPosition(context.Background(), img.ID, folder.ID, "Zz")
+	require.NoError(t, err)
+
+	found, err := repo.GetByID(context.Background(), img.ID, user.ID)
+	require.NoError(t, err)
+	require.Len(t, found.ImageFolders, 1)
+	assert.Equal(t, "Zz", found.ImageFolders[0].Position)
+}
+
+func TestImageRepository_UpdateImageFolderPosition_NotFound(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_updpos_nf")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "empty"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	err = repo.UpdateImageFolderPosition(context.Background(), img.ID, folder.ID, "a0")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_List_FolderView_OrderedByPosition(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_listpos")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "ordered"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	img1, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img1.ID, &folder.ID))
+
+	img2, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img2.ID, &folder.ID))
+
+	img3, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img3.ID, &folder.ID))
+
+	// Manually reorder: put img3 before img1
+	require.NoError(t, repo.UpdateImageFolderPosition(context.Background(), img3.ID, folder.ID, "Zz"))
+
+	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, 0)
+
+	require.NoError(t, err)
+	require.Len(t, images, 3)
+	assert.Equal(t, img3.ID, images[0].ID)
+	assert.Equal(t, img1.ID, images[1].ID)
+	assert.Equal(t, img2.ID, images[2].ID)
+}
+
+func TestImageRepository_List_FolderView_ReturnsAll_IgnoresLimit(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_listall")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "full"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	for range 5 {
+		img, err := repo.Create(context.Background(), newTestImage(user.ID))
+		require.NoError(t, err)
+		require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, &folder.ID))
+	}
+
+	// Pass limit=2; folder view should return all 5 regardless.
+	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, 2)
+
+	require.NoError(t, err)
+	assert.Len(t, images, 5)
 }

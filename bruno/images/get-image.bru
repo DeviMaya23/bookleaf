@@ -13,3 +13,8 @@ get {
 params:path {
   id: {{imageId}}
 }
+
+docs {
+  Response includes `folder_ids: string[]` — an array of all folder UUIDs this image belongs to (empty array when unfiled).
+  The singular `folder_id` and `position` fields have been removed.
+}

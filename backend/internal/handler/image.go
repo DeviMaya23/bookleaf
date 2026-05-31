@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/observability"
 	"github.com/devi/bookleaf/internal/usecase"
@@ -26,9 +25,14 @@ type ImageHandler struct {
 type updateImageRequest struct {
 	Title       *string         `json:"title"`
 	Description *string         `json:"description"`
-	FolderID    json.RawMessage `json:"folder_id"`
+	FolderIDs   json.RawMessage `json:"folder_ids"`
 	SourceURL   json.RawMessage `json:"source_url"`
 	Tags        json.RawMessage `json:"tags"`
+}
+
+type moveImageFolderRequest struct {
+	FromFolderID json.RawMessage `json:"from_folder_id"`
+	ToFolderID   json.RawMessage `json:"to_folder_id"`
 }
 
 type initiateImageUploadRequest struct {
@@ -51,7 +55,7 @@ type imageResponse struct {
 	Description  *string       `json:"description"`
 	MIMEType     string        `json:"mime_type"`
 	SourceURL    *string       `json:"source_url"`
-	FolderID     *uuid.UUID    `json:"folder_id"`
+	FolderIDs    []uuid.UUID   `json:"folder_ids"`
 	ThumbnailURL *string       `json:"thumbnail_url"`
 	Width        *int          `json:"width"`
 	Height       *int          `json:"height"`
@@ -61,13 +65,18 @@ type imageResponse struct {
 	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
+type updateImagePositionRequest struct {
+	FolderID *uuid.UUID `json:"folder_id"`
+	Position string     `json:"position"`
+}
+
 type imageDetailResponse struct {
 	ID           uuid.UUID     `json:"id"`
 	Title        string        `json:"title"`
 	Description  *string       `json:"description"`
 	MIMEType     string        `json:"mime_type"`
 	SourceURL    *string       `json:"source_url"`
-	FolderID     *uuid.UUID    `json:"folder_id"`
+	FolderIDs    []uuid.UUID   `json:"folder_ids"`
 	ThumbnailURL *string       `json:"thumbnail_url"`
 	Width        *int          `json:"width"`
 	Height       *int          `json:"height"`
@@ -227,9 +236,16 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		tagID = &parsedTagID
 	}
 
-	limit, cursor, err := parsePaginationParams(c)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+	var (
+		limit  int
+		cursor *usecase.ImageCursor
+		err    error
+	)
+	if folderID == nil {
+		limit, cursor, err = parsePaginationParams(c)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+		}
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
@@ -290,7 +306,7 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		Description:  item.Description,
 		MIMEType:     item.MIMEType,
 		SourceURL:    item.SourceURL,
-		FolderID:     item.FolderID,
+		FolderIDs:    item.FolderIDs,
 		ThumbnailURL: item.ThumbnailURL,
 		Width:        item.Width,
 		Height:       item.Height,
@@ -448,18 +464,20 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		Description: req.Description,
 	}
 
-	if len(req.FolderID) > 0 {
-		if string(req.FolderID) == "null" {
-			params.FolderID = new(*uuid.UUID)
-		} else {
-			var folderID uuid.UUID
-			if err := json.Unmarshal(req.FolderID, &folderID); err != nil {
-				return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_id")
-			}
-			inner := folderID
-			outer := &inner
-			params.FolderID = &outer
+	if len(req.FolderIDs) > 0 && string(req.FolderIDs) != "null" {
+		var folderIDsRaw []string
+		if err := json.Unmarshal(req.FolderIDs, &folderIDsRaw); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_ids")
 		}
+		folderIDs := make([]uuid.UUID, 0, len(folderIDsRaw))
+		for _, raw := range folderIDsRaw {
+			parsed, err := uuid.Parse(raw)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
+			}
+			folderIDs = append(folderIDs, parsed)
+		}
+		params.FolderIDs = &folderIDs
 	}
 
 	if len(req.SourceURL) > 0 {
@@ -507,6 +525,101 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 	return c.JSON(http.StatusOK, toImageResponse(*item))
 }
 
+func (h *ImageHandler) MoveImageFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.MoveImageFolder")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req moveImageFolderRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if len(req.FromFolderID) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "from_folder_id is required")
+	}
+	if len(req.ToFolderID) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "to_folder_id is required")
+	}
+
+	parseFolderID := func(raw json.RawMessage, field string) (*uuid.UUID, error) {
+		if string(raw) == "null" {
+			return nil, nil
+		}
+		var folderID uuid.UUID
+		if err := json.Unmarshal(raw, &folderID); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid "+field)
+		}
+		return &folderID, nil
+	}
+
+	fromFolderID, err := parseFolderID(req.FromFolderID, "from_folder_id")
+	if err != nil {
+		return err
+	}
+	toFolderID, err := parseFolderID(req.ToFolderID, "to_folder_id")
+	if err != nil {
+		return err
+	}
+
+	item, err := h.imageUsecase.MoveImageFolder(ctx, imageID, userID, fromFolderID, toFolderID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to move image folder")
+	}
+
+	return c.JSON(http.StatusOK, toImageResponse(*item))
+}
+
+func (h *ImageHandler) UpdateImagePosition(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateImagePosition")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	var req updateImagePositionRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if req.FolderID == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "folder_id is required")
+	}
+	if req.Position == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "position is required")
+	}
+
+	if err := h.imageUsecase.UpdateImagePosition(ctx, imageID, userID, *req.FolderID, req.Position); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found or not in specified folder")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update image position")
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
 func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCursor, err error) {
 	limit = 50
 	if limitParam := c.QueryParam("limit"); limitParam != "" {
@@ -528,14 +641,6 @@ func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCurs
 	return limit, cursor, nil
 }
 
-func firstFolderID(imageFolders []domain.ImageFolder) *uuid.UUID {
-	if len(imageFolders) == 0 {
-		return nil
-	}
-	id := imageFolders[0].FolderID
-	return &id
-}
-
 func toImageResponse(item usecase.ImageItem) imageResponse {
 	tags := make([]tagResponse, 0, len(item.Image.Tags))
 	for _, tag := range item.Image.Tags {
@@ -544,13 +649,17 @@ func toImageResponse(item usecase.ImageItem) imageResponse {
 			Name: tag.Name,
 		})
 	}
+	folderIDs := make([]uuid.UUID, 0, len(item.Image.ImageFolders))
+	for _, f := range item.Image.ImageFolders {
+		folderIDs = append(folderIDs, f.FolderID)
+	}
 	return imageResponse{
 		ID:           item.Image.ID,
 		Title:        item.Image.Title,
 		Description:  item.Image.Description,
 		MIMEType:     item.Image.MIMEType,
 		SourceURL:    item.Image.SourceURL,
-		FolderID:     firstFolderID(item.Image.ImageFolders),
+		FolderIDs:    folderIDs,
 		ThumbnailURL: item.ThumbnailURL,
 		Width:        item.Image.Width,
 		Height:       item.Image.Height,

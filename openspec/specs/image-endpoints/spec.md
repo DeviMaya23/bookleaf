@@ -4,17 +4,18 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/` th
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows so the caller can detect next-page existence; `folderID` nil means no folder filter; `tagID` nil means no tag filter; `unfiled` true limits to images with no entry in `image_folders`; images are returned with their `Tags` and `ImageFolders` preloaded; no `is_uploaded` filter is needed as every row in `images` is committed
+- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — when `folderID` is non-nil: returns all non-deleted images for that folder ordered by `image_folders.position ASC`; `cursor` and `limit` are ignored; images are returned with `Tags` and `ImageFolders` preloaded. When `folderID` is nil: returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` applies a keyset filter; `unfiled` true limits to images with no entry in `image_folders`; `tagID` non-nil filters by tag.
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` and `ImageFolders` preloaded
 - `GetDeletedByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns soft-deleted images only; result has `ImageFolders` preloaded
 - `UpdateThumbnailPath(ctx, id uuid.UUID, thumbnailPath string) error` — updates `thumbnail_path`; no ownership check (called internally by goroutine)
 - `UpdateAILabels(ctx, id uuid.UUID, labels json.RawMessage) error`
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied scalar fields for the image owned by `userID`; `folder_id` is NOT a valid key in the map (folder assignment is handled by `SetImageFolder`); result has `Tags` and `ImageFolders` preloaded
 - `SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error` — see `image-folders` spec for full behaviour
+- `UpdateImageFolderPosition(ctx context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error` — see `image-folders` spec for full behaviour
 - `SoftDelete(ctx, id uuid.UUID, userID string) error`
 - `Restore(ctx, id uuid.UUID, userID string) error`
 - `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(deleted_at ASC, id ASC)`; fetches `limit + 1` rows; `cursor` nil means first page
-- `CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)` — counts non-deleted images with a row in `image_folders` for the given folder; implemented as `Model(&domain.Image{}) + JOIN image_folders WHERE image_folders.folder_id = ?`
+- `CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)` — counts non-deleted images with a row in `image_folders` for the given folder
 - `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)`
 - `HardDelete(ctx context.Context, id uuid.UUID, userID string) error`
 
@@ -25,16 +26,16 @@ Methods:
 - **WHEN** the Go package is compiled
 - **THEN** `imageRepository` in `internal/repository/` implements `usecase.ImageRepository` without compilation errors
 
+#### Scenario: List orders by position for folder views
+
+- **WHEN** `List` is called with a non-nil `folderID`
+- **THEN** results are ordered by `image_folders.position ASC`
+- **AND** cursor and limit parameters have no effect
+
 #### Scenario: List preloads tags and image folders for each image
 
 - **WHEN** `List` is called and images have associated tags and folder memberships
 - **THEN** each returned `domain.Image` has its `Tags` and `ImageFolders` slices populated
-
-#### Scenario: List filters by folder via join
-
-- **WHEN** `List` is called with a non-nil `folderID`
-- **THEN** only images with a row in `image_folders` for that folder are returned
-- **AND** the query uses `Model(&domain.Image{})` as the base so soft-deleted images are excluded automatically
 
 #### Scenario: List unfiled uses left join
 
@@ -69,6 +70,7 @@ Routes:
 - `POST /images/:id/accept-suggestion`
 - `GET /images`
 - `GET /images/:id`
+- `PATCH /images/:id/position`
 - `PATCH /images/:id`
 - `DELETE /images/:id`
 - `GET /images/trash`
@@ -79,6 +81,19 @@ Routes:
 - **WHEN** the server starts
 - **THEN** all `/images` routes require a valid Kinde Bearer token
 - **AND** unauthenticated requests return `401 Unauthorized`
+
+---
+
+### Requirement: PATCH /images/:id/position Route
+
+The system SHALL register `PATCH /images/:id/position` on the protected router, handled by `imageHandler.UpdateImagePosition`.
+
+This route SHALL be registered before `PATCH /images/:id` to avoid Echo treating `position` as an `:id` segment.
+
+#### Scenario: Route is reachable
+
+- **WHEN** `PATCH /images/:id/position` is called with a valid token and body
+- **THEN** the request is routed to `UpdateImagePosition` handler (not `UpdateImage`)
 
 ---
 
@@ -290,48 +305,63 @@ The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pa
   "description": "string|null",
   "mime_type": "string",
   "source_url": "string|null",
-  "folder_id": "uuid|null",
+  "folder_ids": ["uuid"],
   "thumbnail_url": "string|null",
   "width": "integer|null",
   "height": "integer|null",
   "file_size": "integer|null",
-  "created_at": "timestamp",
-  "updated_at": "timestamp"
+  "tags": [{ "id": "uuid", "name": "string" }],
+  "created_at": "RFC3339",
+  "updated_at": "RFC3339"
 }
 ```
 
-`GET /images/:id` response (`imageDetailResponse`) includes a `thumbnail_url` field sourced from `ImageDetail.ThumbnailURL`, also a presigned GET URL (24h TTL).
+- `folder_ids` SHALL be a non-null array of UUIDs — empty (`[]`) when the image has no folder memberships, populated with all folder IDs the image belongs to otherwise
+- `position` and `folder_id` (singular) fields are removed from the response shape
+- `GET /images/:id` (`imageDetailResponse`) follows the same shape and includes an additional `image_url` field
+
+The `toImageResponse` function in `internal/handler/image.go` SHALL be updated to populate `FolderIDs []uuid.UUID` by iterating `item.Image.ImageFolders`. The `firstFolderID` and `firstFolderPosition` helpers SHALL be removed.
 
 #### Scenario: Image list response returns paginated envelope
 
 - **WHEN** an authenticated `GET /images` request is made
 - **THEN** the response is an object with an `images` array and a `next_cursor` field
-- **AND** each item in `images` includes all existing fields (`description`, `width`, `height`, `file_size`, etc.)
+- **AND** each item in `images` includes a `folder_ids` array (never null)
 
-#### Scenario: Image detail response is unchanged
+#### Scenario: Image detail response includes folder_ids array
 
 - **WHEN** an authenticated `GET /images/:id` request is made for an existing image
-- **THEN** the response shape is identical to the pre-pagination `imageDetailResponse`
+- **THEN** the response includes a `folder_ids` field containing all folder UUIDs the image belongs to
+
+#### Scenario: folder_ids is empty for an unfiled image
+
+- **WHEN** `GET /images/:id` is called for an image with no folder memberships
+- **THEN** `folder_ids` in the response is an empty array `[]`
+
+#### Scenario: folder_ids contains all memberships for a multi-folder image
+
+- **WHEN** `GET /images/:id` is called for an image belonging to two folders
+- **THEN** `folder_ids` contains both folder UUIDs
 
 ---
 
-### Requirement: GET /images and GET /images/:id — folder_id in Response
+### Requirement: GET /images and GET /images/:id — folder_ids in Response
 
-The `folder_id` field in `imageResponse` and `imageDetailResponse` SHALL be populated from the image's `ImageFolders` slice. If `ImageFolders` is non-empty, `folder_id` SHALL be the `FolderID` of the first entry. If `ImageFolders` is empty, `folder_id` SHALL be `null`.
+The `folder_ids` field in `imageResponse` and `imageDetailResponse` SHALL be populated from the image's `ImageFolders` slice by iterating all entries and collecting their `FolderID` values. The field SHALL never be null — an image with no folder memberships returns an empty array `[]`.
 
-`toImageResponse` SHALL read `item.Image.ImageFolders[0].FolderID` when the slice is non-empty.
+The `folder_id` (singular) and `position` fields are removed from `imageResponse` and `imageDetailResponse`. The `ImageRepository` interface, `toImageResponse` helper, and all related handler structs SHALL reflect this change.
 
-The response field name, type, and nullability are unchanged from the current API contract.
+`toImageResponse` SHALL populate `FolderIDs []uuid.UUID` from `item.Image.ImageFolders` (all entries, not just index 0). The `firstFolderID` and `firstFolderPosition` helpers are removed.
 
-#### Scenario: Image response includes folder_id from ImageFolders
+#### Scenario: Image response includes folder_ids from ImageFolders
 
-- **WHEN** `GET /images` or `GET /images/:id` is called for an image with a folder membership
-- **THEN** the response includes a non-null `folder_id` matching the folder the image is in
+- **WHEN** an image has one or more folder memberships
+- **THEN** the response includes a non-empty `folder_ids` array containing all folder UUIDs
 
-#### Scenario: Image response has null folder_id for unfiled image
+#### Scenario: Image response has empty folder_ids for unfiled image
 
-- **WHEN** `GET /images` or `GET /images/:id` is called for an image with no folder membership
-- **THEN** `folder_id` in the response is `null`
+- **WHEN** an image has no folder membership
+- **THEN** `folder_ids` in the response is `[]`
 
 ---
 
@@ -496,6 +526,7 @@ type imageResponse struct {
     MIMEType     string        `json:"mime_type"`
     SourceURL    *string       `json:"source_url"`
     FolderID     *uuid.UUID    `json:"folder_id"`
+    Position     *string       `json:"position"`
     ThumbnailURL *string       `json:"thumbnail_url"`
     Width        *int          `json:"width"`
     Height       *int          `json:"height"`

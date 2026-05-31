@@ -1,4 +1,4 @@
-import { updateImage, initiateUpload, putToR2, completeUpload, getImage } from './images'
+import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
 import { moveFolder } from './folders'
 import { getFolderSubtreeIds } from '@/components/FolderSidebar'
 import type { Folder } from './folders'
@@ -41,12 +41,12 @@ export async function handleImageDrop(
 ): Promise<'moved' | 'noop'> {
   if (drop.type === 'folder') {
     if (drag.currentFolderId === drop.folderId) return 'noop'
-    await updateImage(getToken, drag.imageId, { folder_id: drop.folderId })
+    await moveImageFolder(getToken, drag.imageId, drag.currentFolderId, drop.folderId)
     return 'moved'
   }
   if (drop.type === 'unsorted') {
     if (drag.currentFolderId === null) return 'noop'
-    await updateImage(getToken, drag.imageId, { folder_id: null })
+    await moveImageFolder(getToken, drag.imageId, drag.currentFolderId, null)
     return 'moved'
   }
   return 'noop'

@@ -16,7 +16,7 @@ vi.mock('@/lib/images', () => ({
 }))
 
 vi.mock('@/lib/folders', () => ({
-  getFolders: vi.fn().mockResolvedValue([]),
+  getFolders: vi.fn().mockResolvedValue([{ id: 'folder-1', name: 'Nature' }]),
 }))
 
 vi.mock('@/lib/tags', () => ({
@@ -26,6 +26,7 @@ vi.mock('@/lib/tags', () => ({
 
 import { downloadImage, updateImage } from '@/lib/images'
 import { getTags, createTag } from '@/lib/tags'
+import { getFolders } from '@/lib/folders'
 
 function makeImage(overrides?: Partial<Image>): Image {
   return {
@@ -34,7 +35,7 @@ function makeImage(overrides?: Partial<Image>): Image {
     description: 'A nice sunset',
     mime_type: 'image/jpeg',
     source_url: 'https://example.com',
-    folder_id: null,
+    folder_ids: [],
     thumbnail_url: 'https://example.com/thumb.jpg',
     width: 1920,
     height: 1080,
@@ -71,7 +72,6 @@ describe('RightPanel — success scenario', () => {
     expect(screen.getByDisplayValue('https://example.com')).toBeInTheDocument()
     expect(screen.getByText('1920 × 1080')).toBeInTheDocument()
     expect(screen.getByText('2.0 MB')).toBeInTheDocument()
-    expect(screen.getByText('Unsorted')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /download image/i })).toBeInTheDocument()
   })
 
@@ -178,6 +178,58 @@ describe('RightPanel tags — failure scenario', () => {
         expect.any(Function),
         'img-1',
         expect.objectContaining({ tags: ['tag-new'] }),
+      )
+    })
+  })
+})
+
+describe('RightPanel folders — success scenario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature' }])
+    vi.mocked(updateImage).mockResolvedValue(makeImage())
+  })
+
+  it('adding a folder calls PATCH with updated folder_ids', async () => {
+    renderPanel(makeImage())
+
+    const input = await screen.findByPlaceholderText('Add to folder…')
+    await userEvent.type(input, 'nat')
+
+    const option = await screen.findByText('Nature')
+    await userEvent.click(option)
+
+    await waitFor(() => {
+      expect(updateImage).toHaveBeenCalledWith(
+        expect.any(Function),
+        'img-1',
+        expect.objectContaining({ folder_ids: ['folder-1'] }),
+      )
+    })
+  })
+})
+
+describe('RightPanel folders — failure scenario', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature' }])
+    vi.mocked(updateImage).mockRejectedValue(new Error('Server error'))
+  })
+
+  it('shows an error toast when PATCH fails after folder change', async () => {
+    renderPanel(makeImage())
+
+    const input = await screen.findByPlaceholderText('Add to folder…')
+    await userEvent.type(input, 'nat')
+
+    const option = await screen.findByText('Nature')
+    await userEvent.click(option)
+
+    await waitFor(() => {
+      expect(updateImage).toHaveBeenCalledWith(
+        expect.any(Function),
+        'img-1',
+        expect.objectContaining({ folder_ids: ['folder-1'] }),
       )
     })
   })

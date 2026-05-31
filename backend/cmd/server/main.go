@@ -140,6 +140,8 @@ func main() {
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
 	protected.GET("/images/:id/download", imageHandler.DownloadImage)
+	protected.POST("/images/:id/move-folder", imageHandler.MoveImageFolder)
+	protected.PATCH("/images/:id/position", imageHandler.UpdateImagePosition)
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)

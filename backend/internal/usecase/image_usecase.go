@@ -44,7 +44,7 @@ type UploadInitResult struct {
 
 type UpdateImageParams struct {
 	Title       *string
-	FolderID    **uuid.UUID
+	FolderIDs   *[]uuid.UUID
 	Description *string
 	SourceURL   **string
 	Tags        *[]uuid.UUID
@@ -75,6 +75,8 @@ type ImageUsecase interface {
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
 	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
+	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*ImageItem, error)
+	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
@@ -490,6 +492,21 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
 
+	// Folder views return all images ordered by position; cursor and limit are ignored.
+	if params.FolderID != nil {
+		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, 0)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		items := make([]ImageItem, len(rawImages))
+		for i, img := range rawImages {
+			items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}
+		}
+		return &ListImagesResult{Images: items, NextCursor: nil}, nil
+	}
+
 	limit := params.Limit
 	if limit <= 0 {
 		limit = 50
@@ -497,7 +514,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.TagID, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -644,8 +661,7 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImage")
 	defer span.End()
 
-	existing, err := u.imageRepo.GetByID(ctx, id, userID)
-	if err != nil {
+	if _, err := u.imageRepo.GetByID(ctx, id, userID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
@@ -683,9 +699,8 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 		}
 	}
 
-	if params.FolderID != nil {
-		newFolderID := *params.FolderID
-		if err := u.imageRepo.SetImageFolder(ctx, id, newFolderID); err != nil {
+	if params.FolderIDs != nil {
+		if err := u.imageRepo.SyncImageFolders(ctx, id, *params.FolderIDs); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, err
@@ -697,28 +712,73 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 			return nil, err
 		}
 
-		var oldFolderID *uuid.UUID
-		if len(existing.ImageFolders) > 0 {
-			oldFolderID = &existing.ImageFolders[0].FolderID
+		folderIDs := make([]string, 0, len(*params.FolderIDs))
+		for _, folderID := range *params.FolderIDs {
+			folderIDs = append(folderIDs, folderID.String())
 		}
-		folderChanged := (newFolderID == nil) != (oldFolderID == nil) ||
-			(newFolderID != nil && oldFolderID != nil && *newFolderID != *oldFolderID)
-		if folderChanged {
-			var folderIDField interface{} = nil
-			if newFolderID != nil {
-				folderIDField = newFolderID.String()
-			}
-			observability.LoggerFromContext(ctx, u.tel.Logger).Info("image mutated",
-				zap.String("event", "image.mutated"),
-				zap.String("image_id", id.String()),
-				zap.String("user_id", userID),
-				zap.String("operation", "moved_to_folder"),
-				zap.Any("folder_id", folderIDField),
-			)
-		}
+		observability.LoggerFromContext(ctx, u.tel.Logger).Info("image mutated",
+			zap.String("event", "image.mutated"),
+			zap.String("image_id", id.String()),
+			zap.String("user_id", userID),
+			zap.String("operation", "synced_folders"),
+			zap.Strings("folder_ids", folderIDs),
+		)
 	}
 
 	return &ImageItem{Image: updated, ThumbnailURL: u.thumbnailURL(ctx, updated.ThumbnailPath)}, nil
+}
+
+func (u *imageUsecase) MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*ImageItem, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.MoveImageFolder")
+	defer span.End()
+
+	if _, err := u.imageRepo.GetByID(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if (fromFolderID == nil && toFolderID == nil) ||
+		(fromFolderID != nil && toFolderID != nil && *fromFolderID == *toFolderID) {
+		img, err := u.imageRepo.GetByID(ctx, imageID, userID)
+		if err != nil {
+			return nil, err
+		}
+		return &ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}, nil
+	}
+
+	if err := u.imageRepo.MoveImageFolder(ctx, imageID, fromFolderID, toFolderID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	img, err := u.imageRepo.GetByID(ctx, imageID, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	return &ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}, nil
+}
+
+func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImagePosition")
+	defer span.End()
+
+	if _, err := u.imageRepo.GetByID(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	if err := u.imageRepo.UpdateImageFolderPosition(ctx, imageID, folderID, position); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func downloadFileExtension(mimeType string) string {

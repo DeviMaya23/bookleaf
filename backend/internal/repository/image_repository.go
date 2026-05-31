@@ -10,6 +10,7 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"roci.dev/fracdex"
 )
 
 type imageRepository struct {
@@ -33,6 +34,23 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
+	if folderID != nil {
+		// Folder view: order by position, return all (no cursor/limit).
+		query := r.db.WithContext(ctx).
+			Where("images.user_id = ?", userID).
+			Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", *folderID).
+			Order("image_folders.position ASC").
+			Preload("Tags").
+			Preload("ImageFolders")
+		if tagID != nil {
+			query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
+		}
+		if err := query.Find(&images).Error; err != nil {
+			return nil, fmt.Errorf("list images: %w", err)
+		}
+		return images, nil
+	}
+
 	query := r.db.WithContext(ctx).
 		Where("images.user_id = ?", userID).
 		Order("images.created_at DESC, images.id DESC").
@@ -44,8 +62,6 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 		query = query.
 			Joins("LEFT JOIN image_folders ON image_folders.image_id = images.id").
 			Where("image_folders.image_id IS NULL")
-	} else if folderID != nil {
-		query = query.Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", *folderID)
 	}
 
 	if tagID != nil {
@@ -73,25 +89,141 @@ func (r *imageRepository) SetImageFolder(ctx context.Context, imageID uuid.UUID,
 		return nil
 	}
 
-	var position string
-	var maxPos int
+	var maxPos string
 	r.db.WithContext(ctx).
 		Model(&domain.ImageFolder{}).
 		Where("folder_id = ?", *folderID).
-		Select("COALESCE(MAX(position::int), 0)").
+		Select("COALESCE(MAX(position), '')").
 		Scan(&maxPos)
-	position = fmt.Sprintf("%d", maxPos+1)
+	position, err := fracdex.KeyBetween(maxPos, "")
+	if err != nil {
+		return fmt.Errorf("generate position key: %w", err)
+	}
 
 	row := domain.ImageFolder{
 		ImageID:  imageID,
 		FolderID: *folderID,
 		Position: position,
 	}
-	if err := r.db.WithContext(ctx).
-		Where(domain.ImageFolder{ImageID: imageID, FolderID: *folderID}).
-		Assign(domain.ImageFolder{Position: position}).
-		FirstOrCreate(&row).Error; err != nil {
-		return fmt.Errorf("upsert image folder: %w", err)
+	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
+		return fmt.Errorf("insert image folder: %w", err)
+	}
+	return nil
+}
+
+func (r *imageRepository) SyncImageFolders(ctx context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var current []domain.ImageFolder
+		if err := tx.Where("image_id = ?", imageID).Find(&current).Error; err != nil {
+			return fmt.Errorf("list image folders: %w", err)
+		}
+
+		currentSet := make(map[uuid.UUID]struct{}, len(current))
+		for _, row := range current {
+			currentSet[row.FolderID] = struct{}{}
+		}
+
+		desiredSet := make(map[uuid.UUID]struct{}, len(folderIDs))
+		toAdd := make([]uuid.UUID, 0)
+		for _, folderID := range folderIDs {
+			if _, seen := desiredSet[folderID]; seen {
+				continue
+			}
+			desiredSet[folderID] = struct{}{}
+			if _, exists := currentSet[folderID]; !exists {
+				toAdd = append(toAdd, folderID)
+			}
+		}
+
+		toDelete := make([]uuid.UUID, 0)
+		for folderID := range currentSet {
+			if _, keep := desiredSet[folderID]; !keep {
+				toDelete = append(toDelete, folderID)
+			}
+		}
+
+		if len(toDelete) > 0 {
+			if err := tx.
+				Where("image_id = ? AND folder_id IN ?", imageID, toDelete).
+				Delete(&domain.ImageFolder{}).Error; err != nil {
+				return fmt.Errorf("delete image folders: %w", err)
+			}
+		}
+
+		for _, folderID := range toAdd {
+			var maxPos string
+			if err := tx.Model(&domain.ImageFolder{}).
+				Where("folder_id = ?", folderID).
+				Select("COALESCE(MAX(position), '')").
+				Scan(&maxPos).Error; err != nil {
+				return fmt.Errorf("select image folder position: %w", err)
+			}
+			position, err := fracdex.KeyBetween(maxPos, "")
+			if err != nil {
+				return fmt.Errorf("generate position key: %w", err)
+			}
+			row := domain.ImageFolder{
+				ImageID:  imageID,
+				FolderID: folderID,
+				Position: position,
+			}
+			if err := tx.Create(&row).Error; err != nil {
+				return fmt.Errorf("insert image folder: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *imageRepository) MoveImageFolder(ctx context.Context, imageID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if fromFolderID != nil {
+			if err := tx.
+				Where("image_id = ? AND folder_id = ?", imageID, *fromFolderID).
+				Delete(&domain.ImageFolder{}).Error; err != nil {
+				return fmt.Errorf("delete image folder: %w", err)
+			}
+		}
+
+		if toFolderID != nil {
+			var maxPos string
+			if err := tx.Model(&domain.ImageFolder{}).
+				Where("folder_id = ?", *toFolderID).
+				Select("COALESCE(MAX(position), '')").
+				Scan(&maxPos).Error; err != nil {
+				return fmt.Errorf("select image folder position: %w", err)
+			}
+			position, err := fracdex.KeyBetween(maxPos, "")
+			if err != nil {
+				return fmt.Errorf("generate position key: %w", err)
+			}
+			row := domain.ImageFolder{
+				ImageID:  imageID,
+				FolderID: *toFolderID,
+				Position: position,
+			}
+			if err := tx.
+				Where(domain.ImageFolder{ImageID: imageID, FolderID: *toFolderID}).
+				FirstOrCreate(&row).Error; err != nil {
+				return fmt.Errorf("insert image folder: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *imageRepository) UpdateImageFolderPosition(ctx context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.ImageFolder{}).
+		Where("image_id = ? AND folder_id = ?", imageID, folderID).
+		Update("position", position)
+	if result.Error != nil {
+		return fmt.Errorf("update image folder position: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update image folder position: %w", gorm.ErrRecordNotFound)
 	}
 	return nil
 }
