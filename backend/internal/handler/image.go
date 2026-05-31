@@ -52,6 +52,7 @@ type imageResponse struct {
 	MIMEType     string        `json:"mime_type"`
 	SourceURL    *string       `json:"source_url"`
 	FolderID     *uuid.UUID    `json:"folder_id"`
+	Position     *string       `json:"position"`
 	ThumbnailURL *string       `json:"thumbnail_url"`
 	Width        *int          `json:"width"`
 	Height       *int          `json:"height"`
@@ -59,6 +60,11 @@ type imageResponse struct {
 	Tags         []tagResponse `json:"tags"`
 	CreatedAt    time.Time     `json:"created_at"`
 	UpdatedAt    time.Time     `json:"updated_at"`
+}
+
+type updateImagePositionRequest struct {
+	FolderID *uuid.UUID `json:"folder_id"`
+	Position string     `json:"position"`
 }
 
 type imageDetailResponse struct {
@@ -227,9 +233,16 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		tagID = &parsedTagID
 	}
 
-	limit, cursor, err := parsePaginationParams(c)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+	var (
+		limit  int
+		cursor *usecase.ImageCursor
+		err    error
+	)
+	if folderID == nil {
+		limit, cursor, err = parsePaginationParams(c)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
+		}
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
@@ -507,6 +520,43 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 	return c.JSON(http.StatusOK, toImageResponse(*item))
 }
 
+func (h *ImageHandler) UpdateImagePosition(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateImagePosition")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	var req updateImagePositionRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if req.FolderID == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "folder_id is required")
+	}
+	if req.Position == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "position is required")
+	}
+
+	if err := h.imageUsecase.UpdateImagePosition(ctx, imageID, userID, *req.FolderID, req.Position); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found or not in specified folder")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update image position")
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
 func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCursor, err error) {
 	limit = 50
 	if limitParam := c.QueryParam("limit"); limitParam != "" {
@@ -536,6 +586,14 @@ func firstFolderID(imageFolders []domain.ImageFolder) *uuid.UUID {
 	return &id
 }
 
+func firstFolderPosition(imageFolders []domain.ImageFolder) *string {
+	if len(imageFolders) == 0 {
+		return nil
+	}
+	p := imageFolders[0].Position
+	return &p
+}
+
 func toImageResponse(item usecase.ImageItem) imageResponse {
 	tags := make([]tagResponse, 0, len(item.Image.Tags))
 	for _, tag := range item.Image.Tags {
@@ -551,6 +609,7 @@ func toImageResponse(item usecase.ImageItem) imageResponse {
 		MIMEType:     item.Image.MIMEType,
 		SourceURL:    item.Image.SourceURL,
 		FolderID:     firstFolderID(item.Image.ImageFolders),
+		Position:     firstFolderPosition(item.Image.ImageFolders),
 		ThumbnailURL: item.ThumbnailURL,
 		Width:        item.Image.Width,
 		Height:       item.Image.Height,

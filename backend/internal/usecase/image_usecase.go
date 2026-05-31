@@ -75,6 +75,7 @@ type ImageUsecase interface {
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
 	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
+	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
@@ -490,6 +491,21 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
 
+	// Folder views return all images ordered by position; cursor and limit are ignored.
+	if params.FolderID != nil {
+		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, 0)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, err
+		}
+		items := make([]ImageItem, len(rawImages))
+		for i, img := range rawImages {
+			items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}
+		}
+		return &ListImagesResult{Images: items, NextCursor: nil}, nil
+	}
+
 	limit := params.Limit
 	if limit <= 0 {
 		limit = 50
@@ -497,7 +513,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, params.Unfiled, params.TagID, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -719,6 +735,25 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	}
 
 	return &ImageItem{Image: updated, ThumbnailURL: u.thumbnailURL(ctx, updated.ThumbnailPath)}, nil
+}
+
+func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImagePosition")
+	defer span.End()
+
+	if _, err := u.imageRepo.GetByID(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	if err := u.imageRepo.UpdateImageFolderPosition(ctx, imageID, folderID, position); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func downloadFileExtension(mimeType string) string {

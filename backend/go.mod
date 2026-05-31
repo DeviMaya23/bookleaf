@@ -147,4 +147,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/clickhouse v0.7.0 // indirect
 	gorm.io/driver/mysql v1.5.7 // indirect
+	roci.dev/fracdex v0.0.0-20241211175510-82d7df79e312 // indirect
 )

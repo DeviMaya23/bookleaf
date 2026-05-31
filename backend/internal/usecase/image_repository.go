@@ -25,6 +25,9 @@ type ImageRepository interface {
 	Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)
 	// SetImageFolder assigns or removes a folder membership. folderID nil removes the row; non-nil upserts it.
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
+	// UpdateImageFolderPosition updates the position of an image within a specific folder.
+	// Returns ErrRecordNotFound if no row exists for (imageID, folderID).
+	UpdateImageFolderPosition(ctx context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	Restore(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)

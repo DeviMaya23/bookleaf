@@ -100,6 +100,10 @@ func (m *mockFolderImageRepository) SetImageFolder(_ context.Context, _ uuid.UUI
 	return m.err
 }
 
+func (m *mockFolderImageRepository) UpdateImageFolderPosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
+	return m.err
+}
+
 func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) FolderUsecase {
 	return NewFolderUsecase(folderRepo, imageRepo, observability.NewTelemetry(nil, nil, nil))
 }
