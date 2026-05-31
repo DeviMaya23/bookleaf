@@ -1,0 +1,27 @@
+meta {
+  name: Move Image to Folder
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/images/:id/move-folder
+  body: json
+  auth: inherit
+}
+
+params:path {
+  id: a215aa2e-05b1-4937-a255-156305886338
+}
+
+body:json {
+  {
+    "from_folder_id": "f3e20650-125d-4e89-b9d0-12a67bb4a8aa",
+    "to_folder_id": "7ded2961-e769-495a-820d-05a1bffe3248"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

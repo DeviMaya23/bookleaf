@@ -30,12 +30,18 @@ type mockImageUsecase struct {
 	listTrashedResult    *usecase.ListTrashedResult
 	err                  error
 	acceptSuggestionErr  error
+	moveImageFolderErr   error
 	lastAcceptImageID    uuid.UUID
 	lastAcceptUserID     string
 	lastSuggestedFolder  string
 	lastDescription      *string
 	lastUpdateParams     usecase.UpdateImageParams
 	lastListImagesParams usecase.ListImagesParams
+	lastMoveImageID      uuid.UUID
+	lastMoveUserID       string
+	lastMoveFromFolderID *uuid.UUID
+	lastMoveToFolderID   *uuid.UUID
+	moveImageFolderCalls int
 }
 
 func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -96,6 +102,18 @@ func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*u
 
 func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*usecase.ImageItem, error) {
 	m.lastUpdateParams = params
+	return m.imageItem, m.err
+}
+
+func (m *mockImageUsecase) MoveImageFolder(_ context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error) {
+	m.moveImageFolderCalls++
+	m.lastMoveImageID = imageID
+	m.lastMoveUserID = userID
+	m.lastMoveFromFolderID = fromFolderID
+	m.lastMoveToFolderID = toFolderID
+	if m.moveImageFolderErr != nil {
+		return nil, m.moveImageFolderErr
+	}
 	return m.imageItem, m.err
 }
 
@@ -795,6 +813,8 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 	title := "updated title"
 	tagIDOne := uuid.New()
 	tagIDTwo := uuid.New()
+	folderIDOne := uuid.New()
+	folderIDTwo := uuid.New()
 
 	tests := []struct {
 		name          string
@@ -822,6 +842,14 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 		{
 			name: "updates tags and returns 200",
 			body: fmt.Sprintf(`{"tags":["%s","%s"]}`, tagIDOne.String(), tagIDTwo.String()),
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "updates folder_ids and returns 200",
+			body: fmt.Sprintf(`{"folder_ids":["%s","%s"]}`, folderIDOne.String(), folderIDTwo.String()),
 			mockUC: &mockImageUsecase{
 				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
 			},
@@ -885,10 +913,77 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 				assert.Equal(t, tagIDOne, (*tt.mockUC.lastUpdateParams.Tags)[0])
 				assert.Equal(t, tagIDTwo, (*tt.mockUC.lastUpdateParams.Tags)[1])
 			}
+			if tt.name == "updates folder_ids and returns 200" {
+				require.NotNil(t, tt.mockUC.lastUpdateParams.FolderIDs)
+				require.Len(t, *tt.mockUC.lastUpdateParams.FolderIDs, 2)
+				assert.Equal(t, folderIDOne, (*tt.mockUC.lastUpdateParams.FolderIDs)[0])
+				assert.Equal(t, folderIDTwo, (*tt.mockUC.lastUpdateParams.FolderIDs)[1])
+			}
 			if tt.name == "clears tags with empty array" {
 				require.NotNil(t, tt.mockUC.lastUpdateParams.Tags)
 				assert.Len(t, *tt.mockUC.lastUpdateParams.Tags, 0)
 			}
+		})
+	}
+}
+
+func TestImageHandler_MoveImageFolder(t *testing.T) {
+	imageID := uuid.New()
+	fromFolderID := uuid.New()
+	toFolderID := uuid.New()
+
+	tests := []struct {
+		name          string
+		body          string
+		mockUC        *mockImageUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name: "moves image folder and returns 200",
+			body: fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()),
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "title"}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "no-op when from and to folder are the same returns 200",
+			body: fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), fromFolderID.String()),
+			mockUC: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "title"}},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:          "returns 404 when image not found",
+			body:          fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()),
+			mockUC:        &mockImageUsecase{moveImageFolderErr: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/move-folder", tt.body)
+			c.SetPath("/images/:id/move-folder")
+			c.SetParamNames("id")
+			c.SetParamValues(imageID.String())
+
+			err := h.MoveImageFolder(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, imageID.String(), resp["id"])
+			assert.Equal(t, 1, tt.mockUC.moveImageFolderCalls)
 		})
 	}
 }

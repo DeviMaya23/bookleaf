@@ -92,7 +92,7 @@ The system SHALL add a `SetImageFolder(ctx context.Context, imageID uuid.UUID, f
 
 Behaviour:
 - When `folderID` is `nil`: DELETE the row from `image_folders` where `image_id = imageID` (unfile the image). If no row exists, this is a no-op (not an error).
-- When `folderID` is non-nil: INSERT a row into `image_folders` with a computed position. If a row for `(imageID, folderID)` already exists, UPDATE its position. Position for a new row is computed using `fracdex.KeyBetween(maxPosition, "")` where `maxPosition` is the current maximum position value in that folder ordered lexicographically (empty string `""` if the folder is empty). The Go dependency `github.com/rocicorp/fracdex` is used for this computation.
+- When `folderID` is non-nil: INSERT a row into `image_folders` with a computed position. If a row for `(imageID, folderID)` already exists, leave it unchanged (position preserved — do not overwrite). Position for a new row is computed using `fracdex.KeyBetween(maxPosition, "")` where `maxPosition` is the current maximum position value in that folder ordered lexicographically (empty string `""` if the folder is empty). The Go dependency `github.com/rocicorp/fracdex` is used for this computation. Note: `SetImageFolder` is intended for image creation flows only; use `MoveImageFolder` for reassigning folder membership after creation.
 
 #### Scenario: SetImageFolder assigns a folder to an image
 
@@ -116,10 +116,10 @@ Behaviour:
 - **WHEN** `SetImageFolder` is called with `folderID == nil` for an image that has no row in `image_folders`
 - **THEN** no error is returned
 
-#### Scenario: SetImageFolder upserts if folder already assigned
+#### Scenario: SetImageFolder is a no-op if folder already assigned
 
 - **WHEN** `SetImageFolder` is called with a `folderID` that already has a row for that image
-- **THEN** the row is updated without error (no duplicate key violation)
+- **THEN** the existing row is returned without modification (no duplicate key violation, position unchanged)
 
 ---
 

@@ -18,15 +18,16 @@ import type { AppView } from '@/lib/view'
 interface ImageCardProps {
   image: Image
   isTrash: boolean
+  currentFolderId: string | null
   onAction: (image: Image) => void
   onSelect: (image: Image) => void
 }
 
-function ImageCard({ image, isTrash, onAction, onSelect }: ImageCardProps) {
+function ImageCard({ image, isTrash, currentFolderId, onAction, onSelect }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `image-${image.id}`,
     disabled: isTrash,
-    data: { type: 'image', imageId: image.id, currentFolderId: image.folder_id, thumbnailUrl: image.thumbnail_url },
+    data: { type: 'image', imageId: image.id, currentFolderId, thumbnailUrl: image.thumbnail_url },
   })
 
   return (
@@ -170,6 +171,7 @@ export default function ImageGrid({ view, onImageSelect }: ImageGridProps) {
             key={image.id}
             image={image}
             isTrash={isTrash}
+            currentFolderId={view.type === 'folder' ? view.id : null}
             onAction={handleAction}
             onSelect={onImageSelect}
           />

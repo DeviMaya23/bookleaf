@@ -26,9 +26,14 @@ type ImageHandler struct {
 type updateImageRequest struct {
 	Title       *string         `json:"title"`
 	Description *string         `json:"description"`
-	FolderID    json.RawMessage `json:"folder_id"`
+	FolderIDs   json.RawMessage `json:"folder_ids"`
 	SourceURL   json.RawMessage `json:"source_url"`
 	Tags        json.RawMessage `json:"tags"`
+}
+
+type moveImageFolderRequest struct {
+	FromFolderID json.RawMessage `json:"from_folder_id"`
+	ToFolderID   json.RawMessage `json:"to_folder_id"`
 }
 
 type initiateImageUploadRequest struct {
@@ -463,18 +468,20 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		Description: req.Description,
 	}
 
-	if len(req.FolderID) > 0 {
-		if string(req.FolderID) == "null" {
-			params.FolderID = new(*uuid.UUID)
-		} else {
-			var folderID uuid.UUID
-			if err := json.Unmarshal(req.FolderID, &folderID); err != nil {
-				return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_id")
-			}
-			inner := folderID
-			outer := &inner
-			params.FolderID = &outer
+	if len(req.FolderIDs) > 0 && string(req.FolderIDs) != "null" {
+		var folderIDsRaw []string
+		if err := json.Unmarshal(req.FolderIDs, &folderIDsRaw); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_ids")
 		}
+		folderIDs := make([]uuid.UUID, 0, len(folderIDsRaw))
+		for _, raw := range folderIDsRaw {
+			parsed, err := uuid.Parse(raw)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
+			}
+			folderIDs = append(folderIDs, parsed)
+		}
+		params.FolderIDs = &folderIDs
 	}
 
 	if len(req.SourceURL) > 0 {
@@ -517,6 +524,64 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update image")
+	}
+
+	return c.JSON(http.StatusOK, toImageResponse(*item))
+}
+
+func (h *ImageHandler) MoveImageFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.MoveImageFolder")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req moveImageFolderRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+	if len(req.FromFolderID) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "from_folder_id is required")
+	}
+	if len(req.ToFolderID) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "to_folder_id is required")
+	}
+
+	parseFolderID := func(raw json.RawMessage, field string) (*uuid.UUID, error) {
+		if string(raw) == "null" {
+			return nil, nil
+		}
+		var folderID uuid.UUID
+		if err := json.Unmarshal(raw, &folderID); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "invalid "+field)
+		}
+		return &folderID, nil
+	}
+
+	fromFolderID, err := parseFolderID(req.FromFolderID, "from_folder_id")
+	if err != nil {
+		return err
+	}
+	toFolderID, err := parseFolderID(req.ToFolderID, "to_folder_id")
+	if err != nil {
+		return err
+	}
+
+	item, err := h.imageUsecase.MoveImageFolder(ctx, imageID, userID, fromFolderID, toFolderID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to move image folder")
 	}
 
 	return c.JSON(http.StatusOK, toImageResponse(*item))

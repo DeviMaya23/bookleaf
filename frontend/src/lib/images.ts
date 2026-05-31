@@ -139,7 +139,7 @@ export interface UpdateImageParams {
   title?: string
   description?: string | null
   source_url?: string | null
-  folder_id?: string | null
+  folder_ids?: string[] | null
   tags?: string[]
 }
 
@@ -151,6 +151,20 @@ export async function updateImage(getToken: GetToken, id: string, params: Update
   })
   if (!res.ok) throw new Error('Failed to update image')
   return res.json()
+}
+
+export async function moveImageFolder(
+  getToken: GetToken,
+  imageId: string,
+  fromFolderId: string | null,
+  toFolderId: string | null,
+): Promise<void> {
+  const res = await apiFetch(`/images/${imageId}/move-folder`, getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from_folder_id: fromFolderId, to_folder_id: toFolderId }),
+  })
+  if (!res.ok) throw new Error('Failed to move image folder')
 }
 
 export async function downloadImage(getToken: GetToken, id: string): Promise<string> {

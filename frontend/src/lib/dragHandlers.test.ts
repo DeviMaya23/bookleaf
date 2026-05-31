@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 vi.mock('./images', () => ({
-  updateImage: vi.fn(),
+  moveImageFolder: vi.fn(),
   initiateUpload: vi.fn(),
   putToR2: vi.fn(),
   completeUpload: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock('@/components/FolderSidebar', () => ({
 }))
 
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
-import { updateImage, initiateUpload, putToR2, completeUpload, getImage } from './images'
+import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
 import { moveFolder } from './folders'
 import { getFolderSubtreeIds } from '@/components/FolderSidebar'
 import type { Folder } from './folders'
@@ -38,8 +38,8 @@ function makeFolder(id: string, parentId: string | null = null): Folder {
 describe('handleImageDrop', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('calls updateImage with target folder_id on success', async () => {
-    vi.mocked(updateImage).mockResolvedValueOnce({} as never)
+  it('calls moveImageFolder with target folder_id on success', async () => {
+    vi.mocked(moveImageFolder).mockResolvedValueOnce(undefined)
 
     const result = await handleImageDrop(
       getToken,
@@ -48,7 +48,7 @@ describe('handleImageDrop', () => {
     )
 
     expect(result).toBe('moved')
-    expect(updateImage).toHaveBeenCalledWith(getToken, 'img-1', { folder_id: 'folder-b' })
+    expect(moveImageFolder).toHaveBeenCalledWith(getToken, 'img-1', 'folder-a', 'folder-b')
   })
 
   it('returns noop when image is already in the target folder', async () => {
@@ -59,11 +59,11 @@ describe('handleImageDrop', () => {
     )
 
     expect(result).toBe('noop')
-    expect(updateImage).not.toHaveBeenCalled()
+    expect(moveImageFolder).not.toHaveBeenCalled()
   })
 
-  it('calls updateImage with folder_id null when dropped on unsorted', async () => {
-    vi.mocked(updateImage).mockResolvedValueOnce({} as never)
+  it('calls moveImageFolder with null target when dropped on unsorted', async () => {
+    vi.mocked(moveImageFolder).mockResolvedValueOnce(undefined)
 
     const result = await handleImageDrop(
       getToken,
@@ -72,11 +72,11 @@ describe('handleImageDrop', () => {
     )
 
     expect(result).toBe('moved')
-    expect(updateImage).toHaveBeenCalledWith(getToken, 'img-1', { folder_id: null })
+    expect(moveImageFolder).toHaveBeenCalledWith(getToken, 'img-1', 'folder-a', null)
   })
 
-  it('throws when updateImage fails', async () => {
-    vi.mocked(updateImage).mockRejectedValueOnce(new Error('network error'))
+  it('throws when moveImageFolder fails', async () => {
+    vi.mocked(moveImageFolder).mockRejectedValueOnce(new Error('network error'))
 
     await expect(
       handleImageDrop(
