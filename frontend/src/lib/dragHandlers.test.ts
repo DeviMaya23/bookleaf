@@ -177,7 +177,7 @@ describe('handleFileAutoUpload', () => {
   }
 
   it('completes 3-step upload and returns full Image on success', async () => {
-    const imageData = { id: 'img-new', title: 'sunset', folder_id: 'folder-1' }
+    const imageData = { id: 'img-new', title: 'sunset', folder_ids: ['folder-1'] }
     vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
     vi.mocked(putToR2).mockResolvedValueOnce(undefined)
     vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null })

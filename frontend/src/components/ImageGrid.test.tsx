@@ -54,7 +54,7 @@ function makeImage(overrides?: object): Image {
     description: null,
     mime_type: 'image/jpeg',
     source_url: null,
-    folder_id: null,
+    folder_ids: [],
     thumbnail_url: 'https://example.com/thumb.jpg',
     width: 100,
     height: 100,

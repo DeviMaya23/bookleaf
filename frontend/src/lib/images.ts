@@ -6,7 +6,7 @@ export interface Image {
   description: string | null
   mime_type: string
   source_url: string | null
-  folder_id: string | null
+  folder_ids: string[]
   thumbnail_url: string | null
   width: number | null
   height: number | null

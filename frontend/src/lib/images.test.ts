@@ -21,7 +21,7 @@ describe('getImage', () => {
       description: null,
       mime_type: 'image/jpeg',
       source_url: null,
-      folder_id: null,
+      folder_ids: [],
       thumbnail_url: null,
       width: 1920,
       height: 1080,

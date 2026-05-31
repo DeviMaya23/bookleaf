@@ -319,24 +319,29 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 	}
 }
 
-func TestImageHandler_toImageResponse_FolderID(t *testing.T) {
-	folderID := uuid.New()
+func TestImageHandler_toImageResponse_FolderIDs(t *testing.T) {
+	folderIDOne := uuid.New()
+	folderIDTwo := uuid.New()
 
-	t.Run("returns null folder_id when ImageFolders is empty", func(t *testing.T) {
+	t.Run("returns empty folder_ids when ImageFolders is empty", func(t *testing.T) {
 		item := usecase.ImageItem{Image: &domain.Image{ID: uuid.New(), Title: "photo"}}
 		resp := toImageResponse(item)
-		assert.Nil(t, resp.FolderID)
+		assert.Empty(t, resp.FolderIDs)
 	})
 
-	t.Run("returns folder_id from first ImageFolders entry", func(t *testing.T) {
+	t.Run("returns all folder_ids from ImageFolders", func(t *testing.T) {
 		item := usecase.ImageItem{Image: &domain.Image{
-			ID:           uuid.New(),
-			Title:        "photo",
-			ImageFolders: []domain.ImageFolder{{ImageID: uuid.New(), FolderID: folderID, Position: "1"}},
+			ID:    uuid.New(),
+			Title: "photo",
+			ImageFolders: []domain.ImageFolder{
+				{ImageID: uuid.New(), FolderID: folderIDOne, Position: "1"},
+				{ImageID: uuid.New(), FolderID: folderIDTwo, Position: "2"},
+			},
 		}}
 		resp := toImageResponse(item)
-		require.NotNil(t, resp.FolderID)
-		assert.Equal(t, folderID, *resp.FolderID)
+		require.Len(t, resp.FolderIDs, 2)
+		assert.Equal(t, folderIDOne, resp.FolderIDs[0])
+		assert.Equal(t, folderIDTwo, resp.FolderIDs[1])
 	})
 }
 
