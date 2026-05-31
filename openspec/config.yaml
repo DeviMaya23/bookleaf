@@ -1,24 +1,5 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
 context: |
   Bookleaf is a web-based image moodboarding app. For full project overview, refer to PROJECT.md.
   
@@ -30,3 +11,8 @@ context: |
   
   For code conventions, import rules, and library usage, refer to CONVENTIONS.md.
   For process and behavior rules, refer to CLAUDE.md.
+
+  rules:
+    proposal:
+      - Generate each proposal artifact step by step. 
+      - Stop and wait for confirmation before generating the next artifact.
