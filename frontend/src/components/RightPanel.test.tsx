@@ -41,6 +41,7 @@ function makeImage(overrides?: Partial<Image>): Image {
     height: 1080,
     file_size: 2 * 1024 * 1024,
     tags: [],
+    position: null,
     created_at: '2026-05-01T00:00:00Z',
     updated_at: '2026-05-01T00:00:00Z',
     ...overrides,

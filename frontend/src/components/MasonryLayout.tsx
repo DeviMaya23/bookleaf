@@ -1,0 +1,68 @@
+import { ImageIcon } from 'lucide-react'
+import type { Image } from '@/lib/images'
+
+export const MASONRY_TARGET_COL_WIDTH = 220
+const GAP = 12
+
+export function computeMasonryLayout(containerWidth: number) {
+  const numCols = Math.max(1, Math.floor(containerWidth / MASONRY_TARGET_COL_WIDTH))
+  const colWidth = (containerWidth - GAP * (numCols - 1)) / numCols
+  return { numCols, colWidth }
+}
+
+interface MasonryLayoutProps {
+  images: Image[]
+  containerWidth: number
+  renderCard: (image: Image, imgHeight: number) => React.ReactNode
+}
+
+export default function MasonryLayout({ images, containerWidth, renderCard }: MasonryLayoutProps) {
+  const { numCols, colWidth } = computeMasonryLayout(containerWidth)
+
+  const columns: Image[][] = Array.from({ length: numCols }, () => [])
+  images.forEach((img, i) => {
+    columns[i % numCols].push(img)
+  })
+
+  return (
+    <div className="flex" style={{ gap: GAP }}>
+      {columns.map((col, colIdx) => (
+        <div key={colIdx} className="flex flex-col" style={{ width: colWidth, gap: GAP }}>
+          {col.map((image) => {
+            const ar = image.width && image.height ? image.width / image.height : 1
+            const imgHeight = colWidth / ar
+            return renderCard(image, imgHeight)
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+interface MasonryCardContentProps {
+  image: Image
+  imgHeight: number
+}
+
+export function MasonryCardContent({ image, imgHeight }: MasonryCardContentProps) {
+  return (
+    <>
+      <div className="bg-muted overflow-hidden rounded-t-lg" style={{ height: imgHeight }}>
+        {image.thumbnail_url ? (
+          <img
+            src={image.thumbnail_url}
+            alt={image.title}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ImageIcon className="w-8 h-8 text-muted-foreground" />
+          </div>
+        )}
+      </div>
+      <div className="p-2">
+        <p className="text-sm truncate">{image.title}</p>
+      </div>
+    </>
+  )
+}

@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { toast } from 'sonner'
 import ImageGrid from './ImageGrid'
 import type { AppView } from '@/lib/view'
+import type { SortEndTrigger } from './ImageGrid'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -16,6 +18,7 @@ vi.mock('@/lib/images', () => ({
   getTrashedImages: vi.fn(),
   deleteImage: vi.fn(),
   restoreImage: vi.fn(),
+  updateImagePosition: vi.fn(),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -44,10 +47,11 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-import { getImages, deleteImage } from '@/lib/images'
+import { getImages, deleteImage, updateImagePosition } from '@/lib/images'
+import { computeNewPosition } from './ImageGrid'
 import type { Image } from '@/lib/images'
 
-function makeImage(overrides?: object): Image {
+function makeImage(overrides?: Partial<Image>): Image {
   return {
     id: '1',
     title: 'Test image',
@@ -59,6 +63,7 @@ function makeImage(overrides?: object): Image {
     width: 100,
     height: 100,
     file_size: 1024,
+    position: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     tags: [],
@@ -152,12 +157,37 @@ describe('ImageGrid pagination', () => {
   })
 })
 
+describe('computeNewPosition', () => {
+  it('returns a key between neighbours for a middle-position move', () => {
+    const images = [
+      makeImage({ id: 'a', position: 'a0' }),
+      makeImage({ id: 'b', position: 'a1' }),
+      makeImage({ id: 'c', position: 'a2' }),
+    ]
+    const newKey = computeNewPosition(images, 1)
+    expect(newKey > 'a0').toBe(true)
+    expect(newKey < 'a2').toBe(true)
+  })
+
+  it('returns a key before the next item when newIndex is 0 (no previous neighbour)', () => {
+    const images = [
+      makeImage({ id: 'a', position: 'a1' }),
+      makeImage({ id: 'b', position: 'a2' }),
+    ]
+    const newKey = computeNewPosition(images, 0)
+    expect(typeof newKey).toBe('string')
+    expect(newKey.length).toBeGreaterThan(0)
+    // new key must be before the item now at index 1
+    expect(newKey < images[1].position!).toBe(true)
+  })
+})
+
 describe('ImageGrid delete flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('calls deleteImage and invalidates on confirm', async () => {
+  it('calls deleteImage when Delete context menu item is clicked', async () => {
     vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
     vi.mocked(deleteImage).mockResolvedValue(undefined)
 
@@ -169,15 +199,12 @@ describe('ImageGrid delete flow', () => {
 
     await userEvent.click(screen.getByRole('menuitem', { name: /delete/i }))
 
-    const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
-    await userEvent.click(confirmBtn)
-
     await waitFor(() => {
       expect(deleteImage).toHaveBeenCalledWith(expect.any(Function), '1')
     })
   })
 
-  it('does not call deleteImage when cancel is clicked', async () => {
+  it('does not call deleteImage when context menu is opened but nothing is clicked', async () => {
     vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
 
     renderImageGrid()
@@ -186,11 +213,56 @@ describe('ImageGrid delete flow', () => {
       expect(screen.getByText('Test image')).toBeInTheDocument()
     })
 
-    await userEvent.click(screen.getByRole('menuitem', { name: /delete/i }))
-
-    const cancelBtn = await screen.findByRole('button', { name: /cancel/i })
-    await userEvent.click(cancelBtn)
-
     expect(deleteImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('ImageGrid reorder rollback', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows error toast and reverts order when position update fails', async () => {
+    const images = [
+      makeImage({ id: '1', title: 'First', position: 'a0' }),
+      makeImage({ id: '2', title: 'Second', position: 'a1' }),
+    ]
+    vi.mocked(getImages).mockResolvedValue({ images, next_cursor: null })
+    vi.mocked(updateImagePosition).mockRejectedValue(new Error('API error'))
+    const toastError = vi.spyOn(toast, 'error')
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const renderWithTrigger = (sortEndTrigger: SortEndTrigger | null) =>
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <ImageGrid
+              view={{ type: 'folder', id: 'folder-1' }}
+              onImageSelect={vi.fn()}
+              sortEndTrigger={sortEndTrigger}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      )
+
+    const { rerender } = renderWithTrigger(null)
+    await waitFor(() => expect(screen.getByText('First')).toBeInTheDocument())
+
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ImageGrid
+            view={{ type: 'folder', id: 'folder-1' }}
+            onImageSelect={vi.fn()}
+            sortEndTrigger={{ activeId: 'image-1', overId: 'image-2', ts: 1 }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith('Failed to save order')
+    })
   })
 })

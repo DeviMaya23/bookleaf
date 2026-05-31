@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { Plus, UploadCloud, ChevronDown, Images } from 'lucide-react'
 import {
@@ -32,6 +32,7 @@ import { getFolders } from '@/lib/folders'
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/dragHandlers'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
+import type { SortEndTrigger } from '@/components/ImageGrid'
 
 function useAppView(): AppView {
   const { folderId } = useParams<{ folderId: string }>()
@@ -68,6 +69,8 @@ export default function AppLayout() {
   const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [isAutoUploading, setIsAutoUploading] = useState(false)
   const [activeDragImage, setActiveDragImage] = useState<{ id: string; thumbnailUrl: string | null } | null>(null)
+  const sortEndTriggerRef = useRef<number>(0)
+  const [sortEndTrigger, setSortEndTrigger] = useState<SortEndTrigger | null>(null)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
 
   const folderId = view.type === 'folder' ? view.id : null
@@ -96,7 +99,15 @@ export default function AppLayout() {
 
     const dragData = active.data.current
     const dropData = over.data.current
-    if (!dragData || !dropData) return
+    if (!dragData) return
+
+    // Image dropped on another image → reorder (handled inside ImageGrid via sortEndTrigger)
+    if (dragData.type === 'image' && dropData?.type === 'image') {
+      setSortEndTrigger({ activeId: String(active.id), overId: String(over.id), ts: ++sortEndTriggerRef.current })
+      return
+    }
+
+    if (!dropData) return
 
     if (dragData.type === 'image') {
       try {
@@ -207,6 +218,7 @@ export default function AppLayout() {
               <ImageGrid
                 view={view}
                 onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
+                sortEndTrigger={sortEndTrigger}
               />
             </div>
           </ScrollArea>

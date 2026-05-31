@@ -311,22 +311,33 @@ The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pa
   "height": "integer|null",
   "file_size": "integer|null",
   "tags": [{ "id": "uuid", "name": "string" }],
+  "position": "string|null",
   "created_at": "RFC3339",
   "updated_at": "RFC3339"
 }
 ```
 
 - `folder_ids` SHALL be a non-null array of UUIDs — empty (`[]`) when the image has no folder memberships, populated with all folder IDs the image belongs to otherwise
-- `position` and `folder_id` (singular) fields are removed from the response shape
-- `GET /images/:id` (`imageDetailResponse`) follows the same shape and includes an additional `image_url` field
+- `position` SHALL be the fracdex key from `image_folders.position` for the queried folder when `GET /images` is called with a `folder_id` parameter; `null` in all other list contexts (unfiled, all, trash)
+- `GET /images/:id` (`imageDetailResponse`) follows the same shape and includes an additional `image_url` field; `position` is always `null` in the detail response (no folder context)
 
-The `toImageResponse` function in `internal/handler/image.go` SHALL be updated to populate `FolderIDs []uuid.UUID` by iterating `item.Image.ImageFolders`. The `firstFolderID` and `firstFolderPosition` helpers SHALL be removed.
+The `ImageItem` struct in `internal/usecase/image_usecase.go` SHALL add a `FolderPosition *string` field. In `ListImages`, when `params.FolderID` is non-nil, the implementation SHALL iterate the image's `ImageFolders` slice to find the entry matching `params.FolderID` and set `FolderPosition` to that entry's `Position`. The `toImageResponse` function in `internal/handler/image.go` SHALL map `item.FolderPosition` to `Position` on the response struct.
 
 #### Scenario: Image list response returns paginated envelope
 
 - **WHEN** an authenticated `GET /images` request is made
 - **THEN** the response is an object with an `images` array and a `next_cursor` field
 - **AND** each item in `images` includes a `folder_ids` array (never null)
+
+#### Scenario: Folder-scoped list includes position
+
+- **WHEN** an authenticated `GET /images?folder_id=<uuid>` request is made
+- **THEN** each image in the response includes a non-null `position` string
+
+#### Scenario: Non-folder-scoped list returns null position
+
+- **WHEN** an authenticated `GET /images` request is made without `folder_id` (e.g. unfiled or all)
+- **THEN** each image in the response has `position: null`
 
 #### Scenario: Image detail response includes folder_ids array
 
@@ -349,7 +360,7 @@ The `toImageResponse` function in `internal/handler/image.go` SHALL be updated t
 
 The `folder_ids` field in `imageResponse` and `imageDetailResponse` SHALL be populated from the image's `ImageFolders` slice by iterating all entries and collecting their `FolderID` values. The field SHALL never be null — an image with no folder memberships returns an empty array `[]`.
 
-The `folder_id` (singular) and `position` fields are removed from `imageResponse` and `imageDetailResponse`. The `ImageRepository` interface, `toImageResponse` helper, and all related handler structs SHALL reflect this change.
+The `folder_id` (singular) field is removed from `imageResponse` and `imageDetailResponse`. The `position` field remains and is populated from `image_folders.position` for folder-scoped list requests (see the Response Shape requirement). The `ImageRepository` interface, `toImageResponse` helper, and all related handler structs SHALL reflect this change.
 
 `toImageResponse` SHALL populate `FolderIDs []uuid.UUID` from `item.Image.ImageFolders` (all entries, not just index 0). The `firstFolderID` and `firstFolderPosition` helpers are removed.
 

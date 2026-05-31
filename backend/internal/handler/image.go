@@ -61,6 +61,7 @@ type imageResponse struct {
 	Height       *int          `json:"height"`
 	FileSize     *int64        `json:"file_size"`
 	Tags         []tagResponse `json:"tags"`
+	Position     *string       `json:"position"`
 	CreatedAt    time.Time     `json:"created_at"`
 	UpdatedAt    time.Time     `json:"updated_at"`
 }
@@ -665,6 +666,7 @@ func toImageResponse(item usecase.ImageItem) imageResponse {
 		Height:       item.Image.Height,
 		FileSize:     item.Image.FileSize,
 		Tags:         tags,
+		Position:     item.FolderPosition,
 		CreatedAt:    item.Image.CreatedAt,
 		UpdatedAt:    item.Image.UpdatedAt,
 	}
