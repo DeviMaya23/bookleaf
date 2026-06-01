@@ -53,7 +53,7 @@ interface ImageCardProps {
 function ImageCard({ image, imgHeight, isTrash, isFolderView, isDropTarget, currentFolderId, onAction, onSelect }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
-    disabled: isTrash || !isFolderView,
+    disabled: isTrash,
     data: { type: 'image', imageId: image.id, currentFolderId, thumbnailUrl: image.thumbnail_url },
   })
 

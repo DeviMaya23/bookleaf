@@ -77,7 +77,7 @@ function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = v
     defaultOptions: { queries: { retry: false } },
   })
   return render(
-    <DndContext>
+    <DndContext sensors={[]}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <ImageGrid view={view} onImageSelect={onImageSelect} />
@@ -257,7 +257,7 @@ describe('ImageGrid reorder rollback', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     const wrap = (sortEndTrigger: SortEndTrigger | null) => (
-      <DndContext>
+      <DndContext sensors={[]}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <ImageGrid
