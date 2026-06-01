@@ -12,6 +12,7 @@ export interface Image {
   height: number | null
   file_size: number | null
   tags: { id: string; name: string }[]
+  position: string | null
   created_at: string
   updated_at: string
 }
@@ -172,6 +173,20 @@ export async function downloadImage(getToken: GetToken, id: string): Promise<str
   if (!res.ok) throw new Error('Failed to get download URL')
   const data: { download_url: string } = await res.json()
   return data.download_url
+}
+
+export async function updateImagePosition(
+  getToken: GetToken,
+  imageId: string,
+  folderId: string,
+  position: string,
+): Promise<void> {
+  const res = await apiFetch(`/images/${imageId}/position`, getToken, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder_id: folderId, position }),
+  })
+  if (!res.ok) throw new Error('Failed to update image position')
 }
 
 export async function acceptSuggestion(

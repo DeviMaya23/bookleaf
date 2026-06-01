@@ -41,20 +41,16 @@ The system SHALL display an empty state message when the image list response is 
 - **WHEN** the image list response returns zero images
 - **THEN** the message "No images here yet" is displayed with an image icon
 
-### Requirement: Images displayed in a Pinterest-style masonry layout
-The system SHALL render images in a CSS `column-count` masonry layout. Each image card SHALL display the thumbnail at its natural aspect ratio (no fixed height). Image cards SHALL NOT have a visible border. The column count SHALL be responsive: 2 columns on mobile, 3 on medium viewports, 4 on large viewports (≥ 1024px). Cards SHALL use `break-inside: avoid` to prevent column breaks within a card.
+### Requirement: Images displayed in a masonry layout
+The system SHALL render images using `MasonryLayout` with explicit round-robin column assignment. Each image card SHALL display the thumbnail at its natural aspect ratio derived from stored `width`/`height` fields. Image cards SHALL NOT have a visible border. The column count SHALL be derived from the gallery container's observed width divided by `TARGET_COL_WIDTH` (220px), updated reactively via `ResizeObserver`. Fixed CSS breakpoint column counts are removed.
 
 #### Scenario: Image cards respect natural aspect ratio
 - **WHEN** the image list contains images with varying dimensions
 - **THEN** each card's thumbnail height reflects the image's natural aspect ratio
 
-#### Scenario: Masonry layout uses correct column counts
-- **WHEN** the viewport is desktop width (≥ 1024px)
-- **THEN** images are displayed in 4 columns
-
-#### Scenario: Masonry collapses on mobile
-- **WHEN** the viewport is mobile width (< 768px)
-- **THEN** images are displayed in 2 columns
+#### Scenario: Column count responds to container width
+- **WHEN** the gallery container width changes (e.g. right panel opens or closes)
+- **THEN** the column count updates to `Math.max(1, Math.floor(containerWidth / 220))`
 
 #### Scenario: Cards have no border
 - **WHEN** the image list contains images

@@ -63,8 +63,9 @@ type CompleteUploadResult struct {
 }
 
 type ImageItem struct {
-	Image        *domain.Image
-	ThumbnailURL *string
+	Image          *domain.Image
+	ThumbnailURL   *string
+	FolderPosition *string
 }
 
 type ImageUsecase interface {
@@ -502,7 +503,15 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		}
 		items := make([]ImageItem, len(rawImages))
 		for i, img := range rawImages {
-			items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}
+			var folderPos *string
+			for _, f := range img.ImageFolders {
+				if f.FolderID == *params.FolderID {
+					p := f.Position
+					folderPos = &p
+					break
+				}
+			}
+			items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath), FolderPosition: folderPos}
 		}
 		return &ListImagesResult{Images: items, NextCursor: nil}, nil
 	}
