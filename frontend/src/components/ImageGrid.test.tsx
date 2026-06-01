@@ -13,7 +13,8 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
 }))
 
-vi.mock('@/lib/images', () => ({
+vi.mock('@/lib/images', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/images')>()),
   getImages: vi.fn(),
   getAllImages: vi.fn(),
   getTrashedImages: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock('@/components/ui/context-menu', async () => {
 })
 
 import { getImages, deleteImage, updateImagePosition } from '@/lib/images'
-import { computeNewPosition } from './ImageGrid'
+import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
 function makeImage(overrides?: Partial<Image>): Image {

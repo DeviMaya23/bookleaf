@@ -57,6 +57,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     setSourceUrl(image.source_url ?? '')
     setTags(image.tags ?? [])
     setLightboxOpen(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id])
 
   const { data: imageDetail, isLoading: isLoadingDetail } = useQuery({
@@ -85,6 +86,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
       .map((id) => allFolders.find((f) => f.id === id))
       .filter((f): f is Folder => f !== undefined)
     setSelectedFolders(resolved)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id, allFolders])
 
   const saveMutation = useMutation({
@@ -201,6 +203,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     origTitle.current = image.title
     origDescription.current = image.description ?? ''
     origSourceUrl.current = image.source_url ?? ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id])
 
   const handleTitleBlur = () => {

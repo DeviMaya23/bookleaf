@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { KeyBetween } from './fracdex'
 
 export interface Image {
   id: string
@@ -187,6 +188,18 @@ export async function updateImagePosition(
     body: JSON.stringify({ folder_id: folderId, position }),
   })
   if (!res.ok) throw new Error('Failed to update image position')
+}
+
+export function computeNewPosition(orderedImages: Image[], newIndex: number): string {
+  const prevPos = orderedImages[newIndex - 1]?.position || null  // || treats '' as null
+  const nextPos = orderedImages[newIndex + 1]?.position || null  // || treats '' as null
+  if (prevPos !== null && nextPos !== null && prevPos >= nextPos) {
+    // Degenerate case: duplicate or inverted positions (e.g. multiple legacy null-position
+    // images that all got 'a0' from earlier KeyBetween(null,null) calls). Fall back to
+    // inserting after prevPos rather than throwing.
+    return KeyBetween(prevPos, null)
+  }
+  return KeyBetween(prevPos, nextPos)
 }
 
 export async function acceptSuggestion(

@@ -9,17 +9,13 @@ vi.mock('./images', () => ({
 }))
 
 vi.mock('./folders', () => ({
-  moveFolder: vi.fn(),
-}))
-
-vi.mock('@/components/FolderSidebar', () => ({
   getFolderSubtreeIds: vi.fn(),
+  moveFolder: vi.fn(),
 }))
 
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
 import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
-import { moveFolder } from './folders'
-import { getFolderSubtreeIds } from '@/components/FolderSidebar'
+import { moveFolder, getFolderSubtreeIds } from './folders'
 import type { Folder } from './folders'
 
 const getToken = vi.fn().mockResolvedValue('token')

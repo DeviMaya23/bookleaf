@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import FolderNameDialog from './FolderNameDialog'
 import ProfileMenu from './ProfileMenu'
-import { getFolders, createFolder, renameFolder, deleteFolder } from '@/lib/folders'
+import { getFolders, createFolder, renameFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 
@@ -50,20 +50,6 @@ function buildFolderTree(folders: Folder[]): FolderNode[] {
   return roots
 }
 
-export function getFolderSubtreeIds(folders: Folder[], folderId: string): Set<string> {
-  const ids = new Set<string>([folderId])
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const f of folders) {
-      if (f.parent_id && ids.has(f.parent_id) && !ids.has(f.id)) {
-        ids.add(f.id)
-        changed = true
-      }
-    }
-  }
-  return ids
-}
 
 interface FolderItemProps {
   folder: FolderNode

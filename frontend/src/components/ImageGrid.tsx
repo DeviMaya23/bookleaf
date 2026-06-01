@@ -13,23 +13,11 @@ import {
 } from '@/components/ui/context-menu'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage, updateImagePosition } from '@/lib/images'
-import { KeyBetween } from '@/lib/fracdex'
+import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
 
-export function computeNewPosition(orderedImages: Image[], newIndex: number): string {
-  const prevPos = orderedImages[newIndex - 1]?.position || null  // || treats '' as null
-  const nextPos = orderedImages[newIndex + 1]?.position || null  // || treats '' as null
-  if (prevPos !== null && nextPos !== null && prevPos >= nextPos) {
-    // Degenerate case: duplicate or inverted positions (e.g. multiple legacy null-position
-    // images that all got 'a0' from earlier KeyBetween(null,null) calls). Fall back to
-    // inserting after prevPos rather than throwing.
-    return KeyBetween(prevPos, null)
-  }
-  return KeyBetween(prevPos, nextPos)
-}
 
 export type LayoutMode = 'masonry'
 
@@ -43,14 +31,13 @@ interface ImageCardProps {
   image: Image
   imgHeight: number
   isTrash: boolean
-  isFolderView: boolean
   isDropTarget: boolean
   currentFolderId: string | null
   onAction: (image: Image) => void
   onSelect: (image: Image) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isFolderView, isDropTarget, currentFolderId, onAction, onSelect }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onSelect }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
     disabled: isTrash,
@@ -235,7 +222,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
       }
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortEndTrigger])
+  }, [sortEndTrigger, view])
 
   function handleAction(image: Image) {
     if (isTrash) {
@@ -264,7 +251,6 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
           image={image}
           imgHeight={imgHeight}
           isTrash={isTrash}
-          isFolderView={isFolderView}
           isDropTarget={isDropTarget}
           currentFolderId={folderId}
           onAction={handleAction}
