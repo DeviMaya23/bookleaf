@@ -108,7 +108,7 @@ func (c *visionClient) AnnotateImage(ctx context.Context, imageBytes []byte) ([]
 	annotations := result.Responses[0].LabelAnnotations
 	labels := make([]Label, len(annotations))
 	for i, a := range annotations {
-		labels[i] = Label{Description: a.Description, Score: a.Score}
+		labels[i] = Label(a)
 	}
 
 	sort.Slice(labels, func(i, j int) bool {
