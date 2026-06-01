@@ -18,6 +18,7 @@ import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function computeNewPosition(orderedImages: Image[], newIndex: number): string {
   const prevPos = orderedImages[newIndex - 1]?.position ?? null
   const nextPos = orderedImages[newIndex + 1]?.position ?? null

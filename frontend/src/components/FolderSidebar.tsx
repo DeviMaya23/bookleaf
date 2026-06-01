@@ -50,6 +50,7 @@ function buildFolderTree(folders: Folder[]): FolderNode[] {
   return roots
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getFolderSubtreeIds(folders: Folder[], folderId: string): Set<string> {
   const ids = new Set<string>([folderId])
   let changed = true

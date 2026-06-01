@@ -164,7 +164,9 @@ export default function BatchUploadModal({
     pending.slice(0, slots).forEach(f => runUpload(f))
   }, [runUpload])
 
-  scheduleNextRef.current = scheduleNext
+  useEffect(() => {
+    scheduleNextRef.current = scheduleNext
+  })
 
   useEffect(() => {
     if (open) {

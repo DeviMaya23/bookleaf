@@ -4,6 +4,7 @@ import type { Image } from '@/lib/images'
 export const MASONRY_TARGET_COL_WIDTH = 220
 const GAP = 12
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function computeMasonryLayout(containerWidth: number) {
   const numCols = Math.max(1, Math.floor(containerWidth / MASONRY_TARGET_COL_WIDTH))
   const colWidth = (containerWidth - GAP * (numCols - 1)) / numCols
