@@ -1,0 +1,22 @@
+version: 2
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+      exclude-functions:
+        - (io.ReadCloser).Close
+        - (*database/sql.DB).Close
+        - (*github.com/golang-migrate/migrate/v4.Migrate).Close
+        - (*github.com/devi/bookleaf/internal/testutil.PostgresContainer).Terminate
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

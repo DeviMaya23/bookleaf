@@ -177,15 +177,19 @@ func main() {
 		defer cancel()
 
 		if tp != nil {
-			tp.Shutdown(shutdownCtx)
+			if err := tp.Shutdown(shutdownCtx); err != nil {
+				logger.Error("tracer shutdown", zap.Error(err))
+			}
 		}
 		if mp != nil {
-			mp.Shutdown(shutdownCtx)
+			if err := mp.Shutdown(shutdownCtx); err != nil {
+				logger.Error("meter shutdown", zap.Error(err))
+			}
 		}
 		if err := e.Shutdown(shutdownCtx); err != nil {
 			logger.Error("echo shutdown", zap.Error(err))
 		}
-		logger.Sync()
+		_ = logger.Sync()
 	}()
 
 	if err := e.Start(":" + cfg.Port); err != nil && err != http.ErrServerClosed {
