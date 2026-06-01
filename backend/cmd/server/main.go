@@ -86,6 +86,15 @@ func main() {
 	if err != nil {
 		logger.Fatal("open database connection", zap.Error(err))
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Fatal("get underlying sql.DB", zap.Error(err))
+	}
+	sqlDB.SetMaxOpenConns(5)
+	sqlDB.SetMaxIdleConns(3)
+	sqlDB.SetConnMaxLifetime(15 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+
 	if cfg.Obs.OTELEnabled {
 		if err := db.Use(otelgorm.NewPlugin()); err != nil {
 			logger.Fatal("register otelgorm plugin", zap.Error(err))
