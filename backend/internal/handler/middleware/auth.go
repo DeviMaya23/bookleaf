@@ -9,7 +9,7 @@ import (
 
 	"github.com/MicahParks/jwkset"
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"

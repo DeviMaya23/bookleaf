@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 )

@@ -9,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/devi/bookleaf/internal/config"
+	"github.com/devi/bookleaf/internal/platform/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
-	authmiddleware "github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
-	"github.com/devi/bookleaf/internal/thumbnail"
+	"github.com/devi/bookleaf/pkg/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/devi/bookleaf/internal/vision"
 	"github.com/labstack/echo/v4"
@@ -207,7 +207,7 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
 	tagUsecase := usecase.NewTagUsecase(tagRepository, tel)
 
-	var visionService vision.VisionService
+	var visionService usecase.VisionService
 	if cfg.Vision.APIKey != "" {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}

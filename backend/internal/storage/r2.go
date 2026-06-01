@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/devi/bookleaf/internal/config"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/config"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -25,7 +25,7 @@ type r2Storage struct {
 	presignURLDuration metric.Float64Histogram
 }
 
-func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) StorageService {
+func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) *r2Storage {
 	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", cfg.AccountID)
 
 	client := s3.New(s3.Options{
@@ -236,4 +236,3 @@ func (r *r2Storage) Ping(ctx context.Context) error {
 	return nil
 }
 
-var _ StorageService = (*r2Storage)(nil)

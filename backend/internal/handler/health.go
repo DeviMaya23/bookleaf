@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/devi/bookleaf/internal/storage"
+	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -15,7 +15,7 @@ const healthProbeTimeout = 3 * time.Second
 
 type HealthHandler struct {
 	db    *gorm.DB
-	store storage.StorageService
+	store usecase.StorageService
 
 	dbProbe func(ctx context.Context) error
 	r2Probe func(ctx context.Context) error
@@ -27,7 +27,7 @@ type healthResponse struct {
 	R2     string `json:"r2"`
 }
 
-func NewHealthHandler(db *gorm.DB, store storage.StorageService) *HealthHandler {
+func NewHealthHandler(db *gorm.DB, store usecase.StorageService) *HealthHandler {
 	h := &HealthHandler{
 		db:    db,
 		store: store,

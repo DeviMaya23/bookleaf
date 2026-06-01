@@ -14,8 +14,7 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
-	"github.com/devi/bookleaf/internal/vision"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -336,14 +335,14 @@ type visionLabel struct {
 	Score       float32
 }
 
-func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]vision.Label, error) {
+func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]domain.Label, error) {
 	m.calls++
 	if m.err != nil {
 		return nil, m.err
 	}
-	out := make([]vision.Label, len(m.labels))
+	out := make([]domain.Label, len(m.labels))
 	for i, l := range m.labels {
-		out[i] = vision.Label{Description: l.Description, Score: l.Score}
+		out[i] = domain.Label{Description: l.Description, Score: l.Score}
 	}
 	return out, nil
 }

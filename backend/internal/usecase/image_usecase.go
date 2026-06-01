@@ -14,10 +14,8 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/storage"
-	"github.com/devi/bookleaf/internal/thumbnail"
-	"github.com/devi/bookleaf/internal/vision"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -35,6 +33,14 @@ const (
 	presignedGetTTL = 24 * time.Hour
 	downloadURLTTL  = 5 * time.Minute
 )
+
+type ThumbnailService interface {
+	Generate(ctx context.Context, src io.Reader) (io.Reader, error)
+}
+
+type VisionService interface {
+	AnnotateImage(ctx context.Context, imageBytes []byte) ([]domain.Label, error)
+}
 
 type UploadInitResult struct {
 	ID        uuid.UUID
@@ -72,9 +78,9 @@ type imageUsecase struct {
 	imageRepo         ImageRepository
 	pendingUploadRepo PendingUploadRepository
 	tagRepo           TagRepository
-	store             storage.StorageService
-	thumbnails        thumbnail.ThumbnailService
-	visionService     vision.VisionService
+	store             StorageService
+	thumbnails        ThumbnailService
+	visionService     VisionService
 	folderRepo        FolderRepository
 	userRepo          UserRepository
 	tel               *observability.Telemetry
@@ -87,9 +93,9 @@ func NewImageUsecase(
 	imageRepo ImageRepository,
 	pendingUploadRepo PendingUploadRepository,
 	tagRepo TagRepository,
-	store storage.StorageService,
-	thumbnails thumbnail.ThumbnailService,
-	visionService vision.VisionService,
+	store StorageService,
+	thumbnails ThumbnailService,
+	visionService VisionService,
 	folderRepo FolderRepository,
 	userRepo UserRepository,
 	tel *observability.Telemetry,

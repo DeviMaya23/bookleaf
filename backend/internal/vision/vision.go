@@ -8,25 +8,18 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+
+	"github.com/devi/bookleaf/internal/domain"
 )
 
 const annotateURL = "https://vision.googleapis.com/v1/images:annotate"
-
-type Label struct {
-	Description string
-	Score       float32
-}
-
-type VisionService interface {
-	AnnotateImage(ctx context.Context, imageBytes []byte) ([]Label, error)
-}
 
 type visionClient struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-func NewVisionClient(apiKey string) VisionService {
+func NewVisionClient(apiKey string) *visionClient {
 	return &visionClient{
 		apiKey:     apiKey,
 		httpClient: &http.Client{},
@@ -63,7 +56,7 @@ type labelAnnotation struct {
 	Score       float32 `json:"score"`
 }
 
-func (c *visionClient) AnnotateImage(ctx context.Context, imageBytes []byte) ([]Label, error) {
+func (c *visionClient) AnnotateImage(ctx context.Context, imageBytes []byte) ([]domain.Label, error) {
 	body := annotateRequest{
 		Requests: []imageRequest{
 			{
@@ -106,9 +99,9 @@ func (c *visionClient) AnnotateImage(ctx context.Context, imageBytes []byte) ([]
 	}
 
 	annotations := result.Responses[0].LabelAnnotations
-	labels := make([]Label, len(annotations))
+	labels := make([]domain.Label, len(annotations))
 	for i, a := range annotations {
-		labels[i] = Label(a)
+		labels[i] = domain.Label{Description: a.Description, Score: a.Score}
 	}
 
 	sort.Slice(labels, func(i, j int) bool {

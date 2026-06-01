@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 )

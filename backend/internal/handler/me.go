@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
 )
