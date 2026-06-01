@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/MicahParks/jwkset"
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/observability"
-	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -19,18 +19,22 @@ type ContextKey string
 
 const AuthenticatedUserIDContextKey ContextKey = "authenticatedUserID"
 
+type UserUsecase interface {
+	GetOrProvision(ctx context.Context, kindeID string) (*domain.User, error)
+}
+
 type authMiddleware struct {
 	issuerURL   string
 	audience    string
 	jwksClient  jwkset.Storage
-	userUsecase usecase.UserUsecase
+	userUsecase UserUsecase
 	logger      *zap.Logger
 }
 
 func NewAuthMiddleware(
 	issuerURL string,
 	audience string,
-	userUsecase usecase.UserUsecase,
+	userUsecase UserUsecase,
 	logger *zap.Logger,
 ) (echo.MiddlewareFunc, error) {
 	jwksURL := strings.TrimRight(issuerURL, "/") + "/.well-known/jwks"
@@ -47,7 +51,7 @@ func newAuthMiddlewareWithStorage(
 	issuerURL string,
 	audience string,
 	jwksClient jwkset.Storage,
-	userUsecase usecase.UserUsecase,
+	userUsecase UserUsecase,
 	logger *zap.Logger,
 ) echo.MiddlewareFunc {
 	if logger == nil {

@@ -9,17 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type UserUsecase interface {
-	GetOrProvision(ctx context.Context, kindeID string) (*domain.User, error)
-	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
-}
-
 type userUsecase struct {
 	userRepo UserRepository
 	tel      *observability.Telemetry
 }
 
-func NewUserUsecase(userRepo UserRepository, tel *observability.Telemetry) UserUsecase {
+func NewUserUsecase(userRepo UserRepository, tel *observability.Telemetry) *userUsecase {
 	return &userUsecase{
 		userRepo: userRepo,
 		tel:      tel,

@@ -27,9 +27,14 @@ import (
 	otelgorm "gorm.io/plugin/opentelemetry/tracing"
 )
 
+type imageWorkerUsecase interface {
+	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
+	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
+}
+
 type server struct {
 	echo         *echo.Echo
-	imageUsecase usecase.ImageUsecase
+	imageWorker  imageWorkerUsecase
 	logger       *zap.Logger
 	shutdownTel  func(context.Context)
 }
@@ -38,10 +43,10 @@ func newServer(ctx context.Context, cfg *config.Config, logger *zap.Logger) *ser
 	e := initEcho(cfg)
 	tel, shutdownTel := initTelemetry(ctx, cfg, e, logger)
 	db := initDB(cfg, logger)
-	imageUsecase := initApp(cfg, db, tel, e, logger)
+	imageWorker := initApp(cfg, db, tel, e, logger)
 	return &server{
 		echo:        e,
-		imageUsecase: imageUsecase,
+		imageWorker: imageWorker,
 		logger:      logger,
 		shutdownTel: shutdownTel,
 	}
@@ -52,7 +57,7 @@ func (s *server) startWorkers(ctx context.Context) {
 		ticker := time.NewTicker(10 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			if err := s.imageUsecase.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
+			if err := s.imageWorker.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
 				s.logger.Warn("stale upload cleanup failed", zap.Error(err))
 			}
 		}
@@ -62,7 +67,7 @@ func (s *server) startWorkers(ctx context.Context) {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		for range ticker.C {
-			if err := s.imageUsecase.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
+			if err := s.imageWorker.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
 				s.logger.Warn("trash purge failed", zap.Error(err))
 			}
 		}
@@ -190,7 +195,7 @@ func initDB(cfg *config.Config, logger *zap.Logger) *gorm.DB {
 	return db
 }
 
-func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *echo.Echo, logger *zap.Logger) usecase.ImageUsecase {
+func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *echo.Echo, logger *zap.Logger) imageWorkerUsecase {
 	userRepository := repository.NewUserRepository(db)
 	userUsecase := usecase.NewUserUsecase(userRepository, tel)
 	folderRepository := repository.NewFolderRepository(db)

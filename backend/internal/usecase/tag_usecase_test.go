@@ -55,7 +55,7 @@ func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUI
 	return m.err
 }
 
-func newTagUsecase(repo TagRepository) TagUsecase {
+func newTagUsecase(repo TagRepository) *tagUsecase {
 	tel := observability.NewTelemetry(nil, nil, nil)
 	return NewTagUsecase(repo, tel)
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,8 +18,23 @@ import (
 	"gorm.io/gorm"
 )
 
+type ImageUsecase interface {
+	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
+	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*usecase.CompleteUploadResult, error)
+	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
+	ListImages(ctx context.Context, userID string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error)
+	GetImage(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageDetail, error)
+	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
+	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateImageParams) (*usecase.ImageItem, error)
+	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error)
+	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
+	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
+	ListTrashed(ctx context.Context, userID string, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error)
+	Restore(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageItem, error)
+}
+
 type ImageHandler struct {
-	imageUsecase usecase.ImageUsecase
+	imageUsecase ImageUsecase
 	tel          *observability.Telemetry
 }
 
@@ -107,7 +123,7 @@ type acceptSuggestionRequest struct {
 	SuggestedFolderName string `json:"suggested_folder_name"`
 }
 
-func NewImageHandler(imageUsecase usecase.ImageUsecase, tel *observability.Telemetry) *ImageHandler {
+func NewImageHandler(imageUsecase ImageUsecase, tel *observability.Telemetry) *ImageHandler {
 	return &ImageHandler{
 		imageUsecase: imageUsecase,
 		tel:          tel,

@@ -1,21 +1,26 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/middleware"
 	"github.com/devi/bookleaf/internal/observability"
-	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
 )
 
+type UserUsecase interface {
+	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
+}
+
 type MeHandler struct {
-	userUsecase usecase.UserUsecase
+	userUsecase UserUsecase
 	tel         *observability.Telemetry
 }
 
-func NewMeHandler(userUsecase usecase.UserUsecase, tel *observability.Telemetry) *MeHandler {
+func NewMeHandler(userUsecase UserUsecase, tel *observability.Telemetry) *MeHandler {
 	return &MeHandler{
 		userUsecase: userUsecase,
 		tel:         tel,

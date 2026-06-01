@@ -14,14 +14,6 @@ import (
 
 var ErrInvalidFolderName = errors.New("folder name is required")
 
-type FolderUsecase interface {
-	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
-	List(ctx context.Context, userID string) ([]*domain.Folder, error)
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*FolderDetail, error)
-	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
-	Delete(ctx context.Context, id uuid.UUID, userID string) error
-}
-
 type FolderDetail struct {
 	Folder     *domain.Folder
 	ImageCount int64
@@ -33,7 +25,7 @@ type folderUsecase struct {
 	tel        *observability.Telemetry
 }
 
-func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageRepository, tel *observability.Telemetry) FolderUsecase {
+func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageRepository, tel *observability.Telemetry) *folderUsecase {
 	return &folderUsecase{
 		folderRepo: folderRepo,
 		imageRepo:  imageRepo,
@@ -158,4 +150,3 @@ func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string)
 	return nil
 }
 
-var _ FolderUsecase = (*folderUsecase)(nil)
