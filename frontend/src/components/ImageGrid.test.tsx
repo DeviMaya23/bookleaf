@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { toast } from 'sonner'
+import { DndContext } from '@dnd-kit/core'
 import ImageGrid from './ImageGrid'
 import type { AppView } from '@/lib/view'
 import type { SortEndTrigger } from './ImageGrid'
@@ -12,7 +13,8 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
 }))
 
-vi.mock('@/lib/images', () => ({
+vi.mock('@/lib/images', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/images')>()),
   getImages: vi.fn(),
   getAllImages: vi.fn(),
   getTrashedImages: vi.fn(),
@@ -48,7 +50,7 @@ vi.mock('@/components/ui/context-menu', async () => {
 })
 
 import { getImages, deleteImage, updateImagePosition } from '@/lib/images'
-import { computeNewPosition } from './ImageGrid'
+import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
 function makeImage(overrides?: Partial<Image>): Image {
@@ -76,11 +78,13 @@ function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = v
     defaultOptions: { queries: { retry: false } },
   })
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <ImageGrid view={view} onImageSelect={onImageSelect} />
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <DndContext sensors={[]}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ImageGrid view={view} onImageSelect={onImageSelect} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </DndContext>,
   )
 }
 
@@ -180,6 +184,26 @@ describe('computeNewPosition', () => {
     // new key must be before the item now at index 1
     expect(newKey < images[1].position!).toBe(true)
   })
+
+  it('does not throw and returns a key after prev when neighbours have duplicate positions', () => {
+    const images = [
+      makeImage({ id: 'a', position: 'a0' }),
+      makeImage({ id: 'b', position: null }),
+      makeImage({ id: 'c', position: 'a0' }),
+    ]
+    expect(() => computeNewPosition(images, 1)).not.toThrow()
+    const newKey = computeNewPosition(images, 1)
+    expect(newKey > 'a0').toBe(true)
+  })
+
+  it('does not throw when a neighbour has an empty-string position', () => {
+    const images = [
+      makeImage({ id: 'a', position: '' }),
+      makeImage({ id: 'b', position: null }),
+      makeImage({ id: 'c', position: 'a1' }),
+    ]
+    expect(() => computeNewPosition(images, 1)).not.toThrow()
+  })
 })
 
 describe('ImageGrid delete flow', () => {
@@ -233,8 +257,8 @@ describe('ImageGrid reorder rollback', () => {
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
-    const renderWithTrigger = (sortEndTrigger: SortEndTrigger | null) =>
-      render(
+    const wrap = (sortEndTrigger: SortEndTrigger | null) => (
+      <DndContext sensors={[]}>
         <QueryClientProvider client={queryClient}>
           <MemoryRouter>
             <ImageGrid
@@ -243,23 +267,14 @@ describe('ImageGrid reorder rollback', () => {
               sortEndTrigger={sortEndTrigger}
             />
           </MemoryRouter>
-        </QueryClientProvider>,
-      )
+        </QueryClientProvider>
+      </DndContext>
+    )
 
-    const { rerender } = renderWithTrigger(null)
+    const { rerender } = render(wrap(null))
     await waitFor(() => expect(screen.getByText('First')).toBeInTheDocument())
 
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <ImageGrid
-            view={{ type: 'folder', id: 'folder-1' }}
-            onImageSelect={vi.fn()}
-            sortEndTrigger={{ activeId: 'image-1', overId: 'image-2', ts: 1 }}
-          />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    rerender(wrap({ activeId: 'image-1', overId: 'image-2', ts: 1 }))
 
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith('Failed to save order')

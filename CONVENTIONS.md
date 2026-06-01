@@ -34,6 +34,12 @@
 - Never import directly from `@radix-ui/*`
 - Application code imports only from `@/components/ui/*`. Direct `@base-ui/react` imports stay inside `src/components/ui/` only.
 
+## Linting
+
+Do not suppress ESLint findings with `eslint-disable` comments — fix the underlying issue instead.
+
+Exceptions (add a comment explaining why when using these):
+- `react-hooks/exhaustive-deps`
 
 ---
 

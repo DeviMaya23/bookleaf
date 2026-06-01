@@ -1,6 +1,6 @@
 import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
 import { moveFolder } from './folders'
-import { getFolderSubtreeIds } from '@/components/FolderSidebar'
+import { getFolderSubtreeIds } from './folders'
 import type { Folder } from './folders'
 import type { Image } from './images'
 

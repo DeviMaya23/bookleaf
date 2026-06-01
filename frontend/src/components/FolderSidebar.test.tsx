@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getFolderSubtreeIds } from './FolderSidebar'
+import { getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 
 function makeFolder(id: string, parentId: string | null = null): Folder {

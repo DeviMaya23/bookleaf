@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
-import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { SortableContext, arrayMove, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useDndMonitor } from '@dnd-kit/core'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,17 +13,11 @@ import {
 } from '@/components/ui/context-menu'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage, updateImagePosition } from '@/lib/images'
-import { KeyBetween } from '@/lib/fracdex'
+import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
 
-export function computeNewPosition(orderedImages: Image[], newIndex: number): string {
-  const prevPos = orderedImages[newIndex - 1]?.position ?? null
-  const nextPos = orderedImages[newIndex + 1]?.position ?? null
-  return KeyBetween(prevPos, nextPos)
-}
 
 export type LayoutMode = 'masonry'
 
@@ -36,16 +31,16 @@ interface ImageCardProps {
   image: Image
   imgHeight: number
   isTrash: boolean
-  isFolderView: boolean
+  isDropTarget: boolean
   currentFolderId: string | null
   onAction: (image: Image) => void
   onSelect: (image: Image) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isFolderView, currentFolderId, onAction, onSelect }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onSelect }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
-    disabled: isTrash || !isFolderView,
+    disabled: isTrash,
     data: { type: 'image', imageId: image.id, currentFolderId, thumbnailUrl: image.thumbnail_url },
   })
 
@@ -63,7 +58,7 @@ function ImageCard({ image, imgHeight, isTrash, isFolderView, currentFolderId, o
           style={style}
           {...listeners}
           {...attributes}
-          className="cursor-pointer rounded-lg overflow-hidden bg-card"
+          className={`cursor-pointer rounded-lg overflow-hidden bg-card${isDropTarget ? ' ring-2 ring-primary' : ''}`}
           onClick={() => onSelect(image)}
         >
           <MasonryCardContent image={image} imgHeight={imgHeight} />
@@ -121,6 +116,21 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(660)
   const [orderedImages, setOrderedImages] = useState<Image[]>([])
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  const activeDragIdRef = useRef<string | null>(null)
+
+  useDndMonitor({
+    onDragStart(event) {
+      activeDragIdRef.current = String(event.active.id)
+    },
+    onDragOver(event) {
+      if (!isFolderView || event.active.data.current?.type !== 'image') return
+      const overId = event.over ? String(event.over.id) : null
+      setDragOverId(overId !== activeDragIdRef.current ? overId : null)
+    },
+    onDragEnd() { setDragOverId(null); activeDragIdRef.current = null },
+    onDragCancel() { setDragOverId(null); activeDragIdRef.current = null },
+  })
 
   useEffect(() => {
     const el = containerRef.current
@@ -212,7 +222,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
       }
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortEndTrigger])
+  }, [sortEndTrigger, view])
 
   function handleAction(image: Image) {
     if (isTrash) {
@@ -234,13 +244,14 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
     <MasonryLayout
       images={orderedImages}
       containerWidth={containerWidth}
-      renderCard={(image, imgHeight) => (
+      dropIndicatorId={dragOverId}
+      renderCard={(image, imgHeight, isDropTarget) => (
         <ImageCard
           key={image.id}
           image={image}
           imgHeight={imgHeight}
           isTrash={isTrash}
-          isFolderView={isFolderView}
+          isDropTarget={isDropTarget}
           currentFolderId={folderId}
           onAction={handleAction}
           onSelect={onImageSelect}
@@ -261,7 +272,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
           <p className="text-sm">{isTrash ? 'Trash is empty' : 'No images here yet'}</p>
         </div>
       ) : isFolderView ? (
-        <SortableContext items={sortableItems} strategy={rectSortingStrategy}>
+        <SortableContext items={sortableItems} strategy={() => null}>
           {grid}
         </SortableContext>
       ) : (

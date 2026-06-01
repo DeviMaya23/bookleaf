@@ -1,22 +1,15 @@
 import { ImageIcon } from 'lucide-react'
 import type { Image } from '@/lib/images'
-
-export const MASONRY_TARGET_COL_WIDTH = 220
-const GAP = 12
-
-export function computeMasonryLayout(containerWidth: number) {
-  const numCols = Math.max(1, Math.floor(containerWidth / MASONRY_TARGET_COL_WIDTH))
-  const colWidth = (containerWidth - GAP * (numCols - 1)) / numCols
-  return { numCols, colWidth }
-}
+import { computeMasonryLayout, GAP } from '@/lib/masonry'
 
 interface MasonryLayoutProps {
   images: Image[]
   containerWidth: number
-  renderCard: (image: Image, imgHeight: number) => React.ReactNode
+  dropIndicatorId?: string | null
+  renderCard: (image: Image, imgHeight: number, isDropTarget: boolean) => React.ReactNode
 }
 
-export default function MasonryLayout({ images, containerWidth, renderCard }: MasonryLayoutProps) {
+export default function MasonryLayout({ images, containerWidth, dropIndicatorId, renderCard }: MasonryLayoutProps) {
   const { numCols, colWidth } = computeMasonryLayout(containerWidth)
 
   const columns: Image[][] = Array.from({ length: numCols }, () => [])
@@ -31,7 +24,7 @@ export default function MasonryLayout({ images, containerWidth, renderCard }: Ma
           {col.map((image) => {
             const ar = image.width && image.height ? image.width / image.height : 1
             const imgHeight = colWidth / ar
-            return renderCard(image, imgHeight)
+            return renderCard(image, imgHeight, dropIndicatorId === `image-${image.id}`)
           })}
         </div>
       ))}

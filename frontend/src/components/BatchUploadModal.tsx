@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { UploadCloud, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
@@ -164,7 +164,7 @@ export default function BatchUploadModal({
     pending.slice(0, slots).forEach(f => runUpload(f))
   }, [runUpload])
 
-  scheduleNextRef.current = scheduleNext
+  useLayoutEffect(() => { scheduleNextRef.current = scheduleNext })
 
   useEffect(() => {
     if (open) {
