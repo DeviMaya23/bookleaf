@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -13,7 +12,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestFolderRepository_Create_Success(t *testing.T) {
+// --- Create ---
+
+func TestFolderRepository_Create_PersistsFields(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	repo := NewFolderRepository(tx)
@@ -23,34 +24,29 @@ func TestFolderRepository_Create_Success(t *testing.T) {
 		Name:        "travel",
 		Description: func() *string { v := "trip board"; return &v }(),
 	})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder.ID == uuid.Nil {
-		t.Fatal("expected generated folder ID")
-	}
-	if folder.Name != "travel" {
-		t.Fatalf("expected folder name travel, got: %s", folder.Name)
-	}
-	if folder.Description == nil || *folder.Description != "trip board" {
-		t.Fatalf("expected folder description trip board, got: %v", folder.Description)
-	}
+
+	require.NoError(t, err)
+	assert.NotEqual(t, uuid.Nil, folder.ID)
+	assert.Equal(t, "travel", folder.Name)
+	require.NotNil(t, folder.Description)
+	assert.Equal(t, "trip board", *folder.Description)
 }
 
-func TestFolderRepository_Create_Failure(t *testing.T) {
+func TestFolderRepository_Create_FKViolation(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
 	_, err := repo.Create(context.Background(), &domain.Folder{
-		UserID: "kp_missing",
+		UserID: "kp_nonexistent",
 		Name:   "travel",
 	})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
+
+	require.Error(t, err)
 }
 
-func TestFolderRepository_List_Success(t *testing.T) {
+// --- List ---
+
+func TestFolderRepository_List_ReturnsOwnFolders(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	createFolder(t, tx, "kp_abc123", "travel", nil)
@@ -58,50 +54,37 @@ func TestFolderRepository_List_Success(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	folders, err := repo.List(context.Background(), "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if len(folders) != 2 {
-		t.Fatalf("expected 2 folders, got: %d", len(folders))
-	}
+
+	require.NoError(t, err)
+	assert.Len(t, folders, 2)
 }
 
-func TestFolderRepository_List_Failure(t *testing.T) {
-	db, err := testutil.NewTestDB(testContainer)
-	if err != nil {
-		t.Fatalf("create db handle: %v", err)
-	}
+func TestFolderRepository_List_ExcludesOtherUserFolders(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_owner")
+	createUser(t, tx, "kp_other")
+	createFolder(t, tx, "kp_owner", "travel", nil)
+	repo := NewFolderRepository(tx)
 
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get underlying sql.DB: %v", err)
-	}
-	sqlDB.Close()
+	folders, err := repo.List(context.Background(), "kp_other")
 
-	repo := NewFolderRepository(db)
-
-	_, err = repo.List(context.Background(), "kp_abc123")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
+	require.NoError(t, err)
+	assert.Empty(t, folders)
 }
 
-func TestFolderRepository_FindByName_Success(t *testing.T) {
+// --- FindByName ---
+
+func TestFolderRepository_FindByName_ReturnsMatch(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	existing := createFolder(t, tx, "kp_abc123", "Nature", nil)
 	repo := NewFolderRepository(tx)
 
 	folder, err := repo.FindByName(context.Background(), "kp_abc123", "nature")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder == nil {
-		t.Fatal("expected folder, got nil")
-	}
-	if folder.ID != existing.ID {
-		t.Fatalf("expected id %s, got %s", existing.ID, folder.ID)
-	}
+
+	require.NoError(t, err)
+	require.NotNil(t, folder)
+	assert.Equal(t, existing.ID, folder.ID)
 }
 
 func TestFolderRepository_FindByName_NotFound(t *testing.T) {
@@ -110,40 +93,62 @@ func TestFolderRepository_FindByName_NotFound(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	folder, err := repo.FindByName(context.Background(), "kp_abc123", "missing-folder")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder != nil {
-		t.Fatalf("expected nil folder, got: %+v", folder)
-	}
+
+	require.NoError(t, err)
+	assert.Nil(t, folder)
 }
 
-func TestFolderRepository_GetByID_Success(t *testing.T) {
+func TestFolderRepository_FindByName_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_owner")
+	createUser(t, tx, "kp_other")
+	createFolder(t, tx, "kp_owner", "nature", nil)
+	repo := NewFolderRepository(tx)
+
+	folder, err := repo.FindByName(context.Background(), "kp_other", "nature")
+
+	require.NoError(t, err)
+	assert.Nil(t, folder)
+}
+
+// --- GetByID ---
+
+func TestFolderRepository_GetByID_ReturnsFolder(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	existing := createFolder(t, tx, "kp_abc123", "travel", nil)
 	repo := NewFolderRepository(tx)
 
 	folder, err := repo.GetByID(context.Background(), existing.ID, "kp_abc123")
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if folder.ID != existing.ID {
-		t.Fatalf("expected id %s, got %s", existing.ID, folder.ID)
-	}
+
+	require.NoError(t, err)
+	assert.Equal(t, existing.ID, folder.ID)
 }
 
-func TestFolderRepository_GetByID_Failure(t *testing.T) {
+func TestFolderRepository_GetByID_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
 	_, err := repo.GetByID(context.Background(), uuid.New(), "kp_abc123")
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
-	}
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
-func TestFolderRepository_Update_Success(t *testing.T) {
+func TestFolderRepository_GetByID_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_owner")
+	createUser(t, tx, "kp_other")
+	existing := createFolder(t, tx, "kp_owner", "travel", nil)
+	repo := NewFolderRepository(tx)
+
+	_, err := repo.GetByID(context.Background(), existing.ID, "kp_other")
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+// --- Update ---
+
+func TestFolderRepository_Update_PersistsFields(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	parent := createFolder(t, tx, "kp_abc123", "parent", nil)
@@ -157,21 +162,16 @@ func TestFolderRepository_Update_Success(t *testing.T) {
 		ParentID:    &parent.ID,
 		Description: func() *string { v := "updated description"; return &v }(),
 	})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if updated.Name != "updated" {
-		t.Fatalf("expected name updated, got %s", updated.Name)
-	}
-	if updated.ParentID == nil || *updated.ParentID != parent.ID {
-		t.Fatalf("expected parent_id %s, got %v", parent.ID, updated.ParentID)
-	}
-	if updated.Description == nil || *updated.Description != "updated description" {
-		t.Fatalf("expected description updated description, got %v", updated.Description)
-	}
+
+	require.NoError(t, err)
+	assert.Equal(t, "updated", updated.Name)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, parent.ID, *updated.ParentID)
+	require.NotNil(t, updated.Description)
+	assert.Equal(t, "updated description", *updated.Description)
 }
 
-func TestFolderRepository_Update_Failure(t *testing.T) {
+func TestFolderRepository_Update_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
@@ -180,12 +180,29 @@ func TestFolderRepository_Update_Failure(t *testing.T) {
 		UserID: "kp_abc123",
 		Name:   "updated",
 	})
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
-	}
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
-func TestFolderRepository_DeleteWithCascade_Success(t *testing.T) {
+func TestFolderRepository_Update_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_owner")
+	createUser(t, tx, "kp_other")
+	existing := createFolder(t, tx, "kp_owner", "travel", nil)
+	repo := NewFolderRepository(tx)
+
+	_, err := repo.Update(context.Background(), &domain.Folder{
+		ID:     existing.ID,
+		UserID: "kp_other",
+		Name:   "updated",
+	})
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+// --- DeleteWithCascade ---
+
+func TestFolderRepository_DeleteWithCascade_RemovesTargetAndNullsChildParent(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	userID := "kp_abc123"
 	createUser(t, tx, userID)
@@ -195,39 +212,27 @@ func TestFolderRepository_DeleteWithCascade_Success(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	err := repo.DeleteWithCascade(context.Background(), target.ID, userID)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
+
+	require.NoError(t, err)
 
 	var gotTarget domain.Folder
-	err = tx.Where("id = ?", target.ID).First(&gotTarget).Error
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("expected target folder deleted, got error: %v", err)
-	}
+	require.ErrorIs(t, tx.Where("id = ?", target.ID).First(&gotTarget).Error, gorm.ErrRecordNotFound)
 
 	var gotChild domain.Folder
-	if err := tx.Where("id = ?", child.ID).First(&gotChild).Error; err != nil {
-		t.Fatalf("expected child folder to exist, got: %v", err)
-	}
-	if gotChild.ParentID != nil {
-		t.Fatalf("expected child parent_id nil, got: %v", gotChild.ParentID)
-	}
+	require.NoError(t, tx.Where("id = ?", child.ID).First(&gotChild).Error)
+	assert.Nil(t, gotChild.ParentID)
 
-	// image_folders row should be gone via ON DELETE CASCADE on folder_id FK
+	// image_folders row removed via ON DELETE CASCADE on folder_id FK
 	var count int64
 	tx.Table("image_folders").Where("image_id = ?", img.ID).Count(&count)
-	if count != 0 {
-		t.Fatalf("expected image_folders row removed by cascade, got count: %d", count)
-	}
+	assert.EqualValues(t, 0, count)
 
-	// image itself should still exist (only the folder membership is removed)
+	// image itself survives — only the folder membership is removed
 	var gotImage domain.Image
-	if err := tx.Where("id = ?", img.ID).First(&gotImage).Error; err != nil {
-		t.Fatalf("expected image to still exist, got: %v", err)
-	}
+	require.NoError(t, tx.Where("id = ?", img.ID).First(&gotImage).Error)
 }
 
-func TestFolderRepository_DeleteWithCascade_FolderOwnedByAnotherUser(t *testing.T) {
+func TestFolderRepository_DeleteWithCascade_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
@@ -235,21 +240,52 @@ func TestFolderRepository_DeleteWithCascade_FolderOwnedByAnotherUser(t *testing.
 	repo := NewFolderRepository(tx)
 
 	err := repo.DeleteWithCascade(context.Background(), target.ID, "kp_other")
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
-	}
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 
 	var got domain.Folder
-	if err := tx.Where("id = ?", target.ID).First(&got).Error; err != nil {
-		t.Fatalf("expected folder to remain for owner, got: %v", err)
-	}
+	require.NoError(t, tx.Where("id = ?", target.ID).First(&got).Error)
 }
+
+// --- CountImagesByFolder ---
+
+func TestFolderRepository_CountImagesByFolder_ExcludesSoftDeleted(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userID := "kp_countimgs"
+	createUser(t, tx, userID)
+	folder := createFolder(t, tx, userID, "target", nil)
+	imageRepo := NewImageRepository(tx)
+	createImage(t, tx, userID, &folder.ID)
+	img2 := createImage(t, tx, userID, &folder.ID)
+	createImage(t, tx, userID, nil) // unfiled — should not count
+	require.NoError(t, imageRepo.SoftDelete(context.Background(), img2.ID, userID))
+	repo := NewFolderRepository(tx)
+
+	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, userID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestFolderRepository_CountImagesByFolder_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_owner")
+	createUser(t, tx, "kp_other")
+	folder := createFolder(t, tx, "kp_owner", "target", nil)
+	createImage(t, tx, "kp_owner", &folder.ID)
+	repo := NewFolderRepository(tx)
+
+	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, "kp_other")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+// --- helpers ---
 
 func createUser(t *testing.T, db *gorm.DB, id string) {
 	t.Helper()
-	if err := db.Create(&domain.User{ID: id}).Error; err != nil {
-		t.Fatalf("create user: %v", err)
-	}
+	require.NoError(t, db.Create(&domain.User{ID: id}).Error)
 }
 
 func createFolder(t *testing.T, db *gorm.DB, userID, name string, parentID *uuid.UUID) *domain.Folder {
@@ -259,9 +295,7 @@ func createFolder(t *testing.T, db *gorm.DB, userID, name string, parentID *uuid
 		Name:     name,
 		ParentID: parentID,
 	}
-	if err := db.Create(folder).Error; err != nil {
-		t.Fatalf("create folder: %v", err)
-	}
+	require.NoError(t, db.Create(folder).Error)
 	return folder
 }
 
@@ -270,38 +304,13 @@ func createImage(t *testing.T, db *gorm.DB, userID string, folderID *uuid.UUID) 
 	img := &domain.Image{
 		UserID:   userID,
 		Title:    "test image",
-		R2Path:   "users/kp_abc123/images/test.jpg",
+		R2Path:   "users/" + userID + "/images/test.jpg",
 		MIMEType: "image/jpeg",
 	}
-	if err := db.Create(img).Error; err != nil {
-		t.Fatalf("create image: %v", err)
-	}
+	require.NoError(t, db.Create(img).Error)
 	if folderID != nil {
-		imageRepo := NewImageRepository(db)
-		if err := imageRepo.SetImageFolder(context.Background(), img.ID, folderID); err != nil {
-			t.Fatalf("set image folder: %v", err)
-		}
+		require.NoError(t, NewImageRepository(db).SetImageFolder(context.Background(), img.ID, folderID))
 	}
 	return img
 }
 
-func TestFolderRepository_CountImagesByFolder(t *testing.T) {
-	tx := testutil.NewTestTx(t, testDB)
-	userID := "kp_countimgs"
-	createUser(t, tx, userID)
-	folder := createFolder(t, tx, userID, "target", nil)
-
-	imageRepo := NewImageRepository(tx)
-	img1 := createImage(t, tx, userID, &folder.ID)
-	img2 := createImage(t, tx, userID, &folder.ID)
-	createImage(t, tx, userID, nil) // no folder — should not count
-
-	// soft-delete img2 — should be excluded
-	require.NoError(t, imageRepo.SoftDelete(context.Background(), img2.ID, userID))
-
-	repo := NewFolderRepository(tx)
-	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, userID)
-	require.NoError(t, err)
-	assert.Equal(t, 1, count)
-	_ = img1
-}

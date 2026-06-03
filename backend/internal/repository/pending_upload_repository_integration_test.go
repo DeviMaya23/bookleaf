@@ -74,6 +74,25 @@ func TestPendingUploadRepository_GetByID_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
+func TestPendingUploadRepository_GetByID_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_pend_owner")
+	createUser(t, tx, "kp_pend_other")
+	repo := NewPendingUploadRepository(tx)
+
+	pending, err := repo.Create(context.Background(), &domain.PendingUpload{
+		UserID:   "kp_pend_owner",
+		Title:    "private",
+		R2Path:   "users/kp_pend_owner/images/test.jpg",
+		MIMEType: "image/jpeg",
+	})
+	require.NoError(t, err)
+
+	_, err = repo.GetByID(context.Background(), pending.ID, "kp_pend_other")
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
 func TestPendingUploadRepository_Delete_Success(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_pending_delete")

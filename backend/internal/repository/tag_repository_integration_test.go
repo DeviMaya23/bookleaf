@@ -49,7 +49,7 @@ func TestTagRepository_Create_DuplicateName(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = repo.Create(context.Background(), newTestTag(userID, "nature"))
-	require.Error(t, err)
+	require.ErrorContains(t, err, "23505")
 }
 
 func TestTagRepository_ListByUserID_Success(t *testing.T) {
@@ -126,6 +126,71 @@ func TestTagRepository_Delete_NotFound(t *testing.T) {
 	repo, _, userID := setupTagTest(t)
 
 	err := repo.Delete(context.Background(), uuid.New(), userID)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestTagRepository_ListByUserID_ExcludesOtherUserTags(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_tagowner")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_tagother")
+	require.NoError(t, err)
+	tagRepo := NewTagRepository(tx)
+	_, err = tagRepo.Create(context.Background(), newTestTag(owner.ID, "ownertag"))
+	require.NoError(t, err)
+
+	tags, err := tagRepo.ListByUserID(context.Background(), other.ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, tags)
+}
+
+func TestTagRepository_GetByID_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_tagown2")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_tagoth2")
+	require.NoError(t, err)
+	tagRepo := NewTagRepository(tx)
+	created, err := tagRepo.Create(context.Background(), newTestTag(owner.ID, "private"))
+	require.NoError(t, err)
+
+	_, err = tagRepo.GetByID(context.Background(), created.ID, other.ID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestTagRepository_Update_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_tagupdowner")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_tagupdother")
+	require.NoError(t, err)
+	tagRepo := NewTagRepository(tx)
+	created, err := tagRepo.Create(context.Background(), newTestTag(owner.ID, "original"))
+	require.NoError(t, err)
+
+	_, err = tagRepo.Update(context.Background(), created.ID, other.ID, "stolen")
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestTagRepository_Delete_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_tagdelowner")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_tagdelother")
+	require.NoError(t, err)
+	tagRepo := NewTagRepository(tx)
+	created, err := tagRepo.Create(context.Background(), newTestTag(owner.ID, "keepme"))
+	require.NoError(t, err)
+
+	err = tagRepo.Delete(context.Background(), created.ID, other.ID)
+
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 

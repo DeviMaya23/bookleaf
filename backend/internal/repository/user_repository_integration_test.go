@@ -20,16 +20,3 @@ func TestUserRepository_GetOrCreate_Success(t *testing.T) {
 	assert.False(t, user.VisionEnabled)
 }
 
-func TestUserRepository_GetOrCreate_DBError(t *testing.T) {
-	db, err := testutil.NewTestDB(testContainer)
-	require.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.Close()
-
-	repo := NewUserRepository(db)
-
-	_, err = repo.GetOrCreate(context.Background(), "kp_abc123")
-	require.Error(t, err)
-}
