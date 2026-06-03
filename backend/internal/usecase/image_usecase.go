@@ -81,7 +81,7 @@ type imageUsecase struct {
 	store             StorageService
 	thumbnails        ThumbnailService
 	visionService     VisionService
-	folderRepo        FolderRepository
+	folderRepo        ImageFolderRepository
 	userRepo          UserRepository
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
@@ -96,7 +96,7 @@ func NewImageUsecase(
 	store StorageService,
 	thumbnails ThumbnailService,
 	visionService VisionService,
-	folderRepo FolderRepository,
+	folderRepo ImageFolderRepository,
 	userRepo UserRepository,
 	tel *observability.Telemetry,
 ) *imageUsecase {

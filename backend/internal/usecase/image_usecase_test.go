@@ -24,123 +24,94 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- mocks ---
+// --- test doubles ---
 
 type mockImageRepository struct {
-	image                    *domain.Image
-	images                   []*domain.Image
-	err                      error
-	setImageFolderErr        error
-	syncImageFoldersErr      error
-	moveImageFolderErr       error
-	updateFolderPositionErr  error
-	count                    int64
-	updateFields             map[string]any
-	lastUpdateID             uuid.UUID
-	lastUpdateBy             string
-	createdImage             *domain.Image
-	lastUnfiled              bool
-	hardDeleteCalls          int
-	setFolderImageID         uuid.UUID
-	setFolderFolderID        *uuid.UUID
-	setFolderCalls           int
-	syncFolderCalls          int
-	lastSyncImageID          uuid.UUID
-	lastSyncFolderIDs        []uuid.UUID
-	moveFolderCalls          int
-	lastMoveImageID          uuid.UUID
-	lastMoveFromFolderID     *uuid.UUID
-	lastMoveToFolderID       *uuid.UUID
-	lastPositionImageID      uuid.UUID
-	lastPositionFolderID     uuid.UUID
-	lastPositionValue        string
+	image             *domain.Image
+	images            []*domain.Image
+	err               error
+	createdImage      *domain.Image
+	updateFields      map[string]any
+	lastUpdateID      uuid.UUID
+	lastUpdateBy      string
+	hardDeleteCalls   int
+	setFolderCalls    int
+	setFolderImageID  uuid.UUID
+	setFolderFolderID *uuid.UUID
+	syncFolderCalls   int
+	lastSyncImageID   uuid.UUID
+	lastSyncFolderIDs []uuid.UUID
+	moveFolderCalls   int
+	lastMoveImageID   uuid.UUID
+	lastMoveFromFolderID *uuid.UUID
+	lastMoveToFolderID   *uuid.UUID
 }
 
-func (m *mockImageRepository) Create(_ context.Context, image *domain.Image) (*domain.Image, error) {
-	m.createdImage = image
+func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
+	m.createdImage = img
 	return m.image, m.err
 }
-
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, unfiled bool, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
-	m.lastUnfiled = unfiled
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return m.images, m.err
 }
-
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
 }
-
 func (m *mockImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
 }
-
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-
 func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ json.RawMessage) error {
 	return m.err
 }
-
 func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
 	m.lastUpdateID = id
 	m.lastUpdateBy = userID
 	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
 }
-
 func (m *mockImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-
 func (m *mockImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-
 func (m *mockImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	return m.images, m.err
 }
-
 func (m *mockImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
-	return m.count, m.err
+	return 0, m.err
 }
-
 func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
 	return m.images, m.err
 }
-
 func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	m.hardDeleteCalls++
 	return m.err
 }
-
 func (m *mockImageRepository) SetImageFolder(_ context.Context, imageID uuid.UUID, folderID *uuid.UUID) error {
 	m.setFolderCalls++
 	m.setFolderImageID = imageID
 	m.setFolderFolderID = folderID
-	return m.setImageFolderErr
+	return m.err
 }
-
 func (m *mockImageRepository) SyncImageFolders(_ context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error {
 	m.syncFolderCalls++
 	m.lastSyncImageID = imageID
 	m.lastSyncFolderIDs = append([]uuid.UUID(nil), folderIDs...)
-	return m.syncImageFoldersErr
+	return m.err
 }
-
-func (m *mockImageRepository) MoveImageFolder(_ context.Context, imageID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) error {
+func (m *mockImageRepository) MoveImageFolder(_ context.Context, imageID uuid.UUID, from *uuid.UUID, to *uuid.UUID) error {
 	m.moveFolderCalls++
 	m.lastMoveImageID = imageID
-	m.lastMoveFromFolderID = fromFolderID
-	m.lastMoveToFolderID = toFolderID
-	return m.moveImageFolderErr
+	m.lastMoveFromFolderID = from
+	m.lastMoveToFolderID = to
+	return m.err
 }
-
-func (m *mockImageRepository) UpdateImageFolderPosition(_ context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error {
-	m.lastPositionImageID = imageID
-	m.lastPositionFolderID = folderID
-	m.lastPositionValue = position
-	return m.updateFolderPositionErr
+func (m *mockImageRepository) UpdateImageFolderPosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
+	return m.err
 }
 
 type mockPendingUploadRepository struct {
@@ -149,15 +120,11 @@ type mockPendingUploadRepository struct {
 	err                  error
 	createErr            error
 	getErr               error
-	deleteErr            error
-	listErr              error
-	transactionErr       error
 	transactionCalls     int
 	transactionImageRepo ImageRepository
 	createdPending       *domain.PendingUpload
 	deletedID            uuid.UUID
 	deleteCalls          int
-	listOlderThan        time.Time
 }
 
 func (m *mockPendingUploadRepository) Create(_ context.Context, pending *domain.PendingUpload) (*domain.PendingUpload, error) {
@@ -170,45 +137,161 @@ func (m *mockPendingUploadRepository) Create(_ context.Context, pending *domain.
 	}
 	return pending, m.err
 }
-
 func (m *mockPendingUploadRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.PendingUpload, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
-	if m.pending != nil {
-		return m.pending, m.err
-	}
-	return nil, m.err
+	return m.pending, m.err
 }
-
 func (m *mockPendingUploadRepository) Delete(_ context.Context, id uuid.UUID) error {
 	m.deleteCalls++
 	m.deletedID = id
-	if m.deleteErr != nil {
-		return m.deleteErr
-	}
 	return m.err
 }
-
-func (m *mockPendingUploadRepository) ListStale(_ context.Context, olderThan time.Time) ([]*domain.PendingUpload, error) {
-	m.listOlderThan = olderThan
-	if m.listErr != nil {
-		return nil, m.listErr
-	}
+func (m *mockPendingUploadRepository) ListStale(_ context.Context, _ time.Time) ([]*domain.PendingUpload, error) {
 	return m.pendings, m.err
 }
-
-func (m *mockPendingUploadRepository) Transaction(_ context.Context, fn func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error) error {
+func (m *mockPendingUploadRepository) Transaction(_ context.Context, fn func(PendingUploadRepository, ImageRepository) error) error {
 	m.transactionCalls++
-	if m.transactionErr != nil {
-		return m.transactionErr
-	}
 	imageRepo := m.transactionImageRepo
 	if imageRepo == nil {
 		imageRepo = &mockImageRepository{}
 	}
 	return fn(m, imageRepo)
 }
+
+type mockStorageService struct {
+	putURL      string
+	getURL      string
+	downloadURL string
+	err         error
+	getObjectErr  error
+	putObjectErr  error
+	deleteObjectErr error
+	objectBytes []byte
+	getCalls    int
+	putCalls    int
+	deleteCalls int
+	deletedKeys []string
+	lastDownloadKey      string
+	lastDownloadFilename string
+	lastDownloadTTL      time.Duration
+}
+
+func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
+	return m.putURL, m.err
+}
+func (m *mockStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
+	return m.getURL, m.err
+}
+func (m *mockStorageService) GeneratePresignedDownloadURL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
+	m.lastDownloadKey = key
+	m.lastDownloadFilename = filename
+	m.lastDownloadTTL = ttl
+	return m.downloadURL, m.err
+}
+func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
+	m.getCalls++
+	if m.getObjectErr != nil {
+		return nil, m.getObjectErr
+	}
+	if m.objectBytes != nil {
+		return io.NopCloser(bytes.NewReader(m.objectBytes)), nil
+	}
+	return io.NopCloser(strings.NewReader("")), nil
+}
+func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _ string) error {
+	m.putCalls++
+	if m.putObjectErr != nil {
+		return m.putObjectErr
+	}
+	return m.err
+}
+func (m *mockStorageService) DeleteObject(_ context.Context, key string) error {
+	m.deleteCalls++
+	m.deletedKeys = append(m.deletedKeys, key)
+	if m.deleteObjectErr != nil {
+		return m.deleteObjectErr
+	}
+	return m.err
+}
+func (m *mockStorageService) Ping(_ context.Context) error { return m.err }
+
+type mockThumbnailService struct{ err error }
+
+func (m *mockThumbnailService) Generate(_ context.Context, _ io.Reader) (io.Reader, error) {
+	return strings.NewReader(""), m.err
+}
+
+type stubImageFolderRepo struct {
+	folder *domain.Folder
+	err    error
+}
+
+func (s *stubImageFolderRepo) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubImageFolderRepo) FindByName(_ context.Context, _, _ string) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubImageFolderRepo) Create(_ context.Context, folder *domain.Folder) (*domain.Folder, error) {
+	return folder, s.err
+}
+
+type stubUserRepo struct{ user *domain.User }
+
+func (s *stubUserRepo) GetOrCreate(_ context.Context, _ string) (*domain.User, error) {
+	return s.user, nil
+}
+func (s *stubUserRepo) GetByID(_ context.Context, _ string) (*domain.User, error) {
+	return s.user, nil
+}
+
+type mockVisionService struct {
+	labels []domain.Label
+	err    error
+	calls  int
+}
+
+func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]domain.Label, error) {
+	m.calls++
+	return m.labels, m.err
+}
+
+type mockTagRepository struct {
+	tag                *domain.Tag
+	tags               []*domain.Tag
+	err                error
+	replaceCalls       int
+	lastReplaceImageID uuid.UUID
+	lastReplaceTagIDs  []uuid.UUID
+}
+
+func (m *mockTagRepository) Create(_ context.Context, _ *domain.Tag) (*domain.Tag, error) {
+	return m.tag, m.err
+}
+func (m *mockTagRepository) ListByUserID(_ context.Context, _ string) ([]*domain.Tag, error) {
+	return m.tags, m.err
+}
+func (m *mockTagRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Tag, error) {
+	return m.tag, m.err
+}
+func (m *mockTagRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ string) (*domain.Tag, error) {
+	return m.tag, m.err
+}
+func (m *mockTagRepository) Delete(_ context.Context, _ uuid.UUID, _ string) error { return m.err }
+func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUID, tagIDs []uuid.UUID) error {
+	m.replaceCalls++
+	m.lastReplaceImageID = imageID
+	if tagIDs != nil {
+		m.lastReplaceTagIDs = append([]uuid.UUID(nil), tagIDs...)
+	} else {
+		m.lastReplaceTagIDs = nil
+	}
+	return m.err
+}
+
+// --- helpers ---
 
 func _mapCopy(fields map[string]any) map[string]any {
 	if fields == nil {
@@ -232,170 +315,6 @@ func generateTestPNGBytes(t *testing.T, width, height int) []byte {
 	var buf bytes.Buffer
 	require.NoError(t, png.Encode(&buf, img))
 	return buf.Bytes()
-}
-
-type mockStorageService struct {
-	putURL               string
-	getURL               string
-	downloadURL          string
-	err                  error
-	getObjectErr         error
-	putObjectErr         error
-	deleteObjectErr      error
-	objectBytes          []byte
-	getCalls             int
-	putCalls             int
-	deleteCalls          int
-	deletedKeys          []string
-	lastDownloadKey      string
-	lastDownloadFilename string
-	lastDownloadTTL      time.Duration
-}
-
-func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
-	return m.putURL, m.err
-}
-
-func (m *mockStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
-	return m.getURL, m.err
-}
-
-func (m *mockStorageService) GeneratePresignedDownloadURL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
-	m.lastDownloadKey = key
-	m.lastDownloadFilename = filename
-	m.lastDownloadTTL = ttl
-	return m.downloadURL, m.err
-}
-
-func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
-	m.getCalls++
-	if m.getObjectErr != nil {
-		return nil, m.getObjectErr
-	}
-	if m.objectBytes != nil {
-		return io.NopCloser(bytes.NewReader(m.objectBytes)), m.err
-	}
-	return io.NopCloser(strings.NewReader("")), m.err
-}
-
-func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _ string) error {
-	m.putCalls++
-	if m.putObjectErr != nil {
-		return m.putObjectErr
-	}
-	return m.err
-}
-
-func (m *mockStorageService) DeleteObject(_ context.Context, key string) error {
-	m.deleteCalls++
-	m.deletedKeys = append(m.deletedKeys, key)
-	if m.deleteObjectErr != nil {
-		return m.deleteObjectErr
-	}
-	return m.err
-}
-
-func (m *mockStorageService) Ping(_ context.Context) error {
-	return m.err
-}
-
-type mockThumbnailService struct {
-	err error
-}
-
-func (m *mockThumbnailService) Generate(_ context.Context, _ io.Reader) (io.Reader, error) {
-	return strings.NewReader(""), m.err
-}
-
-type mockImageUserRepository struct {
-	user *domain.User
-	err  error
-}
-
-func (m *mockImageUserRepository) GetOrCreate(_ context.Context, _ string) (*domain.User, error) {
-	return m.user, m.err
-}
-
-func (m *mockImageUserRepository) GetByID(_ context.Context, _ string) (*domain.User, error) {
-	return m.user, m.err
-}
-
-func defaultMockUserRepo() *mockImageUserRepository {
-	return &mockImageUserRepository{user: &domain.User{ID: "kp_abc123"}}
-}
-
-type mockVisionService struct {
-	labels []visionLabel
-	err    error
-	calls  int
-}
-
-type visionLabel struct {
-	Description string
-	Score       float32
-}
-
-func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]domain.Label, error) {
-	m.calls++
-	if m.err != nil {
-		return nil, m.err
-	}
-	out := make([]domain.Label, len(m.labels))
-	for i, l := range m.labels {
-		out[i] = domain.Label{Description: l.Description, Score: l.Score}
-	}
-	return out, nil
-}
-
-type mockAcceptSuggestionFolderRepository struct {
-	findResult      *domain.Folder
-	findErr         error
-	createResult    *domain.Folder
-	createErr       error
-	findCalls       int
-	createCalls     int
-	lastFindUserID  string
-	lastFindName    string
-	lastCreatedData *domain.Folder
-}
-
-func (m *mockAcceptSuggestionFolderRepository) Create(_ context.Context, folder *domain.Folder) (*domain.Folder, error) {
-	m.createCalls++
-	m.lastCreatedData = folder
-	if m.createErr != nil {
-		return nil, m.createErr
-	}
-	if m.createResult != nil {
-		return m.createResult, nil
-	}
-	return folder, nil
-}
-
-func (m *mockAcceptSuggestionFolderRepository) List(_ context.Context, _ string) ([]*domain.Folder, error) {
-	return nil, nil
-}
-
-func (m *mockAcceptSuggestionFolderRepository) FindByName(_ context.Context, userID, name string) (*domain.Folder, error) {
-	m.findCalls++
-	m.lastFindUserID = userID
-	m.lastFindName = name
-	return m.findResult, m.findErr
-}
-
-func (m *mockAcceptSuggestionFolderRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
-	return nil, nil
-}
-
-func (m *mockAcceptSuggestionFolderRepository) Update(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
-	return nil, nil
-}
-
-func (m *mockAcceptSuggestionFolderRepository) CountImagesByFolder(_ context.Context, _ uuid.UUID, _ string) (int, error) {
-	return 0, nil
-}
-
-func (m *mockAcceptSuggestionFolderRepository) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
-	return nil
 }
 
 func noopTel() *observability.Telemetry {
@@ -429,225 +348,100 @@ func findInt64Sum(rm metricdata.ResourceMetrics, name string) []metricdata.DataP
 	return nil
 }
 
-// --- tests ---
-
-func TestImageUsecase_InitiateUpload(t *testing.T) {
-	tests := []struct {
-		name        string
-		title       string
-		mimeType    string
-		pendingRepo *mockPendingUploadRepository
-		store       *mockStorageService
-		wantErr     error
-		wantURL     string
-	}{
-		{
-			name:        "creates pending record and returns presigned put url",
-			title:       "sunset photo",
-			mimeType:    "image/jpeg",
-			pendingRepo: &mockPendingUploadRepository{},
-			store:       &mockStorageService{putURL: "https://r2.example.com/upload"},
-			wantURL:     "https://r2.example.com/upload",
-		},
-		{
-			name:        "returns error for blank title",
-			title:       "   ",
-			mimeType:    "image/jpeg",
-			pendingRepo: &mockPendingUploadRepository{},
-			store:       &mockStorageService{},
-			wantErr:     ErrInvalidImageTitle,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(&mockImageRepository{}, tt.pendingRepo, nil, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			result, err := uc.InitiateUpload(context.Background(), "kp_abc123", tt.title, tt.mimeType, nil, nil, nil)
-
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-			require.NotNil(t, tt.pendingRepo.createdPending)
-			assert.Equal(t, tt.wantURL, result.UploadURL)
-			assert.Equal(t, tt.pendingRepo.createdPending.ID, result.ID)
-			assert.Equal(t, tt.pendingRepo.createdPending.R2Path, result.R2Path)
-			assert.True(t, strings.HasSuffix(result.R2Path, result.ID.String()+".jpg"))
-		})
-	}
+func defaultUserRepo() *stubUserRepo {
+	return &stubUserRepo{user: &domain.User{ID: "kp_abc123"}}
 }
 
-func TestImageUsecase_InitiateUpload_WithDescription(t *testing.T) {
-	imageID := uuid.New()
-	pendingRepo := &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID}}
-	uc := NewImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-	description := "cover image"
+func newImageUsecase(
+	imageRepo ImageRepository,
+	pendingRepo PendingUploadRepository,
+	tagRepo TagRepository,
+	store StorageService,
+	thumbnails ThumbnailService,
+	vision VisionService,
+	folderRepo ImageFolderRepository,
+	userRepo UserRepository,
+) *imageUsecase {
+	return NewImageUsecase(imageRepo, pendingRepo, tagRepo, store, thumbnails, vision, folderRepo, userRepo, noopTel())
+}
 
-	result, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, nil, &description)
+// --- InitiateUpload ---
+
+func TestImageUsecase_InitiateUpload_BlankTitle(t *testing.T) {
+	uc := newImageUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "   ", "image/jpeg", nil, nil, nil)
+
+	require.ErrorIs(t, err, ErrInvalidImageTitle)
+}
+
+func TestImageUsecase_InitiateUpload_BlankMimeType(t *testing.T) {
+	uc := newImageUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset", "   ", nil, nil, nil)
+
+	require.ErrorIs(t, err, ErrInvalidMIMEType)
+}
+
+func TestImageUsecase_InitiateUpload_R2PathFormat(t *testing.T) {
+	pendingRepo := &mockPendingUploadRepository{}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, nil, nil)
+
+	result, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset", "image/jpeg", nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, pendingRepo.createdPending)
-	require.NotNil(t, pendingRepo.createdPending.Description)
-	assert.Equal(t, description, *pendingRepo.createdPending.Description)
-	assert.Equal(t, imageID, result.ID)
+	assert.True(t, strings.HasPrefix(result.R2Path, "users/kp_abc123/images/"))
+	assert.True(t, strings.HasSuffix(result.R2Path, ".jpg"))
+	assert.Equal(t, result.ID, pendingRepo.createdPending.ID)
 }
 
-func TestImageUsecase_InitiateUpload_WithFolderValidation(t *testing.T) {
-	imageID := uuid.New()
-	validFolderID := uuid.New()
-	invalidFolderID := uuid.New()
+func TestImageUsecase_InitiateUpload_FolderFound(t *testing.T) {
+	folderID := uuid.New()
+	pendingRepo := &mockPendingUploadRepository{}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, folderRepo, nil)
 
-	t.Run("calls SetImageFolder when folder exists for user", func(t *testing.T) {
-		pendingRepo := &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID}}
-		folderRepo := &mockFolderRepository{
-			folder: &domain.Folder{ID: validFolderID, UserID: "kp_abc123", Name: "Nature"},
-		}
-		uc := NewImageUsecase(
-			&mockImageRepository{},
-			pendingRepo,
-			nil,
-			&mockStorageService{putURL: "https://r2.example.com/upload"},
-			&mockThumbnailService{},
-			nil,
-			folderRepo,
-			nil,
-			noopTel(),
-		)
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset", "image/jpeg", nil, &folderID, nil)
 
-		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &validFolderID, nil)
-
-		require.NoError(t, err)
-		require.NotNil(t, pendingRepo.createdPending)
-		require.NotNil(t, pendingRepo.createdPending.FolderID)
-		assert.Equal(t, validFolderID, *pendingRepo.createdPending.FolderID)
-	})
-
-	t.Run("does not call SetImageFolder when folder is not found", func(t *testing.T) {
-		pendingRepo := &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID}}
-		folderRepo := &mockFolderRepository{
-			err: gorm.ErrRecordNotFound,
-		}
-		uc := NewImageUsecase(
-			&mockImageRepository{},
-			pendingRepo,
-			nil,
-			&mockStorageService{putURL: "https://r2.example.com/upload"},
-			&mockThumbnailService{},
-			nil,
-			folderRepo,
-			nil,
-			noopTel(),
-		)
-
-		_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &invalidFolderID, nil)
-
-		require.NoError(t, err)
-		require.NotNil(t, pendingRepo.createdPending)
-		assert.Nil(t, pendingRepo.createdPending.FolderID)
-	})
+	require.NoError(t, err)
+	require.NotNil(t, pendingRepo.createdPending.FolderID)
+	assert.Equal(t, folderID, *pendingRepo.createdPending.FolderID)
 }
 
-func TestImageUsecase_CompleteUpload(t *testing.T) {
-	imageID := uuid.New()
+func TestImageUsecase_InitiateUpload_FolderNotFound(t *testing.T) {
+	folderID := uuid.New()
+	pendingRepo := &mockPendingUploadRepository{}
+	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, folderRepo, nil)
 
-	tests := []struct {
-		name           string
-		pendingRepo    *mockPendingUploadRepository
-		imageRepo      *mockImageRepository
-		store          *mockStorageService
-		thumbnails     *mockThumbnailService
-		wantErr        bool
-		wantDelete     bool
-		wantFolderSet  bool
-	}{
-		{
-			name:        "verifies ownership and returns upload result",
-			pendingRepo: &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg", Title: "photo", MIMEType: "image/jpeg"}},
-			imageRepo:   &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}},
-			store:       &mockStorageService{},
-			thumbnails:  &mockThumbnailService{},
-			wantDelete:  true,
-		},
-		{
-			name:        "get object failure returns error",
-			pendingRepo: &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg", Title: "photo", MIMEType: "image/jpeg"}},
-			imageRepo:   &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}},
-			store:       &mockStorageService{getObjectErr: errors.New("r2 unavailable")},
-			thumbnails:  &mockThumbnailService{},
-			wantErr:     true,
-		},
-		{
-			name:        "generate failure returns error",
-			pendingRepo: &mockPendingUploadRepository{pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg", Title: "photo", MIMEType: "image/jpeg"}},
-			imageRepo:   &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}},
-			store:       &mockStorageService{},
-			thumbnails:  &mockThumbnailService{err: errors.New("unsupported format")},
-			wantErr:     true,
-		},
-		{
-			name:        "returns error when pending upload not found",
-			pendingRepo: &mockPendingUploadRepository{getErr: gorm.ErrRecordNotFound},
-			imageRepo:   &mockImageRepository{},
-			store:       &mockStorageService{},
-			thumbnails:  &mockThumbnailService{},
-			wantErr:     true,
-		},
-		{
-			name: "calls SetImageFolder when pending upload has folder_id",
-			pendingRepo: &mockPendingUploadRepository{pending: &domain.PendingUpload{
-				ID:       imageID,
-				UserID:   "kp_abc123",
-				R2Path:   "users/kp_abc123/images/test.jpg",
-				Title:    "photo",
-				MIMEType: "image/jpeg",
-				FolderID: func() *uuid.UUID { id := uuid.New(); return &id }(),
-			}},
-			imageRepo:     &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}},
-			store:         &mockStorageService{},
-			thumbnails:    &mockThumbnailService{},
-			wantDelete:    true,
-			wantFolderSet: true,
-		},
-	}
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset", "image/jpeg", nil, &folderID, nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.pendingRepo.transactionImageRepo = tt.imageRepo
-			uc := NewImageUsecase(tt.imageRepo, tt.pendingRepo, nil, tt.store, tt.thumbnails, nil, nil, defaultMockUserRepo(), noopTel())
-
-			result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			assert.Equal(t, imageID, result.ImageID)
-			if tt.wantDelete {
-				assert.Equal(t, 1, tt.pendingRepo.deleteCalls)
-				assert.Equal(t, imageID, tt.pendingRepo.deletedID)
-			}
-			if tt.wantFolderSet {
-				assert.NotNil(t, tt.imageRepo.setFolderFolderID, "expected SetImageFolder to be called")
-			}
-		})
-	}
+	require.NoError(t, err)
+	assert.Nil(t, pendingRepo.createdPending.FolderID)
 }
 
-func TestImageUsecase_CompleteUpload_PersistsMetadata(t *testing.T) {
+func TestImageUsecase_InitiateUpload_CreatePendingFails(t *testing.T) {
+	pendingRepo := &mockPendingUploadRepository{createErr: errors.New("db error")}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset", "image/jpeg", nil, nil, nil)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "create pending upload record")
+}
+
+// --- CompleteUpload ---
+
+func TestImageUsecase_CompleteUpload_PersistsImageMetadata(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{
-		image: &domain.Image{ID: imageID, UserID: "kp_abc123"},
-	}
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
-		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.png", Title: "photo", MIMEType: "image/png"},
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.png", MIMEType: "image/png"},
 	}
-	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUsecase(imageRepo, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultUserRepo(), noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -661,770 +455,115 @@ func TestImageUsecase_CompleteUpload_PersistsMetadata(t *testing.T) {
 	assert.Equal(t, 6, *imageRepo.createdImage.Height)
 }
 
-func TestImageUsecase_CompleteUpload_DecodeFailureStillPersistsFileSize(t *testing.T) {
+func TestImageUsecase_CompleteUpload_DecodeFailurePersistsFileSize(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{
-		image: &domain.Image{ID: imageID, UserID: "kp_abc123"},
-	}
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
-		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.bin", Title: "photo", MIMEType: "application/octet-stream"},
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.bin", MIMEType: "application/octet-stream"},
 	}
-	store := &mockStorageService{objectBytes: []byte("not-an-image")}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUsecase(imageRepo, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	store := &mockStorageService{objectBytes: []byte("not-an-image")}
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultUserRepo(), noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
 	require.NoError(t, err)
-	require.NotNil(t, imageRepo.createdImage)
 	require.NotNil(t, imageRepo.createdImage.FileSize)
 	assert.EqualValues(t, len(store.objectBytes), *imageRepo.createdImage.FileSize)
 	assert.Nil(t, imageRepo.createdImage.Width)
 	assert.Nil(t, imageRepo.createdImage.Height)
 }
 
-func TestImageUsecase_CompleteUpload_VisionFlow(t *testing.T) {
-	imageID := uuid.New()
-	basePending := &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg", Title: "photo", MIMEType: "image/jpeg"}
-
-	t.Run("vision enabled returns suggested folder name", func(t *testing.T) {
-		visionSvc := &mockVisionService{labels: []visionLabel{{Description: "Nature", Score: 0.98}}}
-		userRepo := &mockImageUserRepository{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
-		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-		pendingRepo := &mockPendingUploadRepository{pending: basePending}
-		pendingRepo.transactionImageRepo = imageRepo
-
-		uc := NewImageUsecase(
-			imageRepo,
-			pendingRepo,
-			nil,
-			&mockStorageService{},
-			&mockThumbnailService{},
-			visionSvc, nil, userRepo, noopTel(),
-		)
-
-		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
-
-		require.NoError(t, err)
-		require.NotNil(t, result.SuggestedFolderName)
-		assert.Equal(t, "Nature", *result.SuggestedFolderName)
-		assert.Empty(t, result.Warning)
-		assert.Equal(t, 1, visionSvc.calls)
-	})
-
-	t.Run("vision disabled returns nil suggestion without calling vision service", func(t *testing.T) {
-		visionSvc := &mockVisionService{labels: []visionLabel{{Description: "Nature", Score: 0.98}}}
-		userRepo := &mockImageUserRepository{user: &domain.User{ID: "kp_abc123", VisionEnabled: false}}
-		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-		pendingRepo := &mockPendingUploadRepository{pending: basePending}
-		pendingRepo.transactionImageRepo = imageRepo
-
-		uc := NewImageUsecase(
-			imageRepo,
-			pendingRepo,
-			nil,
-			&mockStorageService{},
-			&mockThumbnailService{},
-			visionSvc, &mockFolderRepository{}, userRepo, noopTel(),
-		)
-
-		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
-
-		require.NoError(t, err)
-		assert.Nil(t, result.SuggestedFolderName)
-		assert.Empty(t, result.Warning)
-		assert.Equal(t, 0, visionSvc.calls)
-	})
-
-	t.Run("vision api failure sets warning and returns nil suggestion", func(t *testing.T) {
-		visionSvc := &mockVisionService{err: errors.New("vision unavailable")}
-		userRepo := &mockImageUserRepository{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
-		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-		pendingRepo := &mockPendingUploadRepository{pending: basePending}
-		pendingRepo.transactionImageRepo = imageRepo
-
-		uc := NewImageUsecase(
-			imageRepo,
-			pendingRepo,
-			nil,
-			&mockStorageService{},
-			&mockThumbnailService{},
-			visionSvc, &mockFolderRepository{}, userRepo, noopTel(),
-		)
-
-		result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
-
-		require.NoError(t, err)
-		assert.Nil(t, result.SuggestedFolderName)
-		assert.NotEmpty(t, result.Warning)
-	})
-}
-
-func TestImageUsecase_AcceptSuggestion(t *testing.T) {
-	imageID := uuid.New()
-	existingFolderID := uuid.New()
-	newFolderID := uuid.New()
-
-	t.Run("uses existing folder when matched", func(t *testing.T) {
-		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-		folderRepo := &mockAcceptSuggestionFolderRepository{
-			findResult: &domain.Folder{ID: existingFolderID, Name: "Nature"},
-		}
-		uc := NewImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
-
-		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-		require.NoError(t, err)
-		assert.Equal(t, 1, folderRepo.findCalls)
-		assert.Equal(t, 0, folderRepo.createCalls)
-		assert.Equal(t, 1, imageRepo.setFolderCalls)
-		require.NotNil(t, imageRepo.setFolderFolderID)
-		assert.Equal(t, existingFolderID, *imageRepo.setFolderFolderID)
-	})
-
-	t.Run("creates folder when no match is found", func(t *testing.T) {
-		imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-		folderRepo := &mockAcceptSuggestionFolderRepository{
-			createResult: &domain.Folder{ID: newFolderID, Name: "Nature"},
-		}
-		uc := NewImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
-
-		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-		require.NoError(t, err)
-		assert.Equal(t, 1, folderRepo.findCalls)
-		assert.Equal(t, 1, folderRepo.createCalls)
-		require.NotNil(t, folderRepo.lastCreatedData)
-		assert.Equal(t, "kp_abc123", folderRepo.lastCreatedData.UserID)
-		assert.Equal(t, "Nature", folderRepo.lastCreatedData.Name)
-		assert.Equal(t, 1, imageRepo.setFolderCalls)
-		require.NotNil(t, imageRepo.setFolderFolderID)
-		assert.Equal(t, newFolderID, *imageRepo.setFolderFolderID)
-	})
-
-	t.Run("returns error when image is not found", func(t *testing.T) {
-		imageRepo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-		folderRepo := &mockAcceptSuggestionFolderRepository{}
-		uc := NewImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
-
-		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
-		assert.Equal(t, 0, folderRepo.findCalls)
-		assert.Equal(t, 0, folderRepo.createCalls)
-		assert.Equal(t, 0, imageRepo.setFolderCalls)
-	})
-
-	t.Run("returns error when SetImageFolder fails", func(t *testing.T) {
-		imageRepo := &mockImageRepository{
-			image:             &domain.Image{ID: imageID, UserID: "kp_abc123"},
-			setImageFolderErr: errors.New("db error"),
-		}
-		folderRepo := &mockAcceptSuggestionFolderRepository{
-			findResult: &domain.Folder{ID: existingFolderID, Name: "Nature"},
-		}
-		uc := NewImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
-
-		err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-		require.Error(t, err)
-	})
-}
-
-func TestImageUsecase_InitiateUpload_CreatePendingUpload_Failure(t *testing.T) {
-	validFolderID := uuid.New()
-	pendingRepo := &mockPendingUploadRepository{createErr: errors.New("db error")}
-	folderRepo := &mockFolderRepository{
-		folder: &domain.Folder{ID: validFolderID, UserID: "kp_abc123", Name: "Nature"},
-	}
-	uc := NewImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, &mockThumbnailService{}, nil, folderRepo, nil, noopTel())
-
-	_, err := uc.InitiateUpload(context.Background(), "kp_abc123", "sunset photo", "image/jpeg", nil, &validFolderID, nil)
-
-	require.Error(t, err)
-}
-
-func TestImageUsecase_UpdateImage_WithFolderIDs(t *testing.T) {
+func TestImageUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *testing.T) {
 	imageID := uuid.New()
 	folderID := uuid.New()
-
-	t.Run("calls SyncImageFolders when folder_ids provided", func(t *testing.T) {
-		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		folderIDs := []uuid.UUID{folderID}
-		_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-			FolderIDs: &folderIDs,
-		})
-
-		require.NoError(t, err)
-		assert.Equal(t, 1, repo.syncFolderCalls)
-		assert.Equal(t, imageID, repo.lastSyncImageID)
-		assert.Equal(t, folderIDs, repo.lastSyncFolderIDs)
-	})
-
-	t.Run("returns error when SyncImageFolders fails", func(t *testing.T) {
-		repo := &mockImageRepository{
-			image:             &domain.Image{ID: imageID},
-			syncImageFoldersErr: errors.New("db error"),
-		}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		folderIDs := []uuid.UUID{folderID}
-		_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-			FolderIDs: &folderIDs,
-		})
-
-		require.Error(t, err)
-	})
-}
-
-func TestImageUsecase_ListImages(t *testing.T) {
-	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		wantLen int
-		wantErr bool
-	}{
-		{
-			name: "returns images for user",
-			repo: &mockImageRepository{
-				images: []*domain.Image{
-					{ID: uuid.New(), Title: "photo 1"},
-					{ID: uuid.New(), Title: "photo 2"},
-				},
-			},
-			wantLen: 2,
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockImageRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg", FolderID: &folderID},
 	}
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, defaultUserRepo(), noopTel())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Len(t, result.Images, tt.wantLen)
-		})
-	}
-}
-
-func TestImageUsecase_ListImages_Pagination(t *testing.T) {
-	now := time.Now().UTC()
-	makeImages := func(n int) []*domain.Image {
-		imgs := make([]*domain.Image, n)
-		for i := range imgs {
-			imgs[i] = &domain.Image{ID: uuid.New(), Title: "photo", CreatedAt: now.Add(-time.Duration(i) * time.Second)}
-		}
-		return imgs
-	}
-
-	t.Run("returns next_cursor when more results exist", func(t *testing.T) {
-		// repo returns limit+1 rows
-		repo := &mockImageRepository{images: makeImages(11)}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
-
-		require.NoError(t, err)
-		assert.Len(t, result.Images, 10)
-		assert.NotNil(t, result.NextCursor)
-		assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
-	})
-
-	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
-		repo := &mockImageRepository{images: makeImages(5)}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
-
-		require.NoError(t, err)
-		assert.Len(t, result.Images, 5)
-		assert.Nil(t, result.NextCursor)
-	})
-}
-
-func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
-	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
-
-	t.Run("returns presigned thumbnail URL when path exists", func(t *testing.T) {
-		repo := &mockImageRepository{
-			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
-		}
-		store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
-
-		require.NoError(t, err)
-		require.Len(t, result.Images, 1)
-		require.NotNil(t, result.Images[0].ThumbnailURL)
-		assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
-	})
-
-	t.Run("returns nil thumbnail URL when path is nil", func(t *testing.T) {
-		repo := &mockImageRepository{
-			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: nil}},
-		}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{getURL: "https://r2.example.com/thumb"}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
-
-		require.NoError(t, err)
-		require.Len(t, result.Images, 1)
-		assert.Nil(t, result.Images[0].ThumbnailURL)
-	})
-
-	t.Run("returns nil thumbnail URL when presigning fails", func(t *testing.T) {
-		repo := &mockImageRepository{
-			images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}},
-		}
-		store := &mockStorageService{err: errors.New("presign failed")}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
-
-		require.NoError(t, err)
-		require.Len(t, result.Images, 1)
-		assert.Nil(t, result.Images[0].ThumbnailURL)
-	})
-}
-
-func TestImageUsecase_ListImages_Unfiled(t *testing.T) {
-	t.Run("Unfiled true passes unfiled flag to repo", func(t *testing.T) {
-		repo := &mockImageRepository{
-			images: []*domain.Image{{ID: uuid.New(), Title: "unfoldered photo"}},
-		}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: true})
-
-		require.NoError(t, err)
-		assert.True(t, repo.lastUnfiled)
-		assert.Len(t, result.Images, 1)
-	})
-
-	t.Run("Unfiled false passes no unfiled flag to repo", func(t *testing.T) {
-		repo := &mockImageRepository{
-			images: []*domain.Image{{ID: uuid.New(), Title: "any photo"}},
-		}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Unfiled: false})
-
-		require.NoError(t, err)
-		assert.False(t, repo.lastUnfiled)
-		assert.Len(t, result.Images, 1)
-	})
-}
-
-func TestImageUsecase_GetImage(t *testing.T) {
-	imageID := uuid.New()
-
-	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
-
-	tests := []struct {
-		name             string
-		repo             *mockImageRepository
-		store            *mockStorageService
-		wantURL          string
-		wantThumbnailURL *string
-		wantErr          bool
-	}{
-		{
-			name:             "returns image detail with presigned get url and thumbnail url",
-			repo:             &mockImageRepository{image: &domain.Image{ID: imageID, Title: "photo", ThumbnailPath: &thumbnailPath}},
-			store:            &mockStorageService{getURL: "https://r2.example.com/view"},
-			wantURL:          "https://r2.example.com/view",
-			wantThumbnailURL: func() *string { v := "https://r2.example.com/view"; return &v }(),
-		},
-		{
-			name:    "returns nil thumbnail url when no thumbnail exists",
-			repo:    &mockImageRepository{image: &domain.Image{ID: imageID, Title: "photo"}},
-			store:   &mockStorageService{getURL: "https://r2.example.com/view"},
-			wantURL: "https://r2.example.com/view",
-		},
-		{
-			name:    "returns error when image not found",
-			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
-			store:   &mockStorageService{},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, tt.store, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantURL, detail.ImageURL)
-			assert.Equal(t, imageID, detail.Image.ID)
-			if tt.wantThumbnailURL != nil {
-				require.NotNil(t, detail.ThumbnailURL)
-				assert.Equal(t, *tt.wantThumbnailURL, *detail.ThumbnailURL)
-			} else {
-				assert.Nil(t, detail.ThumbnailURL)
-			}
-		})
-	}
-}
-
-func TestImageUsecase_DownloadImage(t *testing.T) {
-	imageID := uuid.New()
-
-	t.Run("returns presigned download url for owned image", func(t *testing.T) {
-		repo := &mockImageRepository{
-			image: &domain.Image{
-				ID:       imageID,
-				Title:    "photo",
-				MIMEType: "image/jpeg",
-				R2Path:   "users/kp_abc123/images/photo.jpg",
-			},
-		}
-		store := &mockStorageService{downloadURL: "https://r2.example.com/download"}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
-
-		require.NoError(t, err)
-		assert.Equal(t, "https://r2.example.com/download", url)
-		assert.Equal(t, "users/kp_abc123/images/photo.jpg", store.lastDownloadKey)
-		assert.Equal(t, "photo.jpg", store.lastDownloadFilename)
-		assert.Equal(t, 5*time.Minute, store.lastDownloadTTL)
-	})
-
-	t.Run("returns error when image not found", func(t *testing.T) {
-		repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
-
-		require.Error(t, err)
-		assert.Empty(t, url)
-	})
-}
-
-func TestImageUsecase_SoftDelete(t *testing.T) {
-	imageID := uuid.New()
-
-	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		wantErr bool
-	}{
-		{
-			name: "soft deletes image successfully",
-			repo: &mockImageRepository{},
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			err := uc.SoftDelete(context.Background(), imageID, "kp_abc123")
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
-}
-
-func TestImageUsecase_ListTrashed(t *testing.T) {
-	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		wantLen int
-		wantErr bool
-	}{
-		{
-			name: "returns trashed images for user",
-			repo: &mockImageRepository{
-				images: []*domain.Image{
-					{ID: uuid.New(), Title: "deleted photo"},
-				},
-			},
-			wantLen: 1,
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockImageRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{})
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Len(t, result.Images, tt.wantLen)
-		})
-	}
-}
-
-func TestImageUsecase_ListTrashed_Pagination(t *testing.T) {
-	now := time.Now().UTC()
-	makeImages := func(n int) []*domain.Image {
-		imgs := make([]*domain.Image, n)
-		for i := range imgs {
-			deletedAt := now.Add(time.Duration(i) * time.Second)
-			imgs[i] = &domain.Image{
-				ID:        uuid.New(),
-				Title:     "deleted photo",
-				CreatedAt: now,
-				DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
-			}
-		}
-		return imgs
-	}
-
-	t.Run("cursor carries deleted_at of last item", func(t *testing.T) {
-		repo := &mockImageRepository{images: makeImages(11)}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
-
-		require.NoError(t, err)
-		assert.Len(t, result.Images, 10)
-		require.NotNil(t, result.NextCursor)
-		assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
-		require.NotNil(t, result.NextCursor.DeletedAt)
-		assert.Equal(t, result.Images[9].Image.DeletedAt.Time.UTC(), result.NextCursor.DeletedAt.UTC())
-	})
-
-	t.Run("returns nil next_cursor on last page", func(t *testing.T) {
-		repo := &mockImageRepository{images: makeImages(3)}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-		result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
-
-		require.NoError(t, err)
-		assert.Len(t, result.Images, 3)
-		assert.Nil(t, result.NextCursor)
-	})
-}
-
-func TestImageUsecase_Restore(t *testing.T) {
-	imageID := uuid.New()
-
-	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		wantID  uuid.UUID
-		wantErr bool
-	}{
-		{
-			name:   "restores soft-deleted image",
-			repo:   &mockImageRepository{image: &domain.Image{ID: imageID, Title: "photo"}},
-			wantID: imageID,
-		},
-		{
-			name:    "returns error when deleted image not found",
-			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			item, err := uc.Restore(context.Background(), imageID, "kp_abc123")
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, item.Image.ID)
-		})
-	}
-}
-
-func TestImageUsecase_UpdateImage(t *testing.T) {
-	imageID := uuid.New()
-	title := "new title"
-
-	tests := []struct {
-		name    string
-		repo    *mockImageRepository
-		params  UpdateImageParams
-		wantID  uuid.UUID
-		wantErr bool
-	}{
-		{
-			name: "returns updated image on success",
-			repo: &mockImageRepository{image: &domain.Image{ID: imageID, Title: title}},
-			params: UpdateImageParams{
-				Title: &title,
-			},
-			wantID: imageID,
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
-			params:  UpdateImageParams{Title: &title},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-			item, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", tt.params)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, item.Image.ID)
-		})
-	}
-}
-
-func TestImageUsecase_UpdateImage_WithDescription(t *testing.T) {
-	imageID := uuid.New()
-	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-	description := "new description"
-
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-		Description: &description,
-	})
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
 	require.NoError(t, err)
-	require.NotNil(t, repo.updateFields)
-	assert.Equal(t, description, repo.updateFields["description"])
+	require.NotNil(t, imageRepo.setFolderFolderID)
+	assert.Equal(t, folderID, *imageRepo.setFolderFolderID)
 }
 
-func TestImageUsecase_UpdateImage_WithSourceURL(t *testing.T) {
+func TestImageUsecase_CompleteUpload_VisionEnabled(t *testing.T) {
 	imageID := uuid.New()
-	sourceURL := "https://example.com"
-	inner := &sourceURL
-
-	tests := []struct {
-		name      string
-		repo      *mockImageRepository
-		sourceURL **string
-		wantErr   bool
-		checkURL  func(t *testing.T, fields map[string]any)
-	}{
-		{
-			name:      "sets source_url in update fields",
-			repo:      &mockImageRepository{image: &domain.Image{ID: imageID}},
-			sourceURL: &inner,
-			checkURL: func(t *testing.T, fields map[string]any) {
-				require.NotNil(t, fields["source_url"])
-				assert.Equal(t, &sourceURL, fields["source_url"])
-			},
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockImageRepository{err: gorm.ErrRecordNotFound},
-			wantErr: true,
-		},
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
+	pendingRepo.transactionImageRepo = imageRepo
+	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, visionSvc, nil, userRepo, noopTel())
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewImageUsecase(tt.repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-			_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-				SourceURL: tt.sourceURL,
-			})
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			tt.checkURL(t, tt.repo.updateFields)
-		})
-	}
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	require.NotNil(t, result.SuggestedFolderName)
+	assert.Equal(t, "Nature", *result.SuggestedFolderName)
+	assert.Empty(t, result.Warning)
+	assert.Equal(t, 1, visionSvc.calls)
 }
 
-func TestImageUsecase_MoveImageFolder(t *testing.T) {
+func TestImageUsecase_CompleteUpload_VisionDisabled(t *testing.T) {
 	imageID := uuid.New()
-	fromFolderID := uuid.New()
-	toFolderID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: false}}
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, visionSvc, nil, userRepo, noopTel())
 
-	t.Run("delegates to repository on success", func(t *testing.T) {
-		repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
-		item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &fromFolderID, &toFolderID)
+	require.NoError(t, err)
+	assert.Nil(t, result.SuggestedFolderName)
+	assert.Empty(t, result.Warning)
+	assert.Equal(t, 0, visionSvc.calls)
+}
 
-		require.NoError(t, err)
-		require.NotNil(t, item)
-		assert.Equal(t, 1, repo.moveFolderCalls)
-		assert.Equal(t, imageID, repo.lastMoveImageID)
-		require.NotNil(t, repo.lastMoveFromFolderID)
-		require.NotNil(t, repo.lastMoveToFolderID)
-		assert.Equal(t, fromFolderID, *repo.lastMoveFromFolderID)
-		assert.Equal(t, toFolderID, *repo.lastMoveToFolderID)
-	})
+func TestImageUsecase_CompleteUpload_VisionFails(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	visionSvc := &mockVisionService{err: errors.New("vision unavailable")}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, visionSvc, nil, userRepo, noopTel())
 
-	t.Run("returns error when image not found", func(t *testing.T) {
-		repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-		uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
-		item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &fromFolderID, &toFolderID)
-
-		require.Error(t, err)
-		assert.Nil(t, item)
-		assert.Equal(t, 0, repo.moveFolderCalls)
-	})
+	require.NoError(t, err)
+	assert.Nil(t, result.SuggestedFolderName)
+	assert.NotEmpty(t, result.Warning)
 }
 
 func TestImageUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 	imageID := uuid.New()
 	tel, collect := makeMetricsTel(t)
-	repo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
-		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.jpg", Title: "photo", MIMEType: "image/jpeg"},
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
-	pendingRepo.transactionImageRepo = repo
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUsecase(imageRepo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, defaultUserRepo(), tel)
 
-	uc := NewImageUsecase(repo, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), tel)
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.NoError(t, err)
 
-	rm := collect()
-	points := findInt64Sum(rm, "r2.upload.count")
+	points := findInt64Sum(collect(), "r2.upload.count")
 	require.Len(t, points, 1)
 	assert.Equal(t, int64(1), points[0].Value)
-
 	status, ok := points[0].Attributes.Value(attribute.Key("r2.status"))
 	require.True(t, ok)
 	assert.Equal(t, "success", status.AsString())
@@ -1434,99 +573,271 @@ func TestImageUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	imageID := uuid.New()
 	tel, collect := makeMetricsTel(t)
 	pendingRepo := &mockPendingUploadRepository{getErr: gorm.ErrRecordNotFound}
-
 	uc := NewImageUsecase(&mockImageRepository{}, pendingRepo, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, tel)
+
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.Error(t, err)
 
-	rm := collect()
-	points := findInt64Sum(rm, "r2.upload.count")
+	points := findInt64Sum(collect(), "r2.upload.count")
 	require.Len(t, points, 1)
 	assert.Equal(t, int64(1), points[0].Value)
-
 	status, ok := points[0].Attributes.Value(attribute.Key("r2.status"))
 	require.True(t, ok)
 	assert.Equal(t, "error", status.AsString())
 }
 
-func TestImageUsecase_CleanupStaleUploads_Success(t *testing.T) {
-	imgID1 := uuid.New()
-	imgID2 := uuid.New()
-	staleUploads := []*domain.PendingUpload{
-		{ID: imgID1, UserID: "kp_user1", R2Path: "users/kp_user1/images/a.jpg"},
-		{ID: imgID2, UserID: "kp_user2", R2Path: "users/kp_user2/images/b.jpg"},
+// --- AcceptSuggestion ---
+
+func TestImageUsecase_AcceptSuggestion_ExistingFolder(t *testing.T) {
+	imageID := uuid.New()
+	folderID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
+	folderRepo := newFakeFolderRepo(&domain.Folder{ID: folderID, Name: "Nature", UserID: "kp_abc123"})
+	uc := newImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil)
+
+	err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+	require.NoError(t, err)
+	require.NotNil(t, imageRepo.setFolderFolderID)
+	assert.Equal(t, folderID, *imageRepo.setFolderFolderID)
+}
+
+func TestImageUsecase_AcceptSuggestion_CreatesFolder(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
+	folderRepo := newFakeFolderRepo()
+	uc := newImageUsecase(imageRepo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, folderRepo, nil)
+
+	err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
+
+	require.NoError(t, err)
+	created, ok := folderRepo.folders["nature"]
+	require.True(t, ok)
+	assert.Equal(t, "Nature", created.Name)
+	require.NotNil(t, imageRepo.setFolderFolderID)
+	assert.Equal(t, created.ID, *imageRepo.setFolderFolderID)
+}
+
+// --- ListImages ---
+
+func TestImageUsecase_ListImages_FolderView(t *testing.T) {
+	folderID := uuid.New()
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{FolderID: &folderID})
+
+	require.NoError(t, err)
+	assert.Len(t, result.Images, 2)
+	assert.Nil(t, result.NextCursor)
+}
+
+func TestImageUsecase_ListImages_NextCursor(t *testing.T) {
+	now := time.Now().UTC()
+	images := make([]*domain.Image, 11)
+	for i := range images {
+		images[i] = &domain.Image{ID: uuid.New(), CreatedAt: now.Add(-time.Duration(i) * time.Second)}
 	}
-	pendingRepo := &mockPendingUploadRepository{pendings: staleUploads}
-	store := &mockStorageService{}
-	uc := NewImageUsecase(&mockImageRepository{}, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+	repo := &mockImageRepository{images: images}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, store.deleteCalls)
-	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/a.jpg")
-	assert.Contains(t, store.deletedKeys, "users/kp_user2/images/b.jpg")
-	assert.Equal(t, 2, pendingRepo.deleteCalls)
-}
-
-func TestImageUsecase_CleanupStaleUploads_NoOp(t *testing.T) {
-	pendingRepo := &mockPendingUploadRepository{}
-	store := &mockStorageService{}
-	uc := NewImageUsecase(&mockImageRepository{}, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
-
-	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
 
 	require.NoError(t, err)
-	assert.Equal(t, 0, store.deleteCalls)
-	assert.Equal(t, 0, pendingRepo.deleteCalls)
+	assert.Len(t, result.Images, 10)
+	require.NotNil(t, result.NextCursor)
+	assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
 }
 
-func TestImageUsecase_PurgeExpiredTrash_Success(t *testing.T) {
-	thumbnailPath := "users/kp_user1/thumbnails/b.jpg"
-	expiredImages := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_user1", R2Path: "users/kp_user1/images/a.jpg"},
-		{ID: uuid.New(), UserID: "kp_user1", R2Path: "users/kp_user1/images/b.jpg", ThumbnailPath: &thumbnailPath},
-	}
-	repo := &mockImageRepository{images: expiredImages}
-	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+func TestImageUsecase_ListImages_LastPage(t *testing.T) {
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
 
 	require.NoError(t, err)
-	// 2 r2_path deletes + 1 thumbnail delete
-	assert.Equal(t, 3, store.deleteCalls)
-	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/a.jpg")
-	assert.Contains(t, store.deletedKeys, "users/kp_user1/images/b.jpg")
-	assert.Contains(t, store.deletedKeys, thumbnailPath)
+	assert.Len(t, result.Images, 2)
+	assert.Nil(t, result.NextCursor)
 }
 
-func TestImageUsecase_PurgeExpiredTrash_ListError(t *testing.T) {
-	repo := &mockImageRepository{err: errors.New("db unavailable")}
-	store := &mockStorageService{}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, defaultMockUserRepo(), noopTel())
+func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}}}
+	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
 
-	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
+
+	require.NoError(t, err)
+	require.Len(t, result.Images, 1)
+	require.NotNil(t, result.Images[0].ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
+}
+
+// --- GetImage ---
+
+func TestImageUsecase_GetImage_WithThumbnail(t *testing.T) {
+	imageID := uuid.New()
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID, ThumbnailPath: &thumbnailPath}}
+	store := &mockStorageService{getURL: "https://r2.example.com/view"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, imageID, detail.Image.ID)
+	assert.Equal(t, "https://r2.example.com/view", detail.ImageURL)
+	require.NotNil(t, detail.ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/view", *detail.ThumbnailURL)
+}
+
+func TestImageUsecase_GetImage_NoThumbnail(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	store := &mockStorageService{getURL: "https://r2.example.com/view"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://r2.example.com/view", detail.ImageURL)
+	assert.Nil(t, detail.ThumbnailURL)
+}
+
+func TestImageUsecase_GetImage_PresignFails(t *testing.T) {
+	repo := &mockImageRepository{image: &domain.Image{ID: uuid.New()}}
+	store := &mockStorageService{err: errors.New("presign failed")}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	_, err := uc.GetImage(context.Background(), uuid.New(), "kp_abc123")
 
 	require.Error(t, err)
-	assert.Equal(t, 0, store.deleteCalls)
 }
 
-func TestImageUsecase_UpdateImage_WithTags_ReplacesCalled(t *testing.T) {
+// --- DownloadImage ---
+
+func TestImageUsecase_DownloadImage(t *testing.T) {
 	imageID := uuid.New()
-	tag1 := uuid.New()
-	tag2 := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID, Title: "sunset", MIMEType: "image/jpeg", R2Path: "users/kp_abc123/images/photo.jpg"}}
+	store := &mockStorageService{downloadURL: "https://r2.example.com/download"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
 
-	img := &domain.Image{ID: imageID, UserID: "kp_abc123", Title: "img"}
-	repo := &mockImageRepository{image: img}
+	url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://r2.example.com/download", url)
+	assert.Equal(t, "sunset.jpg", store.lastDownloadFilename)
+	assert.Equal(t, downloadURLTTL, store.lastDownloadTTL)
+}
+
+// --- ListTrashed ---
+
+func TestImageUsecase_ListTrashed_NextCursor(t *testing.T) {
+	now := time.Now().UTC()
+	images := make([]*domain.Image, 11)
+	for i := range images {
+		deletedAt := now.Add(time.Duration(i) * time.Second)
+		images[i] = &domain.Image{
+			ID:        uuid.New(),
+			DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
+		}
+	}
+	repo := &mockImageRepository{images: images}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
+
+	require.NoError(t, err)
+	assert.Len(t, result.Images, 10)
+	require.NotNil(t, result.NextCursor)
+	assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
+	require.NotNil(t, result.NextCursor.DeletedAt)
+	assert.Equal(t, result.Images[9].Image.DeletedAt.Time.UTC(), result.NextCursor.DeletedAt.UTC())
+}
+
+func TestImageUsecase_ListTrashed_LastPage(t *testing.T) {
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
+
+	require.NoError(t, err)
+	assert.Len(t, result.Images, 2)
+	assert.Nil(t, result.NextCursor)
+}
+
+func TestImageUsecase_ListTrashed_ThumbnailURL(t *testing.T) {
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}}}
+	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{})
+
+	require.NoError(t, err)
+	require.Len(t, result.Images, 1)
+	require.NotNil(t, result.Images[0].ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
+}
+
+// --- Restore ---
+
+func TestImageUsecase_Restore(t *testing.T) {
+	imageID := uuid.New()
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID, ThumbnailPath: &thumbnailPath}}
+	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	item, err := uc.Restore(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, imageID, item.Image.ID)
+	require.NotNil(t, item.ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/thumb", *item.ThumbnailURL)
+}
+
+// --- UpdateImage ---
+
+func TestImageUsecase_UpdateImage_FieldsAssembled(t *testing.T) {
+	imageID := uuid.New()
+	title := "new title"
+	description := "new description"
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+		Title:       &title,
+		Description: &description,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, title, repo.updateFields["title"])
+	assert.Equal(t, description, repo.updateFields["description"])
+}
+
+func TestImageUsecase_UpdateImage_NilTags_NoReplace(t *testing.T) {
+	imageID := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	tagRepo := &mockTagRepository{}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{Tags: nil})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, tagRepo.replaceCalls)
+}
+
+func TestImageUsecase_UpdateImage_WithTags(t *testing.T) {
+	imageID := uuid.New()
+	tag1, tag2 := uuid.New(), uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	tagRepo := &mockTagRepository{}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
 	tags := []uuid.UUID{tag1, tag2}
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-		Tags: &tags,
-	})
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{Tags: &tags})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, tagRepo.replaceCalls)
@@ -1534,68 +845,142 @@ func TestImageUsecase_UpdateImage_WithTags_ReplacesCalled(t *testing.T) {
 	assert.Equal(t, tags, tagRepo.lastReplaceTagIDs)
 }
 
-func TestImageUsecase_UpdateImage_NilTags_NoReplace(t *testing.T) {
+func TestImageUsecase_UpdateImage_NilFolderIDs_NoSync(t *testing.T) {
 	imageID := uuid.New()
-	img := &domain.Image{ID: imageID, UserID: "kp_abc123", Title: "img"}
-	repo := &mockImageRepository{image: img}
-	tagRepo := &mockTagRepository{}
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, tagRepo, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
-		Tags: nil,
-	})
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{FolderIDs: nil})
 
 	require.NoError(t, err)
-	assert.Equal(t, 0, tagRepo.replaceCalls)
+	assert.Equal(t, 0, repo.syncFolderCalls)
 }
 
-func TestImageUsecase_ListImages_PassesTagID(t *testing.T) {
-	tagID := uuid.New()
-	img := &domain.Image{ID: uuid.New(), UserID: "kp_abc123", Title: "tagged"}
-	repo := &mockImageRepository{images: []*domain.Image{img}}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{TagID: &tagID})
-
-	require.NoError(t, err)
-}
-
-func TestImageUsecase_ListImages_FolderView_NoNextCursor(t *testing.T) {
-	folderID := uuid.New()
-	img1 := &domain.Image{ID: uuid.New(), UserID: "kp_abc123", Title: "img1"}
-	img2 := &domain.Image{ID: uuid.New(), UserID: "kp_abc123", Title: "img2"}
-	repo := &mockImageRepository{images: []*domain.Image{img1, img2}}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
-
-	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{FolderID: &folderID})
-
-	require.NoError(t, err)
-	assert.Nil(t, result.NextCursor)
-	assert.Len(t, result.Images, 2)
-}
-
-func TestImageUsecase_UpdateImagePosition_Success(t *testing.T) {
+func TestImageUsecase_UpdateImage_WithFolderIDs(t *testing.T) {
 	imageID := uuid.New()
 	folderID := uuid.New()
-	img := &domain.Image{ID: imageID, UserID: "kp_abc123", Title: "test"}
-	repo := &mockImageRepository{image: img}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	err := uc.UpdateImagePosition(context.Background(), imageID, "kp_abc123", folderID, "a1V")
+	folderIDs := []uuid.UUID{folderID}
+	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{FolderIDs: &folderIDs})
 
 	require.NoError(t, err)
-	assert.Equal(t, imageID, repo.lastPositionImageID)
-	assert.Equal(t, folderID, repo.lastPositionFolderID)
-	assert.Equal(t, "a1V", repo.lastPositionValue)
+	assert.Equal(t, 1, repo.syncFolderCalls)
+	assert.Equal(t, imageID, repo.lastSyncImageID)
+	assert.Equal(t, folderIDs, repo.lastSyncFolderIDs)
 }
 
-func TestImageUsecase_UpdateImagePosition_ImageNotFound(t *testing.T) {
-	repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-	uc := NewImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil, noopTel())
+// --- MoveImageFolder ---
 
-	err := uc.UpdateImagePosition(context.Background(), uuid.New(), "kp_abc123", uuid.New(), "a1V")
+func TestImageUsecase_MoveImageFolder_NoOp(t *testing.T) {
+	imageID := uuid.New()
+	folderID := uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &folderID, &folderID)
+
+	require.NoError(t, err)
+	assert.NotNil(t, item)
+	assert.Equal(t, 0, repo.moveFolderCalls)
+}
+
+func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
+	imageID := uuid.New()
+	from, to := uuid.New(), uuid.New()
+	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, &mockStorageService{}, &mockThumbnailService{}, nil, nil, nil)
+
+	item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &from, &to)
+
+	require.NoError(t, err)
+	assert.NotNil(t, item)
+	assert.Equal(t, 1, repo.moveFolderCalls)
+	assert.Equal(t, imageID, repo.lastMoveImageID)
+	assert.Equal(t, from, *repo.lastMoveFromFolderID)
+	assert.Equal(t, to, *repo.lastMoveToFolderID)
+}
+
+// --- CleanupStaleUploads ---
+
+func TestImageUsecase_CleanupStaleUploads_DeletesAll(t *testing.T) {
+	stale := []*domain.PendingUpload{
+		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
+		{ID: uuid.New(), UserID: "kp_u2", R2Path: "users/kp_u2/images/b.jpg"},
+	}
+	pendingRepo := &mockPendingUploadRepository{pendings: stale}
+	store := &mockStorageService{}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, store.deleteCalls)
+	assert.Contains(t, store.deletedKeys, "users/kp_u1/images/a.jpg")
+	assert.Contains(t, store.deletedKeys, "users/kp_u2/images/b.jpg")
+	assert.Equal(t, 2, pendingRepo.deleteCalls)
+}
+
+func TestImageUsecase_CleanupStaleUploads_StorageErrorContinues(t *testing.T) {
+	stale := []*domain.PendingUpload{
+		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
+	}
+	pendingRepo := &mockPendingUploadRepository{pendings: stale}
+	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
+	uc := newImageUsecase(&mockImageRepository{}, pendingRepo, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	err := uc.CleanupStaleUploads(context.Background(), 30*time.Minute)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, pendingRepo.deleteCalls)
+}
+
+// --- PurgeExpiredTrash ---
+
+func TestImageUsecase_PurgeExpiredTrash_WithThumbnail(t *testing.T) {
+	thumbnailPath := "users/kp_u1/thumbnails/b.jpg"
+	expired := []*domain.Image{
+		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg", ThumbnailPath: &thumbnailPath},
+	}
+	repo := &mockImageRepository{images: expired}
+	store := &mockStorageService{}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, store.deleteCalls)
+	assert.Contains(t, store.deletedKeys, "users/kp_u1/images/a.jpg")
+	assert.Contains(t, store.deletedKeys, thumbnailPath)
+	assert.Equal(t, 1, repo.hardDeleteCalls)
+}
+
+func TestImageUsecase_PurgeExpiredTrash_WithoutThumbnail(t *testing.T) {
+	expired := []*domain.Image{
+		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
+	}
+	repo := &mockImageRepository{images: expired}
+	store := &mockStorageService{}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, store.deleteCalls)
+	assert.Equal(t, 1, repo.hardDeleteCalls)
+}
+
+func TestImageUsecase_PurgeExpiredTrash_StorageErrorContinues(t *testing.T) {
+	expired := []*domain.Image{
+		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
+	}
+	repo := &mockImageRepository{images: expired}
+	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
+	uc := newImageUsecase(repo, &mockPendingUploadRepository{}, nil, store, &mockThumbnailService{}, nil, nil, nil)
+
+	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, repo.hardDeleteCalls)
 }

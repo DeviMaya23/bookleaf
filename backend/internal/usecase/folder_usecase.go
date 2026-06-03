@@ -14,6 +14,10 @@ import (
 
 var ErrInvalidFolderName = errors.New("folder name is required")
 
+type ImageCounter interface {
+	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
+}
+
 type FolderDetail struct {
 	Folder     *domain.Folder
 	ImageCount int64
@@ -21,11 +25,11 @@ type FolderDetail struct {
 
 type folderUsecase struct {
 	folderRepo FolderRepository
-	imageRepo  ImageRepository
+	imageRepo  ImageCounter
 	tel        *observability.Telemetry
 }
 
-func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageRepository, tel *observability.Telemetry) *folderUsecase {
+func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageCounter, tel *observability.Telemetry) *folderUsecase {
 	return &folderUsecase{
 		folderRepo: folderRepo,
 		imageRepo:  imageRepo,
@@ -149,4 +153,3 @@ func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string)
 
 	return nil
 }
-

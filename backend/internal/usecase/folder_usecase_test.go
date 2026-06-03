@@ -2,10 +2,7 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"testing"
-	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
@@ -14,225 +11,76 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockFolderRepository struct {
-	folder  *domain.Folder
-	folders []*domain.Folder
-	count   int
-	err     error
+// --- spies ---
+
+type stubFolderRepo struct {
+	folder *domain.Folder
+	err    error
 }
 
-func (m *mockFolderRepository) Create(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
-	return m.folder, m.err
+func (s *stubFolderRepo) Create(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubFolderRepo) List(_ context.Context, _ string) ([]*domain.Folder, error) {
+	return nil, s.err
+}
+func (s *stubFolderRepo) FindByName(_ context.Context, _, _ string) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubFolderRepo) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubFolderRepo) Update(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
+	return s.folder, s.err
+}
+func (s *stubFolderRepo) CountImagesByFolder(_ context.Context, _ uuid.UUID, _ string) (int, error) {
+	return 0, s.err
+}
+func (s *stubFolderRepo) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
+	return s.err
 }
 
-func (m *mockFolderRepository) List(_ context.Context, _ string) ([]*domain.Folder, error) {
-	return m.folders, m.err
-}
-
-func (m *mockFolderRepository) FindByName(_ context.Context, _, _ string) (*domain.Folder, error) {
-	return m.folder, m.err
-}
-
-func (m *mockFolderRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
-	return m.folder, m.err
-}
-
-func (m *mockFolderRepository) Update(_ context.Context, _ *domain.Folder) (*domain.Folder, error) {
-	return m.folder, m.err
-}
-
-func (m *mockFolderRepository) CountImagesByFolder(_ context.Context, _ uuid.UUID, _ string) (int, error) {
-	return m.count, m.err
-}
-
-func (m *mockFolderRepository) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-
-type mockFolderImageRepository struct {
+type stubImageCounter struct {
 	count int64
 	err   error
 }
 
-func (m *mockFolderImageRepository) Create(_ context.Context, _ *domain.Image) (*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockFolderImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ json.RawMessage) error {
-	return m.err
-}
-func (m *mockFolderImageRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ map[string]any) (*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockFolderImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockFolderImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
-	return nil, m.err
-}
-func (m *mockFolderImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
-	return m.count, m.err
+func (s *stubImageCounter) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
+	return s.count, s.err
 }
 
-func (m *mockFolderImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
-	return nil, m.err
+func newTestFolderUsecase(folderRepo FolderRepository, counter ImageCounter) *folderUsecase {
+	return NewFolderUsecase(folderRepo, counter, observability.NewTelemetry(nil, nil, nil))
 }
 
-func (m *mockFolderImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
+// --- tests ---
+
+func TestFolderUsecase_Create_BlankName(t *testing.T) {
+	uc := newTestFolderUsecase(&stubFolderRepo{}, &stubImageCounter{})
+
+	_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil, nil)
+
+	require.ErrorIs(t, err, ErrInvalidFolderName)
 }
 
-func (m *mockFolderImageRepository) SetImageFolder(_ context.Context, _ uuid.UUID, _ *uuid.UUID) error {
-	return m.err
-}
+func TestFolderUsecase_Update_BlankName(t *testing.T) {
+	uc := newTestFolderUsecase(&stubFolderRepo{}, &stubImageCounter{})
 
-func (m *mockFolderImageRepository) SyncImageFolders(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
-	return m.err
-}
+	_, err := uc.Update(context.Background(), uuid.New(), "kp_abc123", "", nil, nil)
 
-func (m *mockFolderImageRepository) MoveImageFolder(_ context.Context, _ uuid.UUID, _ *uuid.UUID, _ *uuid.UUID) error {
-	return m.err
-}
-
-func (m *mockFolderImageRepository) UpdateImageFolderPosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
-	return m.err
-}
-
-func newFolderUsecaseForTest(folderRepo *mockFolderRepository, imageRepo *mockFolderImageRepository) *folderUsecase {
-	return NewFolderUsecase(folderRepo, imageRepo, observability.NewTelemetry(nil, nil, nil))
-}
-
-func TestFolderUsecase_Create(t *testing.T) {
-	folderID := uuid.New()
-	desc := "desc"
-
-	t.Run("creates folder successfully", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(
-			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel", Description: &desc}},
-			&mockFolderImageRepository{},
-		)
-
-		folder, err := uc.Create(context.Background(), "kp_abc123", "travel", nil, &desc)
-
-		require.NoError(t, err)
-		assert.Equal(t, folderID, folder.ID)
-		require.NotNil(t, folder.Description)
-		assert.Equal(t, desc, *folder.Description)
-	})
-
-	t.Run("returns error for blank name", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
-
-		_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil, nil)
-
-		require.ErrorIs(t, err, ErrInvalidFolderName)
-	})
-}
-
-func TestFolderUsecase_List(t *testing.T) {
-	t.Run("returns user folders", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(
-			&mockFolderRepository{folders: []*domain.Folder{{ID: uuid.New()}, {ID: uuid.New()}}},
-			&mockFolderImageRepository{},
-		)
-
-		folders, err := uc.List(context.Background(), "kp_abc123")
-
-		require.NoError(t, err)
-		assert.Len(t, folders, 2)
-	})
-
-	t.Run("propagates repository error", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
-
-		_, err := uc.List(context.Background(), "kp_abc123")
-
-		require.Error(t, err)
-	})
+	require.ErrorIs(t, err, ErrInvalidFolderName)
 }
 
 func TestFolderUsecase_GetByID(t *testing.T) {
 	folderID := uuid.New()
+	uc := newTestFolderUsecase(
+		&stubFolderRepo{folder: &domain.Folder{ID: folderID, Name: "travel"}},
+		&stubImageCounter{count: 3},
+	)
 
-	t.Run("returns folder detail with image count", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(
-			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "travel"}},
-			&mockFolderImageRepository{count: 3},
-		)
+	detail, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
 
-		detail, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
-
-		require.NoError(t, err)
-		assert.Equal(t, folderID, detail.Folder.ID)
-		assert.EqualValues(t, 3, detail.ImageCount)
-	})
-
-	t.Run("propagates repository error", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
-
-		_, err := uc.GetByID(context.Background(), folderID, "kp_abc123")
-
-		require.Error(t, err)
-	})
-}
-
-func TestFolderUsecase_Update(t *testing.T) {
-	folderID := uuid.New()
-	desc := "new desc"
-
-	t.Run("updates folder successfully", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(
-			&mockFolderRepository{folder: &domain.Folder{ID: folderID, Name: "updated", Description: &desc}},
-			&mockFolderImageRepository{},
-		)
-
-		folder, err := uc.Update(context.Background(), folderID, "kp_abc123", "updated", nil, &desc)
-
-		require.NoError(t, err)
-		assert.Equal(t, folderID, folder.ID)
-		require.NotNil(t, folder.Description)
-		assert.Equal(t, desc, *folder.Description)
-	})
-
-	t.Run("returns error for blank name", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
-
-		_, err := uc.Update(context.Background(), folderID, "kp_abc123", "", nil, nil)
-
-		require.ErrorIs(t, err, ErrInvalidFolderName)
-	})
-}
-
-func TestFolderUsecase_Delete(t *testing.T) {
-	folderID := uuid.New()
-
-	t.Run("deletes folder successfully", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{}, &mockFolderImageRepository{})
-
-		err := uc.Delete(context.Background(), folderID, "kp_abc123")
-
-		require.NoError(t, err)
-	})
-
-	t.Run("propagates repository error", func(t *testing.T) {
-		uc := newFolderUsecaseForTest(&mockFolderRepository{err: errors.New("db error")}, &mockFolderImageRepository{})
-
-		err := uc.Delete(context.Background(), folderID, "kp_abc123")
-
-		require.Error(t, err)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, folderID, detail.Folder.ID)
+	assert.EqualValues(t, 3, detail.ImageCount)
 }

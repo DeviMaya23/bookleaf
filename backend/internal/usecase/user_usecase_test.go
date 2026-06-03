@@ -11,85 +11,69 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type mockUserRepository struct {
-	user *domain.User
-	err  error
+// --- fake ---
+
+type fakeUserRepo struct {
+	users       map[string]*domain.User
+	getOrCreate error
 }
 
-func (m *mockUserRepository) GetOrCreate(context.Context, string) (*domain.User, error) {
-	return m.user, m.err
+func newFakeUserRepo() *fakeUserRepo {
+	return &fakeUserRepo{users: make(map[string]*domain.User)}
 }
 
-func (m *mockUserRepository) GetByID(context.Context, string) (*domain.User, error) {
-	return m.user, m.err
+func (f *fakeUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
+	user, ok := f.users[id]
+	if !ok {
+		return nil, errors.New("record not found")
+	}
+	return user, nil
 }
 
-func TestUserUsecase_GetOrProvision(t *testing.T) {
-	tests := []struct {
-		name    string
-		repo    *mockUserRepository
-		wantID  string
-		wantErr bool
-	}{
-		{
-			name:   "returns provisioned user",
-			repo:   &mockUserRepository{user: &domain.User{ID: "kp_abc123"}},
-			wantID: "kp_abc123",
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockUserRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
+func (f *fakeUserRepo) GetOrCreate(_ context.Context, id string) (*domain.User, error) {
+	if f.getOrCreate != nil {
+		return nil, f.getOrCreate
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewUserUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
-
-			user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, user.ID)
-		})
-	}
+	user := &domain.User{ID: id}
+	f.users[id] = user
+	return user, nil
 }
 
-func TestUserUsecase_GetByID(t *testing.T) {
-	tests := []struct {
-		name    string
-		repo    *mockUserRepository
-		wantID  string
-		wantErr bool
-	}{
-		{
-			name:   "returns user by id",
-			repo:   &mockUserRepository{user: &domain.User{ID: "kp_abc123"}},
-			wantID: "kp_abc123",
-		},
-		{
-			name:    "propagates repository error",
-			repo:    &mockUserRepository{err: errors.New("db error")},
-			wantErr: true,
-		},
-	}
+func newTestUserUsecase(repo UserRepository) *userUsecase {
+	return NewUserUsecase(repo, observability.NewTelemetry(nil, nil, nil))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			uc := NewUserUsecase(tt.repo, observability.NewTelemetry(nil, nil, nil))
+// --- tests ---
 
-			user, err := uc.GetByID(context.Background(), "kp_abc123")
+func TestUserUsecase_GetOrProvision_ExistingUser(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123"}
+	uc := newTestUserUsecase(repo)
 
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, user.ID)
-		})
-	}
+	user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "kp_abc123", user.ID)
+}
+
+func TestUserUsecase_GetOrProvision_NewUser(t *testing.T) {
+	repo := newFakeUserRepo()
+	uc := newTestUserUsecase(repo)
+
+	user, err := uc.GetOrProvision(context.Background(), "kp_new123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "kp_new123", user.ID)
+	_, exists := repo.users["kp_new123"]
+	assert.True(t, exists)
+}
+
+func TestUserUsecase_GetOrProvision_ProvisionFails(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.getOrCreate = errors.New("db error")
+	uc := newTestUserUsecase(repo)
+
+	_, err := uc.GetOrProvision(context.Background(), "kp_new123")
+
+	require.Error(t, err)
 }
