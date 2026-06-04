@@ -32,6 +32,18 @@ type imageWorkerUsecase interface {
 	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
 }
 
+type compositeImageWorker struct {
+	upload interface{ CleanupStaleUploads(context.Context, time.Duration) error }
+	image  interface{ PurgeExpiredTrash(context.Context, time.Duration) error }
+}
+
+func (w *compositeImageWorker) CleanupStaleUploads(ctx context.Context, threshold time.Duration) error {
+	return w.upload.CleanupStaleUploads(ctx, threshold)
+}
+func (w *compositeImageWorker) PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error {
+	return w.image.PurgeExpiredTrash(ctx, threshold)
+}
+
 type server struct {
 	echo         *echo.Echo
 	imageWorker  imageWorkerUsecase
@@ -212,7 +224,8 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
 
-	imageUsecase := usecase.NewImageUsecase(imageRepository, pendingUploadRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, tel)
+	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, thumbnailService, visionService, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
 	if err != nil {
@@ -223,6 +236,7 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
+	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
 	e.GET("/health", healthHandler.GetHealth)
@@ -240,9 +254,9 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	protected.GET("/tags", tagHandler.ListTags)
 	protected.PUT("/tags/:id", tagHandler.UpdateTag)
 	protected.DELETE("/tags/:id", tagHandler.DeleteTag)
-	protected.POST("/images", imageHandler.InitiateUpload)
-	protected.POST("/images/:id/complete", imageHandler.CompleteUpload)
-	protected.POST("/images/:id/accept-suggestion", imageHandler.AcceptSuggestion)
+	protected.POST("/images", uploadHandler.InitiateUpload)
+	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
+	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
 	protected.GET("/images/trash", imageHandler.ListTrashed)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
@@ -253,5 +267,5 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
 
-	return imageUsecase
+	return &compositeImageWorker{upload: uploadUsecase, image: imageUsecase}
 }

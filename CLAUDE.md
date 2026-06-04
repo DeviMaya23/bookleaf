@@ -8,6 +8,10 @@ Before introducing a new pattern, new abstraction, new dependency,
 or new layer boundary not already present in the codebase, stop and 
 propose it to me first. Do not proceed until confirmed.
 
+## Mid-Implementation Adaptations
+
+If, while implementing a task, you discover that something not covered by the design is needed — a structural workaround, a bridging type, a scope change, an unanticipated dependency — stop and inform me before proceeding. Describe what you found, why the adaptation is needed, and what you're proposing. Do not implement it silently.
+
 
 ## OpenSpec Proposals
 
