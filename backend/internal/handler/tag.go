@@ -1,13 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -15,8 +16,15 @@ import (
 	"gorm.io/gorm"
 )
 
+type TagUsecase interface {
+	Create(ctx context.Context, userID string, name string) (*domain.Tag, error)
+	List(ctx context.Context, userID string) ([]*domain.Tag, error)
+	Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error)
+	Delete(ctx context.Context, id uuid.UUID, userID string) error
+}
+
 type TagHandler struct {
-	tagUsecase usecase.TagUsecase
+	tagUsecase TagUsecase
 	tel        *observability.Telemetry
 }
 
@@ -35,7 +43,7 @@ type tagResponse struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
-func NewTagHandler(tagUsecase usecase.TagUsecase, tel *observability.Telemetry) *TagHandler {
+func NewTagHandler(tagUsecase TagUsecase, tel *observability.Telemetry) *TagHandler {
 	return &TagHandler{
 		tagUsecase: tagUsecase,
 		tel:        tel,

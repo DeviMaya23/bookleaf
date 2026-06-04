@@ -14,10 +14,8 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/storage"
-	"github.com/devi/bookleaf/internal/thumbnail"
-	"github.com/devi/bookleaf/internal/vision"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -35,6 +33,14 @@ const (
 	presignedGetTTL = 24 * time.Hour
 	downloadURLTTL  = 5 * time.Minute
 )
+
+type ThumbnailService interface {
+	Generate(ctx context.Context, src io.Reader) (io.Reader, error)
+}
+
+type VisionService interface {
+	AnnotateImage(ctx context.Context, imageBytes []byte) ([]domain.Label, error)
+}
 
 type UploadInitResult struct {
 	ID        uuid.UUID
@@ -68,31 +74,14 @@ type ImageItem struct {
 	FolderPosition *string
 }
 
-type ImageUsecase interface {
-	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error)
-	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
-	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
-	ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
-	GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error)
-	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
-	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
-	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*ImageItem, error)
-	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
-	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
-	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
-	Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
-	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
-	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
-}
-
 type imageUsecase struct {
 	imageRepo         ImageRepository
 	pendingUploadRepo PendingUploadRepository
 	tagRepo           TagRepository
-	store             storage.StorageService
-	thumbnails        thumbnail.ThumbnailService
-	visionService     vision.VisionService
-	folderRepo        FolderRepository
+	store             StorageService
+	thumbnails        ThumbnailService
+	visionService     VisionService
+	folderRepo        ImageFolderRepository
 	userRepo          UserRepository
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
@@ -104,13 +93,13 @@ func NewImageUsecase(
 	imageRepo ImageRepository,
 	pendingUploadRepo PendingUploadRepository,
 	tagRepo TagRepository,
-	store storage.StorageService,
-	thumbnails thumbnail.ThumbnailService,
-	visionService vision.VisionService,
-	folderRepo FolderRepository,
+	store StorageService,
+	thumbnails ThumbnailService,
+	visionService VisionService,
+	folderRepo ImageFolderRepository,
 	userRepo UserRepository,
 	tel *observability.Telemetry,
-) ImageUsecase {
+) *imageUsecase {
 	uploadCount, _ := tel.Meter.Int64Counter(
 		"r2.upload.count",
 		metric.WithDescription("Total number of upload completion requests"),
@@ -897,4 +886,3 @@ func (u *imageUsecase) PurgeExpiredTrash(ctx context.Context, threshold time.Dur
 	return nil
 }
 
-var _ ImageUsecase = (*imageUsecase)(nil)

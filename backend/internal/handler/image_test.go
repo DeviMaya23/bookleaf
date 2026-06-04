@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +18,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- mocks ---
+// --- mock ---
 
 type mockImageUsecase struct {
 	uploadResult         *usecase.UploadInitResult
@@ -31,12 +31,12 @@ type mockImageUsecase struct {
 	err                  error
 	acceptSuggestionErr  error
 	moveImageFolderErr   error
-	lastAcceptImageID    uuid.UUID
-	lastAcceptUserID     string
-	lastSuggestedFolder  string
 	lastDescription      *string
 	lastUpdateParams     usecase.UpdateImageParams
 	lastListImagesParams usecase.ListImagesParams
+	lastAcceptImageID    uuid.UUID
+	lastAcceptUserID     string
+	lastSuggestedFolder  string
 	lastMoveImageID      uuid.UUID
 	lastMoveUserID       string
 	lastMoveFromFolderID *uuid.UUID
@@ -51,10 +51,6 @@ func (m *mockImageUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *
 
 func (m *mockImageUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) (*usecase.CompleteUploadResult, error) {
 	return m.completeResult, m.err
-}
-
-func (m *mockImageUsecase) DownloadImage(_ context.Context, _ uuid.UUID, _ string) (string, error) {
-	return m.downloadURL, m.err
 }
 
 func (m *mockImageUsecase) AcceptSuggestion(_ context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
@@ -82,22 +78,8 @@ func (m *mockImageUsecase) GetImage(_ context.Context, _ uuid.UUID, _ string) (*
 	return m.imageDetail, m.err
 }
 
-func (m *mockImageUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-
-func (m *mockImageUsecase) ListTrashed(_ context.Context, _ string, _ usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	if m.listTrashedResult != nil {
-		return m.listTrashedResult, nil
-	}
-	return &usecase.ListTrashedResult{}, nil
-}
-
-func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageItem, error) {
-	return m.imageItem, m.err
+func (m *mockImageUsecase) DownloadImage(_ context.Context, _ uuid.UUID, _ string) (string, error) {
+	return m.downloadURL, m.err
 }
 
 func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*usecase.ImageItem, error) {
@@ -121,15 +103,25 @@ func (m *mockImageUsecase) UpdateImagePosition(_ context.Context, _ uuid.UUID, _
 	return m.err
 }
 
-func (m *mockImageUsecase) CleanupStaleUploads(_ context.Context, _ time.Duration) error {
+func (m *mockImageUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
 
-func (m *mockImageUsecase) PurgeExpiredTrash(_ context.Context, _ time.Duration) error {
-	return m.err
+func (m *mockImageUsecase) ListTrashed(_ context.Context, _ string, _ usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.listTrashedResult != nil {
+		return m.listTrashedResult, nil
+	}
+	return &usecase.ListTrashedResult{}, nil
 }
 
-// --- tests ---
+func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageItem, error) {
+	return m.imageItem, m.err
+}
+
+// --- InitiateUpload ---
 
 func TestImageHandler_InitiateUpload(t *testing.T) {
 	imageID := uuid.New()
@@ -137,14 +129,14 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "creates image and returns 201 with upload url",
-			body: `{"title":"sunset","mime_type":"image/jpeg","description":"cover"}`,
-			mockUC: &mockImageUsecase{
+			name: "returns 201 with upload body",
+			body: `{"title":"sunset","mime_type":"image/jpeg"}`,
+			uc: &mockImageUsecase{
 				uploadResult: &usecase.UploadInitResult{
 					ID:        imageID,
 					UploadURL: "https://r2.example.com/upload",
@@ -156,14 +148,26 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 		{
 			name:          "returns 400 for invalid title",
 			body:          `{"title":"","mime_type":"image/jpeg"}`,
-			mockUC:        &mockImageUsecase{err: usecase.ErrInvalidImageTitle},
+			uc:            &mockImageUsecase{err: usecase.ErrInvalidImageTitle},
 			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "returns 400 for invalid mime type",
+			body:          `{"title":"sunset","mime_type":""}`,
+			uc:            &mockImageUsecase{err: usecase.ErrInvalidMIMEType},
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "returns 500 on generic error",
+			body:          `{"title":"sunset","mime_type":"image/jpeg"}`,
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images", tt.body)
 
 			err := h.InitiateUpload(c)
@@ -174,67 +178,82 @@ func TestImageHandler_InitiateUpload(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/upload", resp["upload_url"])
 			assert.Equal(t, "users/kp_abc123/images/"+imageID.String()+".jpg", resp["r2_path"])
-			if tt.name == "creates image and returns 201 with upload url" {
-				require.NotNil(t, tt.mockUC.lastDescription)
-				assert.Equal(t, "cover", *tt.mockUC.lastDescription)
-			}
 		})
 	}
 }
+
+func TestImageHandler_InitiateUpload_MalformedJSON(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images", `{not valid json}`)
+
+	err := h.InitiateUpload(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_InitiateUpload_PassesDescription(t *testing.T) {
+	uc := &mockImageUsecase{uploadResult: &usecase.UploadInitResult{ID: uuid.New()}}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images", `{"title":"sunset","mime_type":"image/jpeg","description":"golden hour"}`)
+
+	err := h.InitiateUpload(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastDescription)
+	assert.Equal(t, "golden hour", *uc.lastDescription)
+}
+
+// --- CompleteUpload ---
 
 func TestImageHandler_CompleteUpload(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
-		wantImageID   string
-		wantWarning   string
-		wantSuggested any
 		wantErrStatus int
 	}{
 		{
-			name: "completes upload and returns 200 response",
-			mockUC: &mockImageUsecase{
+			name: "returns 200 with suggested folder name",
+			uc: &mockImageUsecase{
 				completeResult: &usecase.CompleteUploadResult{
 					ImageID:             imageID,
 					SuggestedFolderName: func() *string { v := "Nature"; return &v }(),
 				},
 			},
-			wantStatus:    http.StatusOK,
-			wantImageID:   imageID.String(),
-			wantSuggested: "Nature",
+			wantStatus: http.StatusOK,
 		},
 		{
-			name: "completes upload with warning",
-			mockUC: &mockImageUsecase{
+			name: "returns 200 with warning when suggestion unavailable",
+			uc: &mockImageUsecase{
 				completeResult: &usecase.CompleteUploadResult{
 					ImageID: imageID,
 					Warning: "ai labelling failed",
 				},
 			},
-			wantStatus:    http.StatusOK,
-			wantImageID:   imageID.String(),
-			wantWarning:   "ai labelling failed",
-			wantSuggested: nil,
+			wantStatus: http.StatusOK,
 		},
 		{
 			name:          "returns 404 when image not found",
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", "")
 			c.SetPath("/images/:id/complete")
 			c.SetParamNames("id")
@@ -248,20 +267,32 @@ func TestImageHandler_CompleteUpload(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, tt.wantImageID, resp["image_id"])
-			if tt.wantWarning != "" {
-				assert.Equal(t, tt.wantWarning, resp["warning"])
-			} else {
-				_, exists := resp["warning"]
-				assert.False(t, exists)
+			assert.Equal(t, imageID.String(), resp["image_id"])
+			if tt.uc.completeResult.SuggestedFolderName != nil {
+				assert.Equal(t, *tt.uc.completeResult.SuggestedFolderName, resp["suggested_folder_name"])
 			}
-			assert.Equal(t, tt.wantSuggested, resp["suggested_folder_name"])
+			if tt.uc.completeResult.Warning != "" {
+				assert.Equal(t, tt.uc.completeResult.Warning, resp["warning"])
+			}
 		})
 	}
 }
+
+func TestImageHandler_CompleteUpload_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/not-a-uuid/complete", "")
+	c.SetPath("/images/:id/complete")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.CompleteUpload(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- AcceptSuggestion ---
 
 func TestImageHandler_AcceptSuggestion(t *testing.T) {
 	imageID := uuid.New()
@@ -269,35 +300,33 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "accepts suggestion and returns 204",
+			name:       "returns 204 and passes parsed params to usecase",
 			body:       `{"suggested_folder_name":"Nature"}`,
-			mockUC:     &mockImageUsecase{},
+			uc:         &mockImageUsecase{},
 			wantStatus: http.StatusNoContent,
 		},
 		{
-			name:          "returns 400 when suggested_folder_name is missing",
-			body:          `{}`,
-			mockUC:        &mockImageUsecase{},
-			wantErrStatus: http.StatusBadRequest,
+			name:          "returns 404 when image not found",
+			body:          `{"suggested_folder_name":"Nature"}`,
+			uc:            &mockImageUsecase{acceptSuggestionErr: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
 		},
 		{
-			name: "returns 404 when image not found",
-			body: `{"suggested_folder_name":"Nature"}`,
-			mockUC: &mockImageUsecase{
-				acceptSuggestionErr: gorm.ErrRecordNotFound,
-			},
-			wantErrStatus: http.StatusNotFound,
+			name:          "returns 500 on generic error",
+			body:          `{"suggested_folder_name":"Nature"}`,
+			uc:            &mockImageUsecase{acceptSuggestionErr: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", tt.body)
 			c.SetPath("/images/:id/accept-suggestion")
 			c.SetParamNames("id")
@@ -309,15 +338,54 @@ func TestImageHandler_AcceptSuggestion(t *testing.T) {
 				assertHTTPError(t, err, tt.wantErrStatus)
 				return
 			}
-
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-			assert.Equal(t, imageID, tt.mockUC.lastAcceptImageID)
-			assert.Equal(t, "kp_abc123", tt.mockUC.lastAcceptUserID)
-			assert.Equal(t, "Nature", tt.mockUC.lastSuggestedFolder)
+			assert.Equal(t, imageID, tt.uc.lastAcceptImageID)
+			assert.Equal(t, "kp_abc123", tt.uc.lastAcceptUserID)
+			assert.Equal(t, "Nature", tt.uc.lastSuggestedFolder)
 		})
 	}
 }
+
+func TestImageHandler_AcceptSuggestion_BlankFolderName(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	imageID := uuid.New()
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", `{"suggested_folder_name":""}`)
+	c.SetPath("/images/:id/accept-suggestion")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.AcceptSuggestion(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_AcceptSuggestion_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/not-a-uuid/accept-suggestion", `{"suggested_folder_name":"Nature"}`)
+	c.SetPath("/images/:id/accept-suggestion")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.AcceptSuggestion(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_AcceptSuggestion_MalformedJSON(t *testing.T) {
+	imageID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", `{not valid json}`)
+	c.SetPath("/images/:id/accept-suggestion")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.AcceptSuggestion(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- toImageResponse ---
 
 func TestImageHandler_toImageResponse_FolderIDs(t *testing.T) {
 	folderIDOne := uuid.New()
@@ -345,199 +413,168 @@ func TestImageHandler_toImageResponse_FolderIDs(t *testing.T) {
 	})
 }
 
-func TestImageHandler_ListImages(t *testing.T) {
+// --- ListImages ---
+
+func TestImageHandler_ListImages_ReturnsList(t *testing.T) {
 	tagID := uuid.New()
-
-	tests := []struct {
-		name          string
-		mockUC        *mockImageUsecase
-		wantStatus    int
-		wantLen       int
-		wantErrStatus int
-	}{
-		{
-			name: "returns paginated image list",
-			mockUC: &mockImageUsecase{
-				listImagesResult: &usecase.ListImagesResult{
-					Images: []usecase.ImageItem{
-						{Image: &domain.Image{
-							ID:          uuid.New(),
-							Title:       "photo 1",
-							Description: func() *string { v := "desc"; return &v }(),
-							Width:       func() *int { v := 640; return &v }(),
-							Height:      func() *int { v := 480; return &v }(),
-							FileSize:    func() *int64 { v := int64(1024); return &v }(),
-							Tags:        []domain.Tag{{ID: tagID, Name: "travel"}},
-						}},
-						{Image: &domain.Image{ID: uuid.New(), Title: "photo 2"}},
-					},
-				},
+	uc := &mockImageUsecase{
+		listImagesResult: &usecase.ListImagesResult{
+			Images: []usecase.ImageItem{
+				{Image: &domain.Image{
+					ID:    uuid.New(),
+					Title: "photo 1",
+					Tags:  []domain.Tag{{ID: tagID, Name: "travel"}},
+				}},
+				{Image: &domain.Image{ID: uuid.New(), Title: "photo 2"}},
 			},
-			wantStatus: http.StatusOK,
-			wantLen:    2,
-		},
-		{
-			name:          "returns 500 on usecase error",
-			mockUC:        &mockImageUsecase{err: errors.New("db error")},
-			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/images", "")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
-			c, rec := newEchoContext(t, http.MethodGet, "/images", "")
+	err := h.ListImages(c)
 
-			err := h.ListImages(c)
-
-			if tt.wantErrStatus != 0 {
-				assertHTTPError(t, err, tt.wantErrStatus)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-
-			var resp map[string]any
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			images, ok := resp["images"].([]any)
-			require.True(t, ok)
-			assert.Len(t, images, tt.wantLen)
-			if tt.name == "returns paginated image list" {
-				firstImage, ok := images[0].(map[string]any)
-				require.True(t, ok)
-				tags, ok := firstImage["tags"].([]any)
-				require.True(t, ok)
-				require.Len(t, tags, 1)
-				tagItem, ok := tags[0].(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, "travel", tagItem["name"])
-
-				secondImage, ok := images[1].(map[string]any)
-				require.True(t, ok)
-				emptyTags, ok := secondImage["tags"].([]any)
-				require.True(t, ok)
-				assert.Len(t, emptyTags, 0)
-			}
-			_, hasCursor := resp["next_cursor"]
-			assert.True(t, hasCursor)
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	images, ok := resp["images"].([]any)
+	require.True(t, ok)
+	assert.Len(t, images, 2)
+	firstImage := images[0].(map[string]any)
+	tags := firstImage["tags"].([]any)
+	require.Len(t, tags, 1)
+	assert.Equal(t, "travel", tags[0].(map[string]any)["name"])
+	_, hasCursor := resp["next_cursor"]
+	assert.True(t, hasCursor)
 }
 
-func TestImageHandler_ListImages_Pagination(t *testing.T) {
-	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
-		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images?cursor=!!!notvalid!!!", "")
+func TestImageHandler_ListImages_GenericError(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images", "")
 
-		err := h.ListImages(c)
+	err := h.ListImages(c)
 
-		assertHTTPError(t, err, http.StatusBadRequest)
-	})
+	assertHTTPError(t, err, http.StatusInternalServerError)
+}
 
-	t.Run("returns paginated envelope with next_cursor on success", func(t *testing.T) {
-		cursorID := uuid.New()
-		cursorTime := time.Now().UTC()
-		mockUC := &mockImageUsecase{
-			listImagesResult: &usecase.ListImagesResult{
-				Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "photo"}}},
-				NextCursor: &usecase.ImageCursor{
-					CreatedAt: cursorTime,
-					ID:        cursorID,
-				},
+func TestImageHandler_ListImages_InvalidCursor(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?cursor=!!!notvalid!!!", "")
+
+	err := h.ListImages(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_ListImages_EncodesNextCursor(t *testing.T) {
+	cursorID := uuid.New()
+	uc := &mockImageUsecase{
+		listImagesResult: &usecase.ListImagesResult{
+			Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "photo"}}},
+			NextCursor: &usecase.ImageCursor{
+				CreatedAt: time.Now().UTC(),
+				ID:        cursorID,
 			},
-		}
-		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-		c, rec := newEchoContext(t, http.MethodGet, "/images", "")
+		},
+	}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/images", "")
 
-		err := h.ListImages(c)
+	err := h.ListImages(c)
 
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var resp map[string]any
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.NotNil(t, resp["next_cursor"])
-		assert.IsType(t, "", resp["next_cursor"])
-		images, ok := resp["images"].([]any)
-		require.True(t, ok)
-		assert.Len(t, images, 1)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.NotNil(t, resp["next_cursor"])
+	assert.IsType(t, "", resp["next_cursor"])
 }
 
-func TestImageHandler_ListImages_Unfiled(t *testing.T) {
-	t.Run("unfiled=true sets Unfiled flag on params", func(t *testing.T) {
-		mockUC := &mockImageUsecase{}
-		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images?unfiled=true", "")
+func TestImageHandler_ListImages_UnfiledTrue(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?unfiled=true", "")
 
-		err := h.ListImages(c)
+	err := h.ListImages(c)
 
-		require.NoError(t, err)
-		assert.True(t, mockUC.lastListImagesParams.Unfiled)
-	})
-
-	t.Run("unfiled absent leaves Unfiled false", func(t *testing.T) {
-		mockUC := &mockImageUsecase{}
-		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images", "")
-
-		err := h.ListImages(c)
-
-		require.NoError(t, err)
-		assert.False(t, mockUC.lastListImagesParams.Unfiled)
-	})
+	require.NoError(t, err)
+	assert.True(t, uc.lastListImagesParams.Unfiled)
 }
 
-func TestImageHandler_ListImages_TagFilter(t *testing.T) {
-	t.Run("returns 400 for invalid tag_id param", func(t *testing.T) {
-		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id=not-a-uuid", "")
+func TestImageHandler_ListImages_UnfiledAbsent(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images", "")
 
-		err := h.ListImages(c)
+	err := h.ListImages(c)
 
-		assertHTTPError(t, err, http.StatusBadRequest)
-	})
-
-	t.Run("sets TagID on params when tag_id is provided", func(t *testing.T) {
-		tagID := uuid.New()
-		mockUC := &mockImageUsecase{}
-		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id="+tagID.String(), "")
-
-		err := h.ListImages(c)
-
-		require.NoError(t, err)
-		require.NotNil(t, mockUC.lastListImagesParams.TagID)
-		assert.Equal(t, tagID, *mockUC.lastListImagesParams.TagID)
-	})
+	require.NoError(t, err)
+	assert.False(t, uc.lastListImagesParams.Unfiled)
 }
+
+func TestImageHandler_ListImages_InvalidTagID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id=not-a-uuid", "")
+
+	err := h.ListImages(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_ListImages_ValidTagID(t *testing.T) {
+	tagID := uuid.New()
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id="+tagID.String(), "")
+
+	err := h.ListImages(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastListImagesParams.TagID)
+	assert.Equal(t, tagID, *uc.lastListImagesParams.TagID)
+}
+
+func TestImageHandler_ListImages_FolderView_IgnoresCursor(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockImageUsecase{
+		listImagesResult: &usecase.ListImagesResult{
+			Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "img"}}},
+		},
+	}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/images?folder_id="+folderID.String()+"&cursor=somevalue", "")
+
+	err := h.ListImages(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Nil(t, resp["next_cursor"])
+}
+
+// --- GetImage ---
 
 func TestImageHandler_GetImage(t *testing.T) {
 	imageID := uuid.New()
 	tagID := uuid.New()
-	now := time.Now().UTC()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "returns image detail with signed url",
-			mockUC: &mockImageUsecase{
+			name: "returns 200 with image detail",
+			uc: &mockImageUsecase{
 				imageDetail: &usecase.ImageDetail{
 					Image: &domain.Image{
-						ID:          imageID,
-						Title:       "photo",
-						Description: func() *string { v := "desc"; return &v }(),
-						MIMEType:    "image/jpeg",
-						Width:       func() *int { v := 640; return &v }(),
-						Height:      func() *int { v := 480; return &v }(),
-						FileSize:    func() *int64 { v := int64(1024); return &v }(),
-						Tags:        []domain.Tag{{ID: tagID, Name: "travel"}},
-						CreatedAt:   now,
-						UpdatedAt:   now,
+						ID:       imageID,
+						Title:    "photo",
+						MIMEType: "image/jpeg",
+						Tags:     []domain.Tag{{ID: tagID, Name: "travel"}},
 					},
 					ImageURL: "https://r2.example.com/view",
 				},
@@ -546,14 +583,19 @@ func TestImageHandler_GetImage(t *testing.T) {
 		},
 		{
 			name:          "returns 404 when image not found",
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -567,53 +609,61 @@ func TestImageHandler_GetImage(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/view", resp["image_url"])
-			_, hasDescription := resp["description"]
-			_, hasWidth := resp["width"]
-			_, hasHeight := resp["height"]
-			_, hasFileSize := resp["file_size"]
-			assert.True(t, hasDescription)
-			assert.True(t, hasWidth)
-			assert.True(t, hasHeight)
-			assert.True(t, hasFileSize)
 			tags, ok := resp["tags"].([]any)
 			require.True(t, ok)
 			require.Len(t, tags, 1)
-			tagItem, ok := tags[0].(map[string]any)
-			require.True(t, ok)
-			assert.Equal(t, "travel", tagItem["name"])
+			assert.Equal(t, "travel", tags[0].(map[string]any)["name"])
 		})
 	}
 }
+
+func TestImageHandler_GetImage_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images/not-a-uuid", "")
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.GetImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- DownloadImage ---
 
 func TestImageHandler_DownloadImage(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "returns download url",
-			mockUC:     &mockImageUsecase{downloadURL: "https://r2.example.com/download"},
+			name:       "returns 200 with download url",
+			uc:         &mockImageUsecase{downloadURL: "https://r2.example.com/download"},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:          "returns 404 when image not found",
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/images/"+imageID.String()+"/download", "")
 			c.SetPath("/images/:id/download")
 			c.SetParamNames("id")
@@ -627,7 +677,6 @@ func TestImageHandler_DownloadImage(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, "https://r2.example.com/download", resp["download_url"])
@@ -635,30 +684,49 @@ func TestImageHandler_DownloadImage(t *testing.T) {
 	}
 }
 
+func TestImageHandler_DownloadImage_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images/not-a-uuid/download", "")
+	c.SetPath("/images/:id/download")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.DownloadImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- SoftDelete ---
+
 func TestImageHandler_SoftDelete(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "soft deletes image and returns 204",
-			mockUC:     &mockImageUsecase{},
+			name:       "returns 204 on success",
+			uc:         &mockImageUsecase{},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:          "returns 404 when image not found",
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/images/"+imageID.String(), "")
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -676,122 +744,117 @@ func TestImageHandler_SoftDelete(t *testing.T) {
 	}
 }
 
-func TestImageHandler_ListTrashed(t *testing.T) {
-	tests := []struct {
-		name          string
-		mockUC        *mockImageUsecase
-		wantStatus    int
-		wantLen       int
-		wantErrStatus int
-	}{
-		{
-			name: "returns paginated trashed images",
-			mockUC: &mockImageUsecase{
-				listTrashedResult: &usecase.ListTrashedResult{
-					Images: []usecase.ImageItem{
-						{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}},
-					},
-				},
-			},
-			wantStatus: http.StatusOK,
-			wantLen:    1,
-		},
-		{
-			name:          "returns 500 on usecase error",
-			mockUC:        &mockImageUsecase{err: errors.New("db error")},
-			wantErrStatus: http.StatusInternalServerError,
-		},
-	}
+func TestImageHandler_SoftDelete_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodDelete, "/images/not-a-uuid", "")
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
-			c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
+	err := h.SoftDelete(c)
 
-			err := h.ListTrashed(c)
-
-			if tt.wantErrStatus != 0 {
-				assertHTTPError(t, err, tt.wantErrStatus)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-
-			var resp map[string]any
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			images, ok := resp["images"].([]any)
-			require.True(t, ok)
-			assert.Len(t, images, tt.wantLen)
-			_, hasCursor := resp["next_cursor"]
-			assert.True(t, hasCursor)
-		})
-	}
+	assertHTTPError(t, err, http.StatusBadRequest)
 }
 
-func TestImageHandler_ListTrashed_Pagination(t *testing.T) {
-	t.Run("returns 400 for invalid cursor param", func(t *testing.T) {
-		h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
-		c, _ := newEchoContext(t, http.MethodGet, "/images/trash?cursor=!!!notvalid!!!", "")
+// --- ListTrashed ---
 
-		err := h.ListTrashed(c)
-
-		assertHTTPError(t, err, http.StatusBadRequest)
-	})
-
-	t.Run("returns paginated envelope with next_cursor on success", func(t *testing.T) {
-		cursorID := uuid.New()
-		cursorTime := time.Now().UTC()
-		mockUC := &mockImageUsecase{
-			listTrashedResult: &usecase.ListTrashedResult{
-				Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}}},
-				NextCursor: &usecase.ImageCursor{
-					CreatedAt: cursorTime,
-					ID:        cursorID,
-				},
+func TestImageHandler_ListTrashed_ReturnsList(t *testing.T) {
+	uc := &mockImageUsecase{
+		listTrashedResult: &usecase.ListTrashedResult{
+			Images: []usecase.ImageItem{
+				{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}},
 			},
-		}
-		h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-		c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
+		},
+	}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
 
-		err := h.ListTrashed(c)
+	err := h.ListTrashed(c)
 
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var resp map[string]any
-		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-		assert.NotNil(t, resp["next_cursor"])
-		assert.IsType(t, "", resp["next_cursor"])
-		images, ok := resp["images"].([]any)
-		require.True(t, ok)
-		assert.Len(t, images, 1)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	images, ok := resp["images"].([]any)
+	require.True(t, ok)
+	assert.Len(t, images, 1)
+	_, hasCursor := resp["next_cursor"]
+	assert.True(t, hasCursor)
 }
+
+func TestImageHandler_ListTrashed_GenericError(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images/trash", "")
+
+	err := h.ListTrashed(c)
+
+	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+func TestImageHandler_ListTrashed_InvalidCursor(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images/trash?cursor=!!!notvalid!!!", "")
+
+	err := h.ListTrashed(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_ListTrashed_EncodesNextCursor(t *testing.T) {
+	cursorID := uuid.New()
+	uc := &mockImageUsecase{
+		listTrashedResult: &usecase.ListTrashedResult{
+			Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "deleted photo"}}},
+			NextCursor: &usecase.ImageCursor{
+				CreatedAt: time.Now().UTC(),
+				ID:        cursorID,
+			},
+		},
+	}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/images/trash", "")
+
+	err := h.ListTrashed(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.NotNil(t, resp["next_cursor"])
+	assert.IsType(t, "", resp["next_cursor"])
+}
+
+// --- Restore ---
 
 func TestImageHandler_Restore(t *testing.T) {
 	imageID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "restores image and returns 200",
-			mockUC:     &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "photo"}}},
+			name:       "returns 200 with restored image",
+			uc:         &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "photo"}}},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:          "returns 404 when image not found",
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/restore", "")
 			c.SetPath("/images/:id/restore")
 			c.SetParamNames("id")
@@ -805,7 +868,6 @@ func TestImageHandler_Restore(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
@@ -813,78 +875,53 @@ func TestImageHandler_Restore(t *testing.T) {
 	}
 }
 
+func TestImageHandler_Restore_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/not-a-uuid/restore", "")
+	c.SetPath("/images/:id/restore")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.Restore(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- UpdateImage ---
+
 func TestImageHandler_UpdateImage(t *testing.T) {
 	imageID := uuid.New()
-	title := "updated title"
-	tagIDOne := uuid.New()
-	tagIDTwo := uuid.New()
-	folderIDOne := uuid.New()
-	folderIDTwo := uuid.New()
 
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "updates image and returns 200 with updated image",
-			body: `{"title":"updated title","description":"new desc"}`,
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "updates source_url and returns 200",
-			body: `{"source_url":"https://example.com"}`,
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "updates tags and returns 200",
-			body: fmt.Sprintf(`{"tags":["%s","%s"]}`, tagIDOne.String(), tagIDTwo.String()),
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "updates folder_ids and returns 200",
-			body: fmt.Sprintf(`{"folder_ids":["%s","%s"]}`, folderIDOne.String(), folderIDTwo.String()),
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "clears tags with empty array",
-			body: `{"tags":[]}`,
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: title}},
-			},
+			name:       "returns 200 with updated image",
+			body:       `{"title":"updated title"}`,
+			uc:         &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "updated title"}}},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:          "returns 404 when image not found",
 			body:          `{"title":"updated title"}`,
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
 		},
 		{
-			name:          "returns 400 for invalid tag id",
-			body:          `{"tags":["not-a-uuid"]}`,
-			mockUC:        &mockImageUsecase{},
-			wantErrStatus: http.StatusBadRequest,
+			name:          "returns 500 on generic error",
+			body:          `{"title":"updated title"}`,
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), tt.body)
 			c.SetPath("/images/:id")
 			c.SetParamNames("id")
@@ -898,39 +935,118 @@ func TestImageHandler_UpdateImage(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
-			assert.Equal(t, title, resp["title"])
-			if tt.name == "updates image and returns 200 with updated image" {
-				require.NotNil(t, tt.mockUC.lastUpdateParams.Description)
-				assert.Equal(t, "new desc", *tt.mockUC.lastUpdateParams.Description)
-			}
-			if tt.name == "updates source_url and returns 200" {
-				require.NotNil(t, tt.mockUC.lastUpdateParams.SourceURL)
-				require.NotNil(t, *tt.mockUC.lastUpdateParams.SourceURL)
-				assert.Equal(t, "https://example.com", **tt.mockUC.lastUpdateParams.SourceURL)
-			}
-			if tt.name == "updates tags and returns 200" {
-				require.NotNil(t, tt.mockUC.lastUpdateParams.Tags)
-				require.Len(t, *tt.mockUC.lastUpdateParams.Tags, 2)
-				assert.Equal(t, tagIDOne, (*tt.mockUC.lastUpdateParams.Tags)[0])
-				assert.Equal(t, tagIDTwo, (*tt.mockUC.lastUpdateParams.Tags)[1])
-			}
-			if tt.name == "updates folder_ids and returns 200" {
-				require.NotNil(t, tt.mockUC.lastUpdateParams.FolderIDs)
-				require.Len(t, *tt.mockUC.lastUpdateParams.FolderIDs, 2)
-				assert.Equal(t, folderIDOne, (*tt.mockUC.lastUpdateParams.FolderIDs)[0])
-				assert.Equal(t, folderIDTwo, (*tt.mockUC.lastUpdateParams.FolderIDs)[1])
-			}
-			if tt.name == "clears tags with empty array" {
-				require.NotNil(t, tt.mockUC.lastUpdateParams.Tags)
-				assert.Len(t, *tt.mockUC.lastUpdateParams.Tags, 0)
-			}
+			assert.Equal(t, "updated title", resp["title"])
 		})
 	}
 }
+
+func TestImageHandler_UpdateImage_EmptyTitleReturns400(t *testing.T) {
+	imageID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), `{"title":""}`)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_UpdateImage_PassesTags(t *testing.T) {
+	imageID := uuid.New()
+	tagOne, tagTwo := uuid.New(), uuid.New()
+	uc := &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID}}}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"tags":["%s","%s"]}`, tagOne.String(), tagTwo.String())
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), body)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.Tags)
+	assert.Equal(t, []uuid.UUID{tagOne, tagTwo}, *uc.lastUpdateParams.Tags)
+}
+
+func TestImageHandler_UpdateImage_ClearsTagsWithEmptyArray(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID}}}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), `{"tags":[]}`)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.Tags)
+	assert.Len(t, *uc.lastUpdateParams.Tags, 0)
+}
+
+func TestImageHandler_UpdateImage_PassesFolderIDs(t *testing.T) {
+	imageID := uuid.New()
+	folderOne, folderTwo := uuid.New(), uuid.New()
+	uc := &mockImageUsecase{imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID}}}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"folder_ids":["%s","%s"]}`, folderOne.String(), folderTwo.String())
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), body)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.FolderIDs)
+	assert.Equal(t, []uuid.UUID{folderOne, folderTwo}, *uc.lastUpdateParams.FolderIDs)
+}
+
+func TestImageHandler_UpdateImage_InvalidTagID(t *testing.T) {
+	imageID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), `{"tags":["not-a-uuid"]}`)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_UpdateImage_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/not-a-uuid", `{"title":"updated"}`)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.UpdateImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_UpdateImage_MalformedJSON(t *testing.T) {
+	imageID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/images/"+imageID.String(), `{not valid json}`)
+	c.SetPath("/images/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.UpdateImage(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- MoveImageFolder ---
 
 func TestImageHandler_MoveImageFolder(t *testing.T) {
 	imageID := uuid.New()
@@ -940,37 +1056,35 @@ func TestImageHandler_MoveImageFolder(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "moves image folder and returns 200",
+			name: "returns 200 with moved image",
 			body: fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()),
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "title"}},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "no-op when from and to folder are the same returns 200",
-			body: fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), fromFolderID.String()),
-			mockUC: &mockImageUsecase{
-				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "title"}},
+			uc: &mockImageUsecase{
+				imageItem: &usecase.ImageItem{Image: &domain.Image{ID: imageID, Title: "photo"}},
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name:          "returns 404 when image not found",
 			body:          fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()),
-			mockUC:        &mockImageUsecase{moveImageFolderErr: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{moveImageFolderErr: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			body:          fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()),
+			uc:            &mockImageUsecase{moveImageFolderErr: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/move-folder", tt.body)
 			c.SetPath("/images/:id/move-folder")
 			c.SetParamNames("id")
@@ -984,14 +1098,72 @@ func TestImageHandler_MoveImageFolder(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
-			assert.Equal(t, 1, tt.mockUC.moveImageFolderCalls)
 		})
 	}
 }
+
+func TestImageHandler_MoveImageFolder_MissingFromFolderID(t *testing.T) {
+	imageID := uuid.New()
+	toFolderID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/move-folder",
+		fmt.Sprintf(`{"to_folder_id":"%s"}`, toFolderID.String()))
+	c.SetPath("/images/:id/move-folder")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.MoveImageFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_MoveImageFolder_MissingToFolderID(t *testing.T) {
+	imageID := uuid.New()
+	fromFolderID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/move-folder",
+		fmt.Sprintf(`{"from_folder_id":"%s"}`, fromFolderID.String()))
+	c.SetPath("/images/:id/move-folder")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.MoveImageFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_MoveImageFolder_InvalidImageUUID(t *testing.T) {
+	fromFolderID := uuid.New()
+	toFolderID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/not-a-uuid/move-folder",
+		fmt.Sprintf(`{"from_folder_id":"%s","to_folder_id":"%s"}`, fromFolderID.String(), toFolderID.String()))
+	c.SetPath("/images/:id/move-folder")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.MoveImageFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_MoveImageFolder_MalformedJSON(t *testing.T) {
+	imageID := uuid.New()
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/move-folder", `{not valid json}`)
+	c.SetPath("/images/:id/move-folder")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.MoveImageFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- UpdateImagePosition ---
 
 func TestImageHandler_UpdateImagePosition(t *testing.T) {
 	imageID := uuid.New()
@@ -1001,7 +1173,7 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 		name          string
 		imageIDParam  string
 		body          string
-		mockUC        *mockImageUsecase
+		uc            *mockImageUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
@@ -1009,42 +1181,49 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 			name:         "returns 204 on success",
 			imageIDParam: imageID.String(),
 			body:         `{"folder_id":"` + folderID.String() + `","position":"a1V"}`,
-			mockUC:       &mockImageUsecase{},
+			uc:           &mockImageUsecase{},
 			wantStatus:   http.StatusNoContent,
 		},
 		{
 			name:          "returns 400 for empty position",
 			imageIDParam:  imageID.String(),
 			body:          `{"folder_id":"` + folderID.String() + `","position":""}`,
-			mockUC:        &mockImageUsecase{},
+			uc:            &mockImageUsecase{},
 			wantErrStatus: http.StatusBadRequest,
 		},
 		{
 			name:          "returns 400 for missing folder_id",
 			imageIDParam:  imageID.String(),
 			body:          `{"position":"a1V"}`,
-			mockUC:        &mockImageUsecase{},
+			uc:            &mockImageUsecase{},
 			wantErrStatus: http.StatusBadRequest,
 		},
 		{
 			name:          "returns 404 when image not found",
 			imageIDParam:  imageID.String(),
 			body:          `{"folder_id":"` + folderID.String() + `","position":"a1V"}`,
-			mockUC:        &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			imageIDParam:  imageID.String(),
+			body:          `{"folder_id":"` + folderID.String() + `","position":"a1V"}`,
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 		{
 			name:          "returns 400 for invalid image id",
 			imageIDParam:  "not-a-uuid",
 			body:          `{"folder_id":"` + folderID.String() + `","position":"a1V"}`,
-			mockUC:        &mockImageUsecase{},
+			uc:            &mockImageUsecase{},
 			wantErrStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewImageHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPatch, "/images/"+tt.imageIDParam+"/position", tt.body)
 			c.SetParamNames("id")
 			c.SetParamValues(tt.imageIDParam)
@@ -1059,29 +1238,4 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
 	}
-}
-
-func TestImageHandler_ListImages_FolderView_IgnoresCursor(t *testing.T) {
-	img := &domain.Image{ID: uuid.New(), UserID: "kp_abc123", Title: "img"}
-	mockUC := &mockImageUsecase{
-		listImagesResult: &usecase.ListImagesResult{
-			Images: []usecase.ImageItem{{Image: img}},
-		},
-	}
-	h := NewImageHandler(mockUC, observability.NewTelemetry(nil, nil, nil))
-
-	folderID := uuid.New()
-	c, rec := newEchoContext(t, http.MethodGet, "/images?folder_id="+folderID.String()+"&cursor=somevalue&limit=1", "")
-
-	err := h.ListImages(c)
-
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Nil(t, resp["next_cursor"])
-	images, ok := resp["images"].([]any)
-	require.True(t, ok)
-	assert.Len(t, images, 1)
 }

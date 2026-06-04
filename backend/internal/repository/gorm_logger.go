@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

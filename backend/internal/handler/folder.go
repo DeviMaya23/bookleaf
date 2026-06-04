@@ -1,13 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -15,8 +16,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type FolderUsecase interface {
+	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
+	List(ctx context.Context, userID string) ([]*domain.Folder, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID string) (*usecase.FolderDetail, error)
+	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
+	Delete(ctx context.Context, id uuid.UUID, userID string) error
+}
+
 type FolderHandler struct {
-	folderUsecase usecase.FolderUsecase
+	folderUsecase FolderUsecase
 	tel           *observability.Telemetry
 }
 
@@ -40,7 +49,7 @@ type folderDetailResponse struct {
 	ImageCount int64 `json:"image_count"`
 }
 
-func NewFolderHandler(folderUsecase usecase.FolderUsecase, tel *observability.Telemetry) *FolderHandler {
+func NewFolderHandler(folderUsecase FolderUsecase, tel *observability.Telemetry) *FolderHandler {
 	return &FolderHandler{
 		folderUsecase: folderUsecase,
 		tel:           tel,

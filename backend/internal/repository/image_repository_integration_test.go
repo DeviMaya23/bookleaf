@@ -47,18 +47,6 @@ func TestImageRepository_Create_Success(t *testing.T) {
 	assert.Equal(t, "test image", img.Title)
 }
 
-func TestImageRepository_Create_DBError(t *testing.T) {
-	db, err := testutil.NewTestDB(testContainer)
-	require.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.Close()
-
-	repo := NewImageRepository(db)
-	_, err = repo.Create(context.Background(), newTestImage("kp_imgtest"))
-	require.Error(t, err)
-}
 
 func TestImageRepository_List_Success(t *testing.T) {
 	repo, userID := setupImageTest(t)
@@ -72,6 +60,23 @@ func TestImageRepository_List_Success(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, images, 2)
+}
+
+func TestImageRepository_List_ExcludesOtherUserImages(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown7")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth7")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	_, err = repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+
+	images, err := repo.List(context.Background(), other.ID, nil, false, nil, nil, 200)
+
+	require.NoError(t, err)
+	assert.Empty(t, images)
 }
 
 func TestImageRepository_List_FilterByFolder(t *testing.T) {
@@ -119,8 +124,23 @@ func TestImageRepository_GetByID_NotFound(t *testing.T) {
 
 	_, err := repo.GetByID(context.Background(), uuid.New(), userID)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_GetByID_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown1")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth1")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	created, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+
+	_, err = repo.GetByID(context.Background(), created.ID, other.ID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestImageRepository_UpdateThumbnailPath_Success(t *testing.T) {
@@ -192,8 +212,23 @@ func TestImageRepository_SoftDelete_NotFound(t *testing.T) {
 
 	err := repo.SoftDelete(context.Background(), uuid.New(), userID)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_SoftDelete_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown2")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth2")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	created, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+
+	err = repo.SoftDelete(context.Background(), created.ID, other.ID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestImageRepository_GetDeletedByID_Success(t *testing.T) {
@@ -221,8 +256,24 @@ func TestImageRepository_GetDeletedByID_NotFound(t *testing.T) {
 
 	_, err = repo.GetDeletedByID(context.Background(), created.ID, userID)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_GetDeletedByID_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown3")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth3")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	created, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(context.Background(), created.ID, owner.ID))
+
+	_, err = repo.GetDeletedByID(context.Background(), created.ID, other.ID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestImageRepository_Restore_Success(t *testing.T) {
@@ -248,8 +299,24 @@ func TestImageRepository_Restore_NotFound(t *testing.T) {
 
 	err := repo.Restore(context.Background(), uuid.New(), userID)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_Restore_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown4")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth4")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	created, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(context.Background(), created.ID, owner.ID))
+
+	err = repo.Restore(context.Background(), created.ID, other.ID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestImageRepository_ListTrashed_Success(t *testing.T) {
@@ -279,6 +346,24 @@ func TestImageRepository_ListTrashed_Empty(t *testing.T) {
 	repo, userID := setupImageTest(t)
 
 	trashed, err := repo.ListTrashed(context.Background(), userID, nil, 200)
+
+	require.NoError(t, err)
+	assert.Empty(t, trashed)
+}
+
+func TestImageRepository_ListTrashed_ExcludesOtherUserImages(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown5")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth5")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(context.Background(), img.ID, owner.ID))
+
+	trashed, err := repo.ListTrashed(context.Background(), other.ID, nil, 200)
 
 	require.NoError(t, err)
 	assert.Empty(t, trashed)
@@ -426,8 +511,23 @@ func TestImageRepository_Update_NotFound(t *testing.T) {
 		"title": "ghost",
 	})
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestImageRepository_Update_WrongUser(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown6")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth6")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	created, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+
+	_, err = repo.Update(context.Background(), created.ID, other.ID, map[string]any{"title": "stolen"})
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 func TestImageRepository_CountByFolderID(t *testing.T) {

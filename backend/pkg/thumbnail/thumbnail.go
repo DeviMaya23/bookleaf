@@ -9,13 +9,9 @@ import (
 	"github.com/disintegration/imaging"
 )
 
-type ThumbnailService interface {
-	Generate(ctx context.Context, src io.Reader) (io.Reader, error)
-}
-
 type imagingThumbnailService struct{}
 
-func NewThumbnailService() ThumbnailService {
+func NewThumbnailService() *imagingThumbnailService {
 	return &imagingThumbnailService{}
 }
 
@@ -42,5 +38,3 @@ func (s *imagingThumbnailService) Generate(ctx context.Context, src io.Reader) (
 
 	return bytes.NewReader(output.Bytes()), nil
 }
-
-var _ ThumbnailService = (*imagingThumbnailService)(nil)

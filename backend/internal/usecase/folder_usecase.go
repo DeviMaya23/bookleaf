@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
@@ -14,12 +14,8 @@ import (
 
 var ErrInvalidFolderName = errors.New("folder name is required")
 
-type FolderUsecase interface {
-	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
-	List(ctx context.Context, userID string) ([]*domain.Folder, error)
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*FolderDetail, error)
-	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
-	Delete(ctx context.Context, id uuid.UUID, userID string) error
+type ImageCounter interface {
+	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
 }
 
 type FolderDetail struct {
@@ -29,11 +25,11 @@ type FolderDetail struct {
 
 type folderUsecase struct {
 	folderRepo FolderRepository
-	imageRepo  ImageRepository
+	imageRepo  ImageCounter
 	tel        *observability.Telemetry
 }
 
-func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageRepository, tel *observability.Telemetry) FolderUsecase {
+func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageCounter, tel *observability.Telemetry) *folderUsecase {
 	return &folderUsecase{
 		folderRepo: folderRepo,
 		imageRepo:  imageRepo,
@@ -157,5 +153,3 @@ func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string)
 
 	return nil
 }
-
-var _ FolderUsecase = (*folderUsecase)(nil)

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
-	authmw "github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	authmw "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -75,6 +75,8 @@ func assertHTTPError(t *testing.T, err error, wantStatus int) {
 	assert.Equal(t, wantStatus, httpErr.Code)
 }
 
+// --- CreateFolder ---
+
 func TestFolderHandler_CreateFolder(t *testing.T) {
 	folderID := uuid.New()
 	now := time.Now().UTC()
@@ -82,14 +84,14 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockFolderUsecase
+		uc            *mockFolderUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "creates folder and returns 201",
+			name: "returns 201 with folder body",
 			body: `{"name":"travel","description":"trip board"}`,
-			mockUC: &mockFolderUsecase{
+			uc: &mockFolderUsecase{
 				folder: &domain.Folder{
 					ID:          folderID,
 					Name:        "travel",
@@ -101,16 +103,22 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name:          "returns 400 on invalid name",
+			name:          "returns 400 for invalid name",
 			body:          `{"name":""}`,
-			mockUC:        &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
+			uc:            &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
 			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "returns 500 on generic error",
+			body:          `{"name":"travel"}`,
+			uc:            &mockFolderUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewFolderHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/folders", tt.body)
 
 			err := h.CreateFolder(c)
@@ -121,79 +129,70 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, folderID.String(), resp["id"])
+			assert.Equal(t, "travel", resp["name"])
 			_, hasDescription := resp["description"]
 			assert.True(t, hasDescription)
 		})
 	}
 }
 
-func TestFolderHandler_ListFolders(t *testing.T) {
-	tests := []struct {
-		name          string
-		mockUC        *mockFolderUsecase
-		wantStatus    int
-		wantLen       int
-		wantErrStatus int
-	}{
-		{
-			name: "returns folder list",
-			mockUC: &mockFolderUsecase{
-				folders: []*domain.Folder{
-					{ID: uuid.New(), Name: "travel", Description: func() *string { v := "trip"; return &v }()},
-					{ID: uuid.New(), Name: "design"},
-				},
-			},
-			wantStatus: http.StatusOK,
-			wantLen:    2,
-		},
-		{
-			name:          "returns 500 on usecase error",
-			mockUC:        &mockFolderUsecase{err: errors.New("db error")},
-			wantErrStatus: http.StatusInternalServerError,
-		},
-	}
+func TestFolderHandler_CreateFolder_MalformedJSON(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/folders", `{not valid json}`)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
-			c, rec := newEchoContext(t, http.MethodGet, "/folders", "")
+	err := h.CreateFolder(c)
 
-			err := h.ListFolders(c)
-
-			if tt.wantErrStatus != 0 {
-				assertHTTPError(t, err, tt.wantErrStatus)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-
-			var resp []map[string]any
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Len(t, resp, tt.wantLen)
-			if tt.wantLen > 0 {
-				_, hasDescription := resp[0]["description"]
-				assert.True(t, hasDescription)
-			}
-		})
-	}
+	assertHTTPError(t, err, http.StatusBadRequest)
 }
+
+// --- ListFolders ---
+
+func TestFolderHandler_ListFolders_ReturnsList(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{
+		folders: []*domain.Folder{
+			{ID: uuid.New(), Name: "travel", Description: func() *string { v := "trip"; return &v }()},
+			{ID: uuid.New(), Name: "design"},
+		},
+	}, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/folders", "")
+
+	err := h.ListFolders(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Len(t, resp, 2)
+	_, hasDescription := resp[0]["description"]
+	assert.True(t, hasDescription)
+}
+
+func TestFolderHandler_ListFolders_GenericError(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/folders", "")
+
+	err := h.ListFolders(c)
+
+	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+// --- GetFolder ---
 
 func TestFolderHandler_GetFolder(t *testing.T) {
 	folderID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockFolderUsecase
+		uc            *mockFolderUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name: "returns folder by id",
-			mockUC: &mockFolderUsecase{
+			name: "returns 200 with folder detail",
+			uc: &mockFolderUsecase{
 				detail: &usecase.FolderDetail{
 					Folder:     &domain.Folder{ID: folderID, Name: "travel", Description: func() *string { v := "trip"; return &v }()},
 					ImageCount: 3,
@@ -203,14 +202,19 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 		},
 		{
 			name:          "returns 404 when folder not found",
-			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockFolderUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockFolderUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewFolderHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/folders/"+folderID.String(), "")
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -224,7 +228,6 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, folderID.String(), resp["id"])
@@ -235,39 +238,59 @@ func TestFolderHandler_GetFolder(t *testing.T) {
 	}
 }
 
+func TestFolderHandler_GetFolder_InvalidUUID(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/folders/not-a-uuid", "")
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.GetFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- UpdateFolder ---
+
 func TestFolderHandler_UpdateFolder(t *testing.T) {
 	folderID := uuid.New()
 
 	tests := []struct {
 		name          string
 		body          string
-		mockUC        *mockFolderUsecase
+		uc            *mockFolderUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "updates folder and returns 200",
+			name:       "returns 200 with updated folder",
 			body:       `{"name":"updated","description":"new desc"}`,
-			mockUC:     &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated", Description: func() *string { v := "new desc"; return &v }()}},
+			uc:         &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated", Description: func() *string { v := "new desc"; return &v }()}},
 			wantStatus: http.StatusOK,
 		},
 		{
-			name:          "returns 400 on invalid name",
+			name:          "returns 400 for invalid name",
 			body:          `{"name":""}`,
-			mockUC:        &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
+			uc:            &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
 			wantErrStatus: http.StatusBadRequest,
 		},
 		{
 			name:          "returns 404 when folder not found",
 			body:          `{"name":"updated"}`,
-			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockFolderUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			body:          `{"name":"updated"}`,
+			uc:            &mockFolderUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewFolderHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), tt.body)
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -281,40 +304,72 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStatus, rec.Code)
-			if tt.wantStatus == http.StatusOK {
-				var resp map[string]any
-				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				_, hasDescription := resp["description"]
-				assert.True(t, hasDescription)
-			}
+			var resp map[string]any
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, folderID.String(), resp["id"])
+			assert.Equal(t, "updated", resp["name"])
+			_, hasDescription := resp["description"]
+			assert.True(t, hasDescription)
 		})
 	}
 }
+
+func TestFolderHandler_UpdateFolder_InvalidUUID(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPut, "/folders/not-a-uuid", `{"name":"updated"}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.UpdateFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestFolderHandler_UpdateFolder_MalformedJSON(t *testing.T) {
+	folderID := uuid.New()
+	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), `{not valid json}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- DeleteFolder ---
 
 func TestFolderHandler_DeleteFolder(t *testing.T) {
 	folderID := uuid.New()
 
 	tests := []struct {
 		name          string
-		mockUC        *mockFolderUsecase
+		uc            *mockFolderUsecase
 		wantStatus    int
 		wantErrStatus int
 	}{
 		{
-			name:       "deletes folder and returns 204",
-			mockUC:     &mockFolderUsecase{},
+			name:       "returns 204 on success",
+			uc:         &mockFolderUsecase{},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:          "returns 404 when folder not found",
-			mockUC:        &mockFolderUsecase{err: gorm.ErrRecordNotFound},
+			uc:            &mockFolderUsecase{err: gorm.ErrRecordNotFound},
 			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockFolderUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewFolderHandler(tt.mockUC, observability.NewTelemetry(nil, nil, nil))
+			h := NewFolderHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/folders/"+folderID.String(), "")
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
@@ -330,4 +385,16 @@ func TestFolderHandler_DeleteFolder(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
 	}
+}
+
+func TestFolderHandler_DeleteFolder_InvalidUUID(t *testing.T) {
+	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodDelete, "/folders/not-a-uuid", "")
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.DeleteFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
 }

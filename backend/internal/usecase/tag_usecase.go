@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/observability"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 )
@@ -17,19 +17,12 @@ var (
 	ErrDuplicateTagName = errors.New("tag name already exists")
 )
 
-type TagUsecase interface {
-	Create(ctx context.Context, userID string, name string) (*domain.Tag, error)
-	List(ctx context.Context, userID string) ([]*domain.Tag, error)
-	Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error)
-	Delete(ctx context.Context, id uuid.UUID, userID string) error
-}
-
 type tagUsecase struct {
 	tagRepo TagRepository
 	tel     *observability.Telemetry
 }
 
-func NewTagUsecase(tagRepo TagRepository, tel *observability.Telemetry) TagUsecase {
+func NewTagUsecase(tagRepo TagRepository, tel *observability.Telemetry) *tagUsecase {
 	return &tagUsecase{tagRepo: tagRepo, tel: tel}
 }
 
@@ -109,4 +102,3 @@ func isUniqueConstraintViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "23505")
 }
 
-var _ TagUsecase = (*tagUsecase)(nil)

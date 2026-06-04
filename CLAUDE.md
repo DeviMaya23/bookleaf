@@ -17,10 +17,10 @@ propose it to me first. Do not proceed until confirmed.
 
 ### Unit Testing in proposals
 
-- Always plan for unit tests on the service and handler layers
+- Always plan for unit tests on the usecase and handler layers
 - Do not write unit tests for SQL repositories, only do integration tests
-- Each unit test should cover one success scenario and one failure scenario by default
-- If the spec requires more scenarios, follow the spec
+- Follow the unit testing rules in CONVENTIONS.md — they define what scenarios are worth writing and what test doubles to use
+- Do not default to one success + one failure per function; write only the scenarios that have a reason to exist per the conventions
 
 #### Assertion quality
 - If a function returns a result, assert the result — not just the error

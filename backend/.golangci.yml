@@ -15,6 +15,11 @@ linters:
         - (*database/sql.DB).Close
         - (*github.com/golang-migrate/migrate/v4.Migrate).Close
         - (*github.com/devi/bookleaf/internal/testutil.PostgresContainer).Terminate
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
 
 issues:
   max-issues-per-linter: 0

@@ -9,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/devi/bookleaf/internal/config"
+	"github.com/devi/bookleaf/internal/platform/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
-	authmiddleware "github.com/devi/bookleaf/internal/middleware"
-	"github.com/devi/bookleaf/internal/observability"
+	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
-	"github.com/devi/bookleaf/internal/thumbnail"
+	"github.com/devi/bookleaf/pkg/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/devi/bookleaf/internal/vision"
 	"github.com/labstack/echo/v4"
@@ -26,6 +26,65 @@ import (
 	"gorm.io/gorm"
 	otelgorm "gorm.io/plugin/opentelemetry/tracing"
 )
+
+type imageWorkerUsecase interface {
+	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
+	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
+}
+
+type server struct {
+	echo         *echo.Echo
+	imageWorker  imageWorkerUsecase
+	logger       *zap.Logger
+	shutdownTel  func(context.Context)
+}
+
+func newServer(ctx context.Context, cfg *config.Config, logger *zap.Logger) *server {
+	e := initEcho(cfg)
+	tel, shutdownTel := initTelemetry(ctx, cfg, e, logger)
+	db := initDB(cfg, logger)
+	imageWorker := initApp(cfg, db, tel, e, logger)
+	return &server{
+		echo:        e,
+		imageWorker: imageWorker,
+		logger:      logger,
+		shutdownTel: shutdownTel,
+	}
+}
+
+func (s *server) startWorkers(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := s.imageWorker.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
+				s.logger.Warn("stale upload cleanup failed", zap.Error(err))
+			}
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := s.imageWorker.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
+				s.logger.Warn("trash purge failed", zap.Error(err))
+			}
+		}
+	}()
+}
+
+func (s *server) start(port string) error {
+	return s.echo.Start(":" + port)
+}
+
+func (s *server) shutdown(ctx context.Context) {
+	s.shutdownTel(ctx)
+	if err := s.echo.Shutdown(ctx); err != nil {
+		s.logger.Error("echo shutdown", zap.Error(err))
+	}
+	_ = s.logger.Sync()
+}
 
 func main() {
 	ctx := context.Background()
@@ -39,10 +98,27 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("init logger: %w", err))
 	}
-	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		logger.Error("otel error", zap.Error(err))
-	}))
 
+	srv := newServer(ctx, cfg, logger)
+	srv.startWorkers(ctx)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-quit
+		srv.logger.Info("shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		srv.shutdown(shutdownCtx)
+	}()
+
+	if err := srv.start(cfg.Port); err != nil && err != http.ErrServerClosed {
+		logger.Fatal("server stopped", zap.Error(err))
+	}
+}
+
+func initEcho(cfg *config.Config) *echo.Echo {
 	e := echo.New()
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.CORSWithConfig(echomiddleware.CORSConfig{
@@ -52,49 +128,76 @@ func main() {
 			echo.HeaderContentType,
 		},
 	}))
+	return e
+}
 
-	var tel *observability.Telemetry
-	var tp interface{ Shutdown(context.Context) error }
-	var mp interface{ Shutdown(context.Context) error }
-	if cfg.Obs.OTELEnabled {
-		var tracerProviderErr error
-		tp, tracerProviderErr = observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter, cfg.Obs.SampleRatio)
-		if tracerProviderErr != nil {
-			logger.Fatal("init tracer provider", zap.Error(tracerProviderErr))
-		}
+func initTelemetry(ctx context.Context, cfg *config.Config, e *echo.Echo, logger *zap.Logger) (*observability.Telemetry, func(context.Context)) {
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logger.Error("otel error", zap.Error(err))
+	}))
 
-		var meterProviderErr error
-		var metricsHandler http.Handler
-		mp, metricsHandler, meterProviderErr = observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
-		if meterProviderErr != nil {
-			logger.Fatal("init meter provider", zap.Error(meterProviderErr))
-		}
-
-		tel = observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
-		e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
-		e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
-		if metricsHandler != nil {
-			e.GET("/metrics", echo.WrapHandler(metricsHandler))
-		}
-	} else {
-		tel = observability.NewTelemetry(logger, nil, nil)
+	if !cfg.Obs.OTELEnabled {
+		return observability.NewTelemetry(logger, nil, nil), func(context.Context) {}
 	}
 
+	tp, err := observability.NewTracerProvider(ctx, cfg.Obs.OTELExporter, cfg.Obs.SampleRatio)
+	if err != nil {
+		logger.Fatal("init tracer provider", zap.Error(err))
+	}
+
+	mp, metricsHandler, err := observability.NewMeterProvider(cfg.Obs.OTELMetricsExporter)
+	if err != nil {
+		logger.Fatal("init meter provider", zap.Error(err))
+	}
+
+	tel := observability.NewTelemetry(logger, otel.Tracer("bookleaf"), otel.Meter("bookleaf"))
+	e.Use(observability.TraceMiddleware(otel.Tracer("bookleaf")))
+	e.Use(observability.MetricsMiddleware(otel.Meter("bookleaf")))
+	if metricsHandler != nil {
+		e.GET("/metrics", echo.WrapHandler(metricsHandler))
+	}
+
+	shutdown := func(ctx context.Context) {
+		if err := tp.Shutdown(ctx); err != nil {
+			logger.Error("tracer shutdown", zap.Error(err))
+		}
+		if err := mp.Shutdown(ctx); err != nil {
+			logger.Error("meter shutdown", zap.Error(err))
+		}
+	}
+
+	return tel, shutdown
+}
+
+func initDB(cfg *config.Config, logger *zap.Logger) *gorm.DB {
 	db, err := gorm.Open(postgres.Open(cfg.DB.URL), &gorm.Config{
 		Logger: repository.NewZapGORMLogger(logger),
 	})
 	if err != nil {
 		logger.Fatal("open database connection", zap.Error(err))
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Fatal("get underlying sql.DB", zap.Error(err))
+	}
+	sqlDB.SetMaxOpenConns(5)
+	sqlDB.SetMaxIdleConns(3)
+	sqlDB.SetConnMaxLifetime(15 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(5 * time.Minute)
+
 	if cfg.Obs.OTELEnabled {
 		if err := db.Use(otelgorm.NewPlugin()); err != nil {
 			logger.Fatal("register otelgorm plugin", zap.Error(err))
 		}
 	}
 
+	return db
+}
+
+func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *echo.Echo, logger *zap.Logger) imageWorkerUsecase {
 	userRepository := repository.NewUserRepository(db)
 	userUsecase := usecase.NewUserUsecase(userRepository, tel)
-	meHandler := httphandler.NewMeHandler(userUsecase, tel)
 	folderRepository := repository.NewFolderRepository(db)
 	storageService := storage.NewR2Storage(cfg.R2, tel)
 	thumbnailService := thumbnail.NewThumbnailService()
@@ -102,22 +205,26 @@ func main() {
 	pendingUploadRepository := repository.NewPendingUploadRepository(db)
 	tagRepository := repository.NewTagRepository(db)
 	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
-	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagUsecase := usecase.NewTagUsecase(tagRepository, tel)
-	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
-	var visionService vision.VisionService
+
+	var visionService usecase.VisionService
 	if cfg.Vision.APIKey != "" {
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
+
 	imageUsecase := usecase.NewImageUsecase(imageRepository, pendingUploadRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
-	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
 	if err != nil {
 		logger.Fatal("initialise auth middleware", zap.Error(err))
 	}
 
+	meHandler := httphandler.NewMeHandler(userUsecase, tel)
+	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
+	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
+	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
+
 	e.GET("/health", healthHandler.GetHealth)
 
 	protected := e.Group("")
@@ -146,53 +253,5 @@ func main() {
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
 
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := imageUsecase.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
-				logger.Warn("stale upload cleanup failed", zap.Error(err))
-			}
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := imageUsecase.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
-				logger.Warn("trash purge failed", zap.Error(err))
-			}
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
-
-	go func() {
-		<-quit
-		logger.Info("shutting down")
-
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		if tp != nil {
-			if err := tp.Shutdown(shutdownCtx); err != nil {
-				logger.Error("tracer shutdown", zap.Error(err))
-			}
-		}
-		if mp != nil {
-			if err := mp.Shutdown(shutdownCtx); err != nil {
-				logger.Error("meter shutdown", zap.Error(err))
-			}
-		}
-		if err := e.Shutdown(shutdownCtx); err != nil {
-			logger.Error("echo shutdown", zap.Error(err))
-		}
-		_ = logger.Sync()
-	}()
-
-	if err := e.Start(":" + cfg.Port); err != nil && err != http.ErrServerClosed {
-		logger.Fatal("server stopped", zap.Error(err))
-	}
+	return imageUsecase
 }
