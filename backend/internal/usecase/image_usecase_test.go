@@ -39,6 +39,8 @@ type mockImageRepository struct {
 	lastMoveImageID      uuid.UUID
 	lastMoveFromFolderID *uuid.UUID
 	lastMoveToFolderID   *uuid.UUID
+	updateAILabelsCalls  int
+	lastAILabels         json.RawMessage
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
@@ -57,7 +59,9 @@ func (m *mockImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ s
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, _ json.RawMessage) error {
+func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, labels json.RawMessage) error {
+	m.updateAILabelsCalls++
+	m.lastAILabels = labels
 	return m.err
 }
 func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
@@ -306,6 +310,52 @@ func TestImageUsecase_GetImage_NoThumbnail(t *testing.T) {
 	assert.Equal(t, "https://r2.example.com/view", detail.ImageURL)
 	assert.Nil(t, detail.ThumbnailURL)
 }
+
+func TestImageUsecase_GetImage_SuggestedFolderName(t *testing.T) {
+	imageID := uuid.New()
+
+	tests := []struct {
+		name     string
+		aiLabels json.RawMessage
+		wantName *string
+	}{
+		{
+			name:     "null ai_labels returns nil",
+			aiLabels: nil,
+			wantName: nil,
+		},
+		{
+			name:     "empty ai_labels returns nil",
+			aiLabels: json.RawMessage(`[]`),
+			wantName: nil,
+		},
+		{
+			name:     "populated ai_labels returns top label description",
+			aiLabels: json.RawMessage(`[{"Description":"Nature","Score":0.98},{"Description":"Outdoor","Score":0.75}]`),
+			wantName: strPtr("Nature"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockImageRepository{image: &domain.Image{ID: imageID, AILabels: tt.aiLabels}}
+			store := &mockStorageService{getURL: "https://r2.example.com/view"}
+			uc := newImageUsecase(repo, nil, store)
+
+			detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
+
+			require.NoError(t, err)
+			if tt.wantName == nil {
+				assert.Nil(t, detail.SuggestedFolderName)
+			} else {
+				require.NotNil(t, detail.SuggestedFolderName)
+				assert.Equal(t, *tt.wantName, *detail.SuggestedFolderName)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string { return &s }
 
 func TestImageUsecase_GetImage_PresignFails(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: uuid.New()}}

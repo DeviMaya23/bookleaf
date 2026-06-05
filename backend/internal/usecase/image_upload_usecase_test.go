@@ -3,6 +3,7 @@ package usecase
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -380,6 +381,26 @@ func TestImageUploadUsecase_ProcessVisionLabelling_SavesLabels(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, visionSvc.calls)
+	assert.Equal(t, 1, imageRepo.updateAILabelsCalls)
+	var saved []domain.Label
+	require.NoError(t, json.Unmarshal(imageRepo.lastAILabels, &saved))
+	require.Len(t, saved, 1)
+	assert.Equal(t, "Nature", saved[0].Description)
+}
+
+func TestImageUploadUsecase_ProcessVisionLabelling_ZeroLabelsWritesEmpty(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	store := &mockStorageService{objectBytes: []byte("img-bytes")}
+	visionSvc := &mockVisionService{labels: []domain.Label{}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
+	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, nil, userRepo, store, &mockThumbnailService{}, visionSvc)
+
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, imageRepo.updateAILabelsCalls)
+	assert.Equal(t, "[]", string(imageRepo.lastAILabels))
 }
 
 func TestImageUploadUsecase_ProcessVisionLabelling_VisionDisabledReturnsNil(t *testing.T) {

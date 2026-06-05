@@ -71,20 +71,21 @@ type updateImagePositionRequest struct {
 }
 
 type imageDetailResponse struct {
-	ID           uuid.UUID     `json:"id"`
-	Title        string        `json:"title"`
-	Description  *string       `json:"description"`
-	MIMEType     string        `json:"mime_type"`
-	SourceURL    *string       `json:"source_url"`
-	FolderIDs    []uuid.UUID   `json:"folder_ids"`
-	ThumbnailURL *string       `json:"thumbnail_url"`
-	Width        *int          `json:"width"`
-	Height       *int          `json:"height"`
-	FileSize     *int64        `json:"file_size"`
-	Tags         []tagResponse `json:"tags"`
-	ImageURL     string        `json:"image_url"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
+	ID                  uuid.UUID     `json:"id"`
+	Title               string        `json:"title"`
+	Description         *string       `json:"description"`
+	MIMEType            string        `json:"mime_type"`
+	SourceURL           *string       `json:"source_url"`
+	FolderIDs           []uuid.UUID   `json:"folder_ids"`
+	ThumbnailURL        *string       `json:"thumbnail_url"`
+	Width               *int          `json:"width"`
+	Height              *int          `json:"height"`
+	FileSize            *int64        `json:"file_size"`
+	Tags                []tagResponse `json:"tags"`
+	ImageURL            string        `json:"image_url"`
+	SuggestedFolderName *string       `json:"suggested_folder_name"`
+	CreatedAt           time.Time     `json:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at"`
 }
 
 type downloadImageResponse struct {
@@ -195,20 +196,21 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 
 	item := toImageResponse(usecase.ImageItem{Image: result.Image, ThumbnailURL: result.ThumbnailURL})
 	return c.JSON(http.StatusOK, imageDetailResponse{
-		ID:           item.ID,
-		Title:        item.Title,
-		Description:  item.Description,
-		MIMEType:     item.MIMEType,
-		SourceURL:    item.SourceURL,
-		FolderIDs:    item.FolderIDs,
-		ThumbnailURL: item.ThumbnailURL,
-		Width:        item.Width,
-		Height:       item.Height,
-		FileSize:     item.FileSize,
-		Tags:         item.Tags,
-		ImageURL:     result.ImageURL,
-		CreatedAt:    item.CreatedAt,
-		UpdatedAt:    item.UpdatedAt,
+		ID:                  item.ID,
+		Title:               item.Title,
+		Description:         item.Description,
+		MIMEType:            item.MIMEType,
+		SourceURL:           item.SourceURL,
+		FolderIDs:           item.FolderIDs,
+		ThumbnailURL:        item.ThumbnailURL,
+		Width:               item.Width,
+		Height:               item.Height,
+		FileSize:            item.FileSize,
+		Tags:                item.Tags,
+		ImageURL:            result.ImageURL,
+		SuggestedFolderName: result.SuggestedFolderName,
+		CreatedAt:           item.CreatedAt,
+		UpdatedAt:           item.UpdatedAt,
 	})
 }
 

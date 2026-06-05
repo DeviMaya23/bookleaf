@@ -451,10 +451,6 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 		return fmt.Errorf("annotate image: %w", err)
 	}
 
-	if len(labels) == 0 {
-		return nil
-	}
-
 	labelsJSON, err := json.Marshal(labels)
 	if err != nil {
 		return fmt.Errorf("marshal labels: %w", err)
