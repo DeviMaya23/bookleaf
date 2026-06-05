@@ -114,6 +114,7 @@ export async function putToR2(uploadUrl: string, file: File): Promise<void> {
 
 export interface CompleteUploadResult {
   image_id: string
+  suggested_folder_name: string | null
 }
 
 export async function completeUpload(

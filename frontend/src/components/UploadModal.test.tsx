@@ -43,7 +43,7 @@ describe('UploadModal', () => {
     const user = userEvent.setup()
     vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
     vi.mocked(putToR2).mockResolvedValueOnce(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1' })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
     const onUploadSuccess = vi.fn()
 
     const { onOpenChange } = renderModal(null, onUploadSuccess)
@@ -63,7 +63,7 @@ describe('UploadModal', () => {
     const user = userEvent.setup()
     vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
     vi.mocked(putToR2).mockResolvedValueOnce(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1' })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
 
     renderModal('folder-1')
 
