@@ -11,11 +11,13 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
+import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
+import { isSafari } from '@/lib/browser'
 
 const MAX_CONCURRENT = 3
 const MAX_FILES = 20
 const MAX_SIZE_BYTES = 50 * 1024 * 1024
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
 
 type FileStatus = 'PENDING' | 'UPLOADING' | 'SUCCESS' | 'FAILED_FINAL' | 'OVERSIZED' | 'UNSUPPORTED'
 
@@ -42,7 +44,8 @@ function makeId(file: File): string {
 }
 
 function makeBatchFile(file: File): BatchFile {
-  const status: FileStatus = !ACCEPTED_TYPES.includes(file.type)
+  const unsupported = !ACCEPTED_TYPES.includes(file.type) || (file.type === 'image/heic' && !isSafari())
+  const status: FileStatus = unsupported
     ? 'UNSUPPORTED'
     : file.size > MAX_SIZE_BYTES
       ? 'OVERSIZED'
@@ -131,12 +134,24 @@ export default function BatchUploadModal({
     inFlightRef.current++
     updateFile(batchFile.id, { status: 'UPLOADING' })
     try {
+      let uploadBlob: Blob | File = batchFile.file
+      let mimeType = batchFile.file.type
+      if (batchFile.file.type === 'image/heic') {
+        uploadBlob = await convertHeicToJpeg(batchFile.file)
+        mimeType = 'image/jpeg'
+      }
+
       const initiated = await initiateUpload(getToken, {
         title: fileBaseName(batchFile.file.name),
-        mimeType: batchFile.file.type,
+        mimeType,
         folderId: folderId ?? undefined,
       })
-      await putToR2(initiated.upload_url, batchFile.file)
+
+      const thumbnail = await generateThumbnail(uploadBlob)
+      await Promise.all([
+        putToR2(initiated.upload_url, uploadBlob),
+        putToR2(initiated.thumbnail_upload_url, thumbnail),
+      ])
       await completeUpload(getToken, initiated.id)
       if (!closedRef.current) {
         updateFile(batchFile.id, { status: 'SUCCESS' })
@@ -259,7 +274,7 @@ export default function BatchUploadModal({
             >
               <UploadCloud className="w-7 h-7 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Drop images here or click to browse</p>
-              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP · max 50 MB · up to 20 files</p>
+              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari) · max 50 MB · up to 20 files</p>
             </div>
           )}
 

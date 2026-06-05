@@ -14,6 +14,15 @@ vi.mock('@/lib/images', () => ({
   completeUpload: vi.fn(),
 }))
 
+vi.mock('@/lib/thumbnail', () => ({
+  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
+}))
+
+vi.mock('@/lib/browser', () => ({
+  isSafari: vi.fn().mockReturnValue(false),
+}))
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
@@ -41,8 +50,13 @@ describe('UploadModal', () => {
 
   it('closes modal and shows success toast on successful upload', async () => {
     const user = userEvent.setup()
-    vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
-    vi.mocked(putToR2).mockResolvedValueOnce(undefined)
+    vi.mocked(initiateUpload).mockResolvedValueOnce({
+      id: 'upload-1',
+      upload_url: 'https://r2.example.com/upload',
+      thumbnail_upload_url: 'https://r2.example.com/thumb',
+      r2_path: 'path',
+    })
+    vi.mocked(putToR2).mockResolvedValue(undefined)
     vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
     const onUploadSuccess = vi.fn()
 
@@ -55,14 +69,22 @@ describe('UploadModal', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith('Image uploaded successfully')
     })
+    expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', expect.any(File))
+    expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
+    expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'upload-1')
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onUploadSuccess).toHaveBeenCalledWith('img-1')
   })
 
   it('uploads with description and source_url when Add details is filled', async () => {
     const user = userEvent.setup()
-    vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
-    vi.mocked(putToR2).mockResolvedValueOnce(undefined)
+    vi.mocked(initiateUpload).mockResolvedValueOnce({
+      id: 'upload-1',
+      upload_url: 'https://r2.example.com/upload',
+      thumbnail_upload_url: 'https://r2.example.com/thumb',
+      r2_path: 'path',
+    })
+    vi.mocked(putToR2).mockResolvedValue(undefined)
     vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
 
     renderModal('folder-1')

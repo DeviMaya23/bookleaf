@@ -21,5 +21,6 @@ script:post-response {
   if (res.status === 201) {
     bru.setVar("imageId", res.body.id);
     bru.setVar("uploadUrl", res.body.upload_url);
+    bru.setVar("thumbnailUploadUrl", res.body.thumbnail_upload_url);
   }
 }

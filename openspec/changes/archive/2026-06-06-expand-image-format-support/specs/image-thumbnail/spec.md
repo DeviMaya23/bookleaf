@@ -1,43 +1,4 @@
-## ADDED Requirements
-
-### Requirement: ThumbnailService Interface
-
-The system SHALL define a `ThumbnailService` interface in `internal/thumbnail/` with a single `Generate` method. The image usecase SHALL depend on this interface.
-
-Method:
-- `Generate(ctx context.Context, src io.Reader) (io.Reader, error)` — reads the source image, returns a resized JPEG reader
-
-#### Scenario: Interface is satisfied by imaging implementation
-
-- **WHEN** the Go package is compiled
-- **THEN** the concrete thumbnail implementation satisfies `ThumbnailService` without compilation errors
-
----
-
-### Requirement: Thumbnail Generation
-
-The system SHALL implement `ThumbnailService` using the `disintegration/imaging` library. The generated thumbnail SHALL:
-
-- Fit within a 600×600 pixel bounding box while preserving the original aspect ratio (no distortion)
-- Be encoded as JPEG regardless of the source image format
-- Use `imaging.Lanczos` as the resampling filter
-
-#### Scenario: Landscape image is resized to fit 600×600
-
-- **WHEN** a 1200×600 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 600×300
-
-#### Scenario: Portrait image is resized to fit 600×600
-
-- **WHEN** a 600×1200 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 300×600
-
-#### Scenario: Image already within bounds is not upscaled
-
-- **WHEN** a 200×100 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 200×100
-
----
+## MODIFIED Requirements
 
 ### Requirement: Async Thumbnail Storage
 
@@ -101,25 +62,10 @@ River job steps (unchanged, non-blocking, executed by `ThumbnailUploadWorker`):
 
 ---
 
-### Requirement: ProcessThumbnailUpload Usecase Method
+## REMOVED Requirements
 
-The system SHALL add `ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error` to `imageUploadUsecase`. This is the method called by `ThumbnailUploadWorker` on each attempt.
+### Requirement: Synchronous thumbnail preflight in CompleteUpload
 
-The method SHALL:
-1. Call `StorageService.GetObject(ctx, r2Path)` to fetch the original image
-2. Call `ThumbnailService.Generate(ctx, src)` to produce the thumbnail
-3. Call `StorageService.PutObject(ctx, thumbnailKey, bytes, "image/jpeg")` to upload it
-4. Call `ImageRepository.UpdateThumbnailPath(ctx, imageID, thumbnailKey)` to persist the path
+**Reason:** Thumbnail generation has moved to the client. The server no longer needs to decode the original image during `CompleteUpload`. Removing the preflight eliminates the dependency on Go image decoders and unblocks support for WebP, AVIF, and HEIC.
 
-Any failure at any step SHALL return a non-nil error so River can retry.
-
-#### Scenario: All steps succeed
-
-- **WHEN** `ProcessThumbnailUpload` is called and all steps complete without error
-- **THEN** the image record has `thumbnail_path` set to `thumbnailKey`
-- **AND** nil is returned
-
-#### Scenario: Any step failure returns error
-
-- **WHEN** any step in `ProcessThumbnailUpload` returns an error
-- **THEN** `ProcessThumbnailUpload` returns a non-nil error
+**Migration:** `CompleteUpload` no longer calls `ThumbnailService.Generate` or `StorageService.GetObject` synchronously. The preflight check is replaced by `StorageService.HeadObject` on the expected thumbnail path. See the updated Async Thumbnail Storage requirement above.

@@ -171,8 +171,10 @@ export default function AppLayout() {
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)
     } catch (err) {
-      if ((err as Error).message === 'unsupported_type') {
-        toast.error('Unsupported file type. Use JPEG, PNG, GIF, or WEBP.')
+      if ((err as Error).message === 'heic_safari_only') {
+        toast.error('HEIC uploads are only supported in Safari.')
+      } else if ((err as Error).message === 'unsupported_type') {
+        toast.error('Unsupported file type. Use JPEG, PNG, GIF, WEBP, or AVIF.')
       } else {
         toast.error('Upload failed. Please try again.')
       }

@@ -120,10 +120,13 @@ type mockStorageService struct {
 	getObjectErr    error
 	putObjectErr    error
 	deleteObjectErr error
+	headObjectFound bool
+	headObjectErr   error
 	objectBytes     []byte
 	getCalls        int
 	putCalls        int
 	deleteCalls     int
+	headCalls       int
 	deletedKeys     []string
 
 	lastDownloadKey      string
@@ -142,6 +145,10 @@ func (m *mockStorageService) GeneratePresignedDownloadURL(_ context.Context, key
 	m.lastDownloadFilename = filename
 	m.lastDownloadTTL = ttl
 	return m.downloadURL, m.err
+}
+func (m *mockStorageService) HeadObject(_ context.Context, _ string) (bool, error) {
+	m.headCalls++
+	return m.headObjectFound, m.headObjectErr
 }
 func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadCloser, error) {
 	m.getCalls++
