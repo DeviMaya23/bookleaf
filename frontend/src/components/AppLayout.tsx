@@ -29,8 +29,7 @@ import BatchUploadModal from './BatchUploadModal'
 import RightPanel from './RightPanel'
 import { useQuery } from '@tanstack/react-query'
 import { getFolders } from '@/lib/folders'
-import { getMe } from '@/lib/me'
-import { usePostUploadFeedback } from '@/hooks/usePostUploadFeedback'
+import { useVisionSuggestion } from '@/hooks/useVisionSuggestion'
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/dragHandlers'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
@@ -74,7 +73,6 @@ export default function AppLayout() {
   const sortEndTriggerRef = useRef<number>(0)
   const [sortEndTrigger, setSortEndTrigger] = useState<SortEndTrigger | null>(null)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
-  const [pendingFeedbackImageId, setPendingFeedbackImageId] = useState<string | null>(null)
 
   const folderId = view.type === 'folder' ? view.id : null
 
@@ -84,13 +82,7 @@ export default function AppLayout() {
     staleTime: 60_000,
   })
 
-  const { data: me } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => getMe(getToken),
-    staleTime: Infinity,
-  })
-
-  usePostUploadFeedback(pendingFeedbackImageId, me?.vision_enabled ?? false)
+  const { checkVision } = useVisionSuggestion()
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -174,7 +166,7 @@ export default function AppLayout() {
     try {
       const imageDetail = await handleFileAutoUpload(getToken, file, folderId)
       queryClient.invalidateQueries({ queryKey: ['images'] })
-      setPendingFeedbackImageId(imageDetail.id)
+      checkVision(imageDetail.id)
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)
     } catch (err) {
@@ -186,7 +178,7 @@ export default function AppLayout() {
     } finally {
       setIsAutoUploading(false)
     }
-  }, [getToken, folderId, queryClient])
+  }, [getToken, folderId, queryClient, checkVision])
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -246,7 +238,7 @@ export default function AppLayout() {
           open={uploadOpen}
           onOpenChange={setUploadOpen}
           folderId={folderId}
-          onUploadSuccess={(id) => setPendingFeedbackImageId(id)}
+          onUploadSuccess={checkVision}
         />
         <BatchUploadModal
           open={batchUploadOpen}
