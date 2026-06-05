@@ -47,9 +47,11 @@ type VisionService interface {
 }
 
 type UploadInitResult struct {
-	ID        uuid.UUID
-	UploadURL string
-	R2Path    string
+	ID                 uuid.UUID
+	UploadURL          string
+	R2Path             string
+	ThumbnailUploadURL string
+	ThumbnailKey       string
 }
 
 type CompleteUploadResult struct {
@@ -170,7 +172,21 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 		return nil, fmt.Errorf("generate upload url: %w", err)
 	}
 
-	return &UploadInitResult{ID: pending.ID, UploadURL: uploadURL, R2Path: r2Path}, nil
+	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", userID, id.String())
+	thumbnailUploadURL, err := u.store.GeneratePresignedPutURL(ctx, thumbnailKey, "image/jpeg", uploadURLTTL)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("generate thumbnail upload url: %w", err)
+	}
+
+	return &UploadInitResult{
+		ID:                 pending.ID,
+		UploadURL:          uploadURL,
+		R2Path:             r2Path,
+		ThumbnailUploadURL: thumbnailUploadURL,
+		ThumbnailKey:       thumbnailKey,
+	}, nil
 }
 
 func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error) {
@@ -196,17 +212,19 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	width, height, fileSize, rawBytes, err := u.extractImageMetadata(ctx, pending.R2Path)
+	width, height, fileSize, err := u.extractImageMetadata(ctx, pending.R2Path)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("extract image metadata: %w", err)
 	}
 
-	if _, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes)); err != nil {
+	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
+	thumbnailExists, err := u.store.HeadObject(ctx, thumbnailKey)
+	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("thumbnail preflight: %w", err)
+		return nil, fmt.Errorf("check thumbnail existence: %w", err)
 	}
 
 	img := &domain.Image{
@@ -218,6 +236,9 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		R2Path:      pending.R2Path,
 		MIMEType:    pending.MIMEType,
 		FileSize:    &fileSize,
+	}
+	if thumbnailExists {
+		img.ThumbnailPath = &thumbnailKey
 	}
 	if width > 0 {
 		widthValue := width
@@ -245,17 +266,17 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		return nil, err
 	}
 
-	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
-
-	if err := u.enqueuer.Insert(ctx, ThumbnailUploadArgs{
-		ImageID:      pending.ID,
-		UserID:       pending.UserID,
-		R2Path:       pending.R2Path,
-		ThumbnailKey: thumbnailKey,
-	}); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("enqueue thumbnail upload: %w", err)
+	if !thumbnailExists {
+		if err := u.enqueuer.Insert(ctx, ThumbnailUploadArgs{
+			ImageID:      pending.ID,
+			UserID:       pending.UserID,
+			R2Path:       pending.R2Path,
+			ThumbnailKey: thumbnailKey,
+		}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("enqueue thumbnail upload: %w", err)
+		}
 	}
 
 	if err := u.enqueuer.Insert(ctx, VisionArgs{
@@ -352,16 +373,16 @@ func (u *imageUploadUsecase) CleanupStaleUploads(ctx context.Context, threshold 
 	return nil
 }
 
-func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path string) (width, height int, fileSize int64, rawBytes []byte, err error) {
+func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path string) (width, height int, fileSize int64, err error) {
 	src, err := u.store.GetObject(ctx, r2Path)
 	if err != nil {
-		return 0, 0, 0, nil, err
+		return 0, 0, 0, err
 	}
 	defer src.Close()
 
-	rawBytes, err = io.ReadAll(src)
+	rawBytes, err := io.ReadAll(src)
 	if err != nil {
-		return 0, 0, 0, nil, err
+		return 0, 0, 0, err
 	}
 
 	if cfg, _, decodeErr := stdimage.DecodeConfig(bytes.NewReader(rawBytes)); decodeErr == nil {
@@ -369,7 +390,7 @@ func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path st
 		height = cfg.Height
 	}
 
-	return width, height, int64(len(rawBytes)), rawBytes, nil
+	return width, height, int64(len(rawBytes)), nil
 }
 
 func (u *imageUploadUsecase) ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error {

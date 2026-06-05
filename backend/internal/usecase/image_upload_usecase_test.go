@@ -213,6 +213,9 @@ func TestImageUploadUsecase_InitiateUpload_R2PathFormat(t *testing.T) {
 	assert.True(t, strings.HasPrefix(result.R2Path, "users/kp_abc123/images/"))
 	assert.True(t, strings.HasSuffix(result.R2Path, ".jpg"))
 	assert.Equal(t, result.ID, pendingRepo.createdPending.ID)
+	assert.NotEmpty(t, result.ThumbnailUploadURL)
+	assert.True(t, strings.HasPrefix(result.ThumbnailKey, "users/kp_abc123/thumbnails/"))
+	assert.True(t, strings.HasSuffix(result.ThumbnailKey, ".jpg"))
 }
 
 func TestImageUploadUsecase_InitiateUpload_FolderFound(t *testing.T) {
@@ -310,23 +313,41 @@ func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *t
 	assert.Equal(t, folderID, *imageRepo.setFolderFolderID)
 }
 
-func TestImageUploadUsecase_CompleteUpload_ThumbnailPreflightFails(t *testing.T) {
+func TestImageUploadUsecase_CompleteUpload_ThumbnailPresent_SetsThumbnailPathAndSkipsWorker(t *testing.T) {
 	imageID := uuid.New()
 	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4)}
-	thumbSvc := &mockThumbnailService{err: errors.New("codec unavailable")}
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4), headObjectFound: true}
 	enqueuer := &spyJobEnqueuer{}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, thumbSvc, nil, enqueuer, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, enqueuer, noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "thumbnail preflight")
-	assert.Equal(t, 0, enqueuer.insertCalls)
+	require.NoError(t, err)
+	require.NotNil(t, imageRepo.createdImage.ThumbnailPath)
+	assert.True(t, strings.HasPrefix(*imageRepo.createdImage.ThumbnailPath, "users/kp_abc123/thumbnails/"))
+	assert.Equal(t, 1, enqueuer.insertCalls, "only vision job should be enqueued")
+}
+
+func TestImageUploadUsecase_CompleteUpload_ThumbnailAbsent_LeavesThumbnailPathNilAndEnqueuesWorker(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4), headObjectFound: false}
+	enqueuer := &spyJobEnqueuer{}
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, enqueuer, noopTel())
+
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Nil(t, imageRepo.createdImage.ThumbnailPath)
+	assert.Equal(t, 2, enqueuer.insertCalls, "thumbnail and vision jobs should both be enqueued")
 }
 
 // --- ProcessThumbnailUpload ---

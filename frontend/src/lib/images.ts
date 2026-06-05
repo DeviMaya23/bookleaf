@@ -80,6 +80,7 @@ export interface InitiateUploadParams {
 export interface InitiateUploadResult {
   id: string
   upload_url: string
+  thumbnail_upload_url: string
   r2_path: string
 }
 
@@ -103,7 +104,7 @@ export async function initiateUpload(
   return res.json()
 }
 
-export async function putToR2(uploadUrl: string, file: File): Promise<void> {
+export async function putToR2(uploadUrl: string, file: Blob | File): Promise<void> {
   const res = await fetch(uploadUrl, {
     method: 'PUT',
     headers: { 'Content-Type': file.type },

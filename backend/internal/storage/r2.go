@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/devi/bookleaf/internal/platform/config"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"go.opentelemetry.io/otel/attribute"
@@ -174,6 +176,26 @@ func (r *r2Storage) GeneratePresignedDownloadURL(ctx context.Context, key, filen
 		zap.String("filename", filename),
 	)
 	return resp.URL, nil
+}
+
+func (r *r2Storage) HeadObject(ctx context.Context, key string) (bool, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.HeadObject")
+	defer span.End()
+
+	_, err := r.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var nf *s3types.NotFound
+		if errors.As(err, &nf) {
+			return false, nil
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return false, fmt.Errorf("head object %s: %w", key, err)
+	}
+	return true, nil
 }
 
 func (r *r2Storage) GetObject(ctx context.Context, key string) (io.ReadCloser, error) {

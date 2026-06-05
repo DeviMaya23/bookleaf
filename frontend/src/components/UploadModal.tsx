@@ -16,8 +16,10 @@ import {
   putToR2,
   completeUpload,
 } from '@/lib/images'
+import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
+import { isSafari } from '@/lib/browser'
 
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
 
 function fileBaseName(name: string): string {
   return name.replace(/\.[^.]+$/, '')
@@ -58,7 +60,13 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
 
   function handleFile(selected: File) {
     if (!isValidType(selected)) {
-      setTypeError('Only JPEG, PNG, GIF, and WEBP files are supported.')
+      setTypeError('Unsupported file type.')
+      setFile(null)
+      revokePreview()
+      return
+    }
+    if (selected.type === 'image/heic' && !isSafari()) {
+      setTypeError('HEIC uploads are only supported in Safari.')
       setFile(null)
       revokePreview()
       return
@@ -105,17 +113,30 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error('No file selected')
+
+      let uploadBlob: Blob | File = file
+      let mimeType = file.type
+      if (file.type === 'image/heic') {
+        uploadBlob = await convertHeicToJpeg(file)
+        mimeType = 'image/jpeg'
+      }
+
       const resolvedTitle = title.trim() !== '' ? title.trim() : fileBaseName(file.name)
       const initiated = await initiateUpload(getToken, {
         title: resolvedTitle,
-        mimeType: file.type,
+        mimeType,
         folderId: folderId ?? undefined,
         description: notes.trim() || undefined,
         sourceUrl: sourceUrl.trim() || undefined,
       })
-      await putToR2(initiated.upload_url, file)
-      const result = await completeUpload(getToken, initiated.id)
-      return result
+
+      const thumbnail = await generateThumbnail(uploadBlob)
+      await Promise.all([
+        putToR2(initiated.upload_url, uploadBlob),
+        putToR2(initiated.thumbnail_upload_url, thumbnail),
+      ])
+
+      return completeUpload(getToken, initiated.id)
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['images'] })
@@ -170,7 +191,7 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
             >
               <UploadCloud className="w-8 h-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Drop an image here or click to browse</p>
-              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP</p>
+              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari)</p>
               {typeError && (
                 <p className="text-xs text-destructive">{typeError}</p>
               )}

@@ -13,9 +13,20 @@ vi.mock('./folders', () => ({
   moveFolder: vi.fn(),
 }))
 
+vi.mock('./thumbnail', () => ({
+  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
+}))
+
+vi.mock('./browser', () => ({
+  isSafari: vi.fn(),
+}))
+
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
 import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
 import { moveFolder, getFolderSubtreeIds } from './folders'
+import { generateThumbnail, convertHeicToJpeg } from './thumbnail'
+import { isSafari } from './browser'
 import type { Folder } from './folders'
 
 const getToken = vi.fn().mockResolvedValue('token')
@@ -166,16 +177,26 @@ describe('handleFolderDrop', () => {
 })
 
 describe('handleFileAutoUpload', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(isSafari).mockReturnValue(false)
+  })
 
   function makeFile(name: string, type: string): File {
     return new File(['bytes'], name, { type })
   }
 
-  it('completes 3-step upload and returns full Image on success', async () => {
+  const defaultInitiateResult = {
+    id: 'upload-1',
+    upload_url: 'https://r2.example.com/upload',
+    thumbnail_upload_url: 'https://r2.example.com/thumb',
+    r2_path: 'path',
+  }
+
+  it('completes 4-step upload and returns full Image on success', async () => {
     const imageData = { id: 'img-new', title: 'sunset', folder_ids: ['folder-1'] }
-    vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
-    vi.mocked(putToR2).mockResolvedValueOnce(undefined)
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2).mockResolvedValue(undefined)
     vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null })
     vi.mocked(getImage).mockResolvedValueOnce(imageData as never)
 
@@ -184,9 +205,56 @@ describe('handleFileAutoUpload', () => {
 
     expect(initiateUpload).toHaveBeenCalledWith(getToken, { title: 'sunset', mimeType: 'image/jpeg', folderId: 'folder-1' })
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', file)
+    expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
     expect(completeUpload).toHaveBeenCalledWith(getToken, 'upload-1')
     expect(getImage).toHaveBeenCalledWith(getToken, 'img-new')
     expect(result).toBe(imageData)
+  })
+
+  it('accepts webp files', async () => {
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2).mockResolvedValue(undefined)
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(getImage).mockResolvedValueOnce({} as never)
+
+    const file = makeFile('image.webp', 'image/webp')
+    await handleFileAutoUpload(getToken, file, null)
+
+    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/webp' }))
+  })
+
+  it('accepts avif files', async () => {
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2).mockResolvedValue(undefined)
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(getImage).mockResolvedValueOnce({} as never)
+
+    const file = makeFile('image.avif', 'image/avif')
+    await handleFileAutoUpload(getToken, file, null)
+
+    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/avif' }))
+  })
+
+  it('rejects heic on non-Safari', async () => {
+    vi.mocked(isSafari).mockReturnValue(false)
+    const file = makeFile('photo.heic', 'image/heic')
+
+    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('heic_safari_only')
+    expect(initiateUpload).not.toHaveBeenCalled()
+  })
+
+  it('accepts heic on Safari and converts to jpeg', async () => {
+    vi.mocked(isSafari).mockReturnValue(true)
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2).mockResolvedValue(undefined)
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(getImage).mockResolvedValueOnce({} as never)
+
+    const file = makeFile('photo.heic', 'image/heic')
+    await handleFileAutoUpload(getToken, file, null)
+
+    expect(convertHeicToJpeg).toHaveBeenCalledWith(file)
+    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/jpeg' }))
   })
 
   it('throws unsupported_type error for invalid file type', async () => {
@@ -201,5 +269,28 @@ describe('handleFileAutoUpload', () => {
 
     const file = makeFile('photo.png', 'image/png')
     await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('server error')
+  })
+
+  it('generates thumbnail from upload blob', async () => {
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2).mockResolvedValue(undefined)
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(getImage).mockResolvedValueOnce({} as never)
+
+    const file = makeFile('photo.png', 'image/png')
+    await handleFileAutoUpload(getToken, file, null)
+
+    expect(generateThumbnail).toHaveBeenCalledWith(file)
+  })
+
+  it('aborts upload when thumbnail PUT fails — completeUpload is not called', async () => {
+    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
+    vi.mocked(putToR2)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('thumbnail upload failed'))
+
+    const file = makeFile('photo.png', 'image/png')
+    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('thumbnail upload failed')
+    expect(completeUpload).not.toHaveBeenCalled()
   })
 })

@@ -399,6 +399,8 @@ func downloadFileExtension(mimeType string) string {
 		return "webp"
 	case "image/gif":
 		return "gif"
+	case "image/avif":
+		return "avif"
 	default:
 		return "bin"
 	}

@@ -10,6 +10,8 @@ func MimeTypeToExt(mimeType string) string {
 		return ".webp"
 	case "image/gif":
 		return ".gif"
+	case "image/avif":
+		return ".avif"
 	default:
 		return ".jpg"
 	}

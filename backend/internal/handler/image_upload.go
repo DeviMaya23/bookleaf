@@ -24,9 +24,10 @@ type initiateImageUploadRequest struct {
 }
 
 type initiateImageUploadResponse struct {
-	ID        uuid.UUID `json:"id"`
-	UploadURL string    `json:"upload_url"`
-	R2Path    string    `json:"r2_path"`
+	ID                 uuid.UUID `json:"id"`
+	UploadURL          string    `json:"upload_url"`
+	ThumbnailUploadURL string    `json:"thumbnail_upload_url"`
+	R2Path             string    `json:"r2_path"`
 }
 
 type completeUploadResponse struct {
@@ -80,9 +81,10 @@ func (h *UploadHandler) InitiateUpload(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, initiateImageUploadResponse{
-		ID:        result.ID,
-		UploadURL: result.UploadURL,
-		R2Path:    result.R2Path,
+		ID:                 result.ID,
+		UploadURL:          result.UploadURL,
+		ThumbnailUploadURL: result.ThumbnailUploadURL,
+		R2Path:             result.R2Path,
 	})
 }
 

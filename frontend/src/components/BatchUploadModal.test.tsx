@@ -14,6 +14,15 @@ vi.mock('@/lib/images', () => ({
   completeUpload: vi.fn(),
 }))
 
+vi.mock('@/lib/thumbnail', () => ({
+  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
+}))
+
+vi.mock('@/lib/browser', () => ({
+  isSafari: vi.fn().mockReturnValue(false),
+}))
+
 import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
 
 function renderModal(props: Partial<{ folderId: string | null; initialFiles: File[] }> = {}) {
@@ -44,8 +53,8 @@ describe('BatchUploadModal', () => {
     it('uploads all files successfully and invalidates the image query per file', async () => {
       const user = userEvent.setup()
       vi.mocked(initiateUpload)
-        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', r2_path: 'p1' })
-        .mockResolvedValueOnce({ id: 'u2', upload_url: 'https://r2.example.com/2', r2_path: 'p2' })
+        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
+        .mockResolvedValueOnce({ id: 'u2', upload_url: 'https://r2.example.com/2', thumbnail_upload_url: 'https://r2.example.com/thumb-2', r2_path: 'p2' })
       vi.mocked(putToR2).mockResolvedValue(undefined)
       vi.mocked(completeUpload)
         .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
@@ -65,6 +74,8 @@ describe('BatchUploadModal', () => {
         expect.any(Function),
         expect.objectContaining({ title: 'a', mimeType: 'image/jpeg' }),
       )
+      // 2 files × 2 PUTs each (original + thumbnail)
+      expect(putToR2).toHaveBeenCalledTimes(4)
       // folder suggestion from complete is ignored — modal stays open, no suggestion UI
       expect(screen.queryByText(/add to this folder/i)).not.toBeInTheDocument()
     })
@@ -90,7 +101,7 @@ describe('BatchUploadModal', () => {
       vi.mocked(initiateUpload)
         .mockRejectedValueOnce(new Error('fail'))
         .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', r2_path: 'p1' })
+        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
       vi.mocked(putToR2).mockResolvedValue(undefined)
       vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
 
@@ -114,7 +125,7 @@ describe('BatchUploadModal', () => {
 
     it('sends folder_id when a folder is active and omits it on non-folder routes', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', r2_path: 'p1' })
+      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
       vi.mocked(putToR2).mockResolvedValue(undefined)
       vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
 
@@ -142,7 +153,7 @@ describe('BatchUploadModal', () => {
 
     it('marks oversized files as Too large and unsupported types as Unsupported type, uploading valid files', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', r2_path: 'p1' })
+      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
       vi.mocked(putToR2).mockResolvedValue(undefined)
       vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
 
