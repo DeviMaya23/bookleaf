@@ -16,6 +16,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -201,23 +202,30 @@ export default function AppLayout() {
           <ScrollArea className="h-full">
             <div className="p-6">
               <div className="flex justify-end mb-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger className={buttonVariants()}>
+                <div className="flex">
+                  <button
+                    className={cn(buttonVariants(), 'rounded-r-none')}
+                    onClick={() => setUploadOpen(true)}
+                  >
                     <Plus className="w-4 h-4 mr-1" />
                     Image
-                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                      <UploadCloud className="w-4 h-4" />
-                      Upload image
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
-                      <Images className="w-4 h-4" />
-                      Upload multiple images
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className={cn(buttonVariants(), 'rounded-l-none border-l border-l-white/20 px-2')}>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                        <UploadCloud className="w-4 h-4" />
+                        Upload image
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
+                        <Images className="w-4 h-4" />
+                        Upload multiple images
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
               <ImageGrid
                 view={view}
