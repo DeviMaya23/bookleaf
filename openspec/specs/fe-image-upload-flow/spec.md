@@ -123,14 +123,29 @@ On submit, the system SHALL execute the 3-step upload sequence: (1) `POST /image
 
 ---
 
-### Requirement: Upload success flow
-On successful upload (with no folder suggestion), the system SHALL close the modal, show a success toast, and refresh the image list.
+### Requirement: Upload success flow (modal)
+
+On successful upload via the upload modal, the system SHALL close the modal, show a success toast, and refresh the image list. The modal SHALL close immediately on success regardless of any async job state.
 
 #### Scenario: Success closes modal and shows toast
-- **WHEN** all 3 upload steps succeed and `complete` returns no `suggested_folder_name`
+
+- **WHEN** all 3 upload steps succeed via the upload modal
 - **THEN** the modal closes
 - **AND** a success toast is shown
 - **AND** the image list is refreshed
+
+---
+
+### Requirement: Upload success flow (drag-and-drop)
+
+The drag-and-drop file upload path (dropping a single file onto the main content area) uses the same 3-step upload sequence (`POST /images`, `PUT` to R2, `POST /images/:id/complete`). On success it SHALL refresh the image list and trigger the same post-upload feedback hook as the modal path. There is no modal to close.
+
+#### Scenario: Single-file drop succeeds
+
+- **WHEN** a single supported image file is dropped onto the main content area
+- **AND** all 3 upload steps succeed
+- **THEN** the image list is refreshed
+- **AND** the post-upload feedback hook is triggered with the new image ID
 
 ---
 
@@ -141,28 +156,6 @@ If any step in the upload sequence fails, the system SHALL show an error toast a
 - **WHEN** any step of the upload sequence returns an error
 - **THEN** an error toast is shown
 - **AND** the modal remains open
-
----
-
-### Requirement: Folder suggestion view
-If `POST /images/:id/complete` returns a non-null `suggested_folder_name`, the modal body SHALL replace the upload form with a suggestion view. The suggestion view SHALL display the suggested folder name and offer two actions: **Accept** and **Ignore**.
-
-#### Scenario: Suggestion view shown when complete returns a suggestion
-- **WHEN** `POST /images/:id/complete` returns a non-null `suggested_folder_name`
-- **THEN** the upload form is replaced by the suggestion view inside the modal
-- **AND** the suggested folder name is displayed
-- **AND** Accept and Ignore buttons are present
-
-#### Scenario: Accepting the suggestion calls accept-suggestion API
-- **WHEN** the user clicks Accept in the suggestion view
-- **THEN** `POST /images/:id/accept-suggestion` is called with the suggested folder name
-- **AND** the modal closes
-- **AND** a success toast is shown
-
-#### Scenario: Ignoring the suggestion closes the modal
-- **WHEN** the user clicks Ignore in the suggestion view
-- **THEN** the modal closes without calling the accept-suggestion API
-- **AND** a success toast is shown
 
 ---
 

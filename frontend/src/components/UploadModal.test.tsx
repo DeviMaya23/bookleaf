@@ -12,7 +12,6 @@ vi.mock('@/lib/images', () => ({
   initiateUpload: vi.fn(),
   putToR2: vi.fn(),
   completeUpload: vi.fn(),
-  acceptSuggestion: vi.fn(),
 }))
 
 vi.mock('sonner', () => ({
@@ -22,12 +21,12 @@ vi.mock('sonner', () => ({
 import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
 import { toast } from 'sonner'
 
-function renderModal(folderId: string | null = null) {
+function renderModal(folderId: string | null = null, onUploadSuccess?: (id: string) => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onOpenChange = vi.fn()
   render(
     <QueryClientProvider client={queryClient}>
-      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} />
+      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} onUploadSuccess={onUploadSuccess} />
     </QueryClientProvider>,
   )
   return { onOpenChange }
@@ -39,6 +38,26 @@ function makeImageFile(name = 'photo.jpg', type = 'image/jpeg'): File {
 
 describe('UploadModal', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('closes modal and shows success toast on successful upload', async () => {
+    const user = userEvent.setup()
+    vi.mocked(initiateUpload).mockResolvedValueOnce({ id: 'upload-1', upload_url: 'https://r2.example.com/upload', r2_path: 'path' })
+    vi.mocked(putToR2).mockResolvedValueOnce(undefined)
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    const onUploadSuccess = vi.fn()
+
+    const { onOpenChange } = renderModal(null, onUploadSuccess)
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeImageFile())
+    await user.click(screen.getByRole('button', { name: /upload/i }))
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Image uploaded successfully')
+    })
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onUploadSuccess).toHaveBeenCalledWith('img-1')
+  })
 
   it('uploads with description and source_url when Add details is filled', async () => {
     const user = userEvent.setup()

@@ -9,17 +9,22 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/devi/bookleaf/internal/platform/config"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/platform/config"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
-	"github.com/devi/bookleaf/pkg/thumbnail"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/devi/bookleaf/internal/vision"
+	"github.com/devi/bookleaf/internal/worker"
+	"github.com/devi/bookleaf/pkg/thumbnail"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
 	echomiddleware "github.com/labstack/echo/v4/middleware"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -27,51 +32,40 @@ import (
 	otelgorm "gorm.io/plugin/opentelemetry/tracing"
 )
 
-type imageWorkerUsecase interface {
-	CleanupStaleUploads(ctx context.Context, threshold time.Duration) error
-	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
+// riverEnqueuer adapts *river.Client to usecase.JobEnqueuer.
+type riverEnqueuer struct {
+	client *river.Client[pgx.Tx]
+}
+
+func (e *riverEnqueuer) Insert(ctx context.Context, args usecase.JobArgs) error {
+	riverArgs, ok := args.(river.JobArgs)
+	if !ok {
+		return fmt.Errorf("unsupported job args type %T", args)
+	}
+	_, err := e.client.Insert(ctx, riverArgs, nil)
+	return err
 }
 
 type server struct {
-	echo         *echo.Echo
-	imageWorker  imageWorkerUsecase
-	logger       *zap.Logger
-	shutdownTel  func(context.Context)
+	echo        *echo.Echo
+	riverClient *river.Client[pgx.Tx]
+	riverPool   *pgxpool.Pool
+	logger      *zap.Logger
+	shutdownTel func(context.Context)
 }
 
 func newServer(ctx context.Context, cfg *config.Config, logger *zap.Logger) *server {
 	e := initEcho(cfg)
 	tel, shutdownTel := initTelemetry(ctx, cfg, e, logger)
 	db := initDB(cfg, logger)
-	imageWorker := initApp(cfg, db, tel, e, logger)
+	riverClient, riverPool := initApp(ctx, cfg, db, tel, e, logger)
 	return &server{
 		echo:        e,
-		imageWorker: imageWorker,
+		riverClient: riverClient,
+		riverPool:   riverPool,
 		logger:      logger,
 		shutdownTel: shutdownTel,
 	}
-}
-
-func (s *server) startWorkers(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := s.imageWorker.CleanupStaleUploads(ctx, 30*time.Minute); err != nil {
-				s.logger.Warn("stale upload cleanup failed", zap.Error(err))
-			}
-		}
-	}()
-
-	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := s.imageWorker.PurgeExpiredTrash(ctx, 30*24*time.Hour); err != nil {
-				s.logger.Warn("trash purge failed", zap.Error(err))
-			}
-		}
-	}()
 }
 
 func (s *server) start(port string) error {
@@ -79,6 +73,10 @@ func (s *server) start(port string) error {
 }
 
 func (s *server) shutdown(ctx context.Context) {
+	if err := s.riverClient.Stop(ctx); err != nil {
+		s.logger.Error("river client stop", zap.Error(err))
+	}
+	s.riverPool.Close()
 	s.shutdownTel(ctx)
 	if err := s.echo.Shutdown(ctx); err != nil {
 		s.logger.Error("echo shutdown", zap.Error(err))
@@ -100,7 +98,6 @@ func main() {
 	}
 
 	srv := newServer(ctx, cfg, logger)
-	srv.startWorkers(ctx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
@@ -195,7 +192,7 @@ func initDB(cfg *config.Config, logger *zap.Logger) *gorm.DB {
 	return db
 }
 
-func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *echo.Echo, logger *zap.Logger) imageWorkerUsecase {
+func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *echo.Echo, logger *zap.Logger) (*river.Client[pgx.Tx], *pgxpool.Pool) {
 	userRepository := repository.NewUserRepository(db)
 	userUsecase := usecase.NewUserUsecase(userRepository, tel)
 	folderRepository := repository.NewFolderRepository(db)
@@ -212,7 +209,57 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 		visionService = vision.NewVisionClient(cfg.Vision.APIKey)
 	}
 
-	imageUsecase := usecase.NewImageUsecase(imageRepository, pendingUploadRepository, tagRepository, storageService, thumbnailService, visionService, folderRepository, userRepository, tel)
+	// Dedicated River pool (max 3 connections, separate from GORM's pool).
+	poolCfg, err := pgxpool.ParseConfig(cfg.DB.URL)
+	if err != nil {
+		logger.Fatal("parse river pool config", zap.Error(err))
+	}
+	poolCfg.MaxConns = 3
+	riverPool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		logger.Fatal("open river database pool", zap.Error(err))
+	}
+
+	// Deferred enqueuer: client field is set after river.NewClient to break the
+	// uploadUsecase ↔ riverClient init cycle.
+	enqueuer := &riverEnqueuer{}
+
+	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, tel)
+	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, thumbnailService, visionService, enqueuer, tel)
+
+	workers := river.NewWorkers()
+	river.AddWorker(workers, worker.NewThumbnailUploadWorker(uploadUsecase))
+	river.AddWorker(workers, worker.NewVisionWorker(uploadUsecase))
+	river.AddWorker(workers, worker.NewCleanupStaleUploadsWorker(uploadUsecase))
+	river.AddWorker(workers, worker.NewTrashPurgeWorker(imageUsecase))
+
+	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
+		Queues: map[string]river.QueueConfig{
+			river.QueueDefault: {MaxWorkers: 10},
+		},
+		Workers: workers,
+		PeriodicJobs: []*river.PeriodicJob{
+			river.NewPeriodicJob(
+				river.PeriodicInterval(10*time.Minute),
+				func() (river.JobArgs, *river.InsertOpts) { return worker.CleanupStaleUploadsArgs{}, nil },
+				nil,
+			),
+			river.NewPeriodicJob(
+				river.PeriodicInterval(24*time.Hour),
+				func() (river.JobArgs, *river.InsertOpts) { return worker.TrashPurgeArgs{}, nil },
+				nil,
+			),
+		},
+	})
+	if err != nil {
+		logger.Fatal("create river client", zap.Error(err))
+	}
+
+	enqueuer.client = riverClient
+
+	if err := riverClient.Start(ctx); err != nil {
+		logger.Fatal("start river client", zap.Error(err))
+	}
 
 	authMiddleware, err := authmiddleware.NewAuthMiddleware(cfg.Kinde.IssuerURL, cfg.Kinde.Audience, userUsecase, logger)
 	if err != nil {
@@ -223,6 +270,7 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
+	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
 	e.GET("/health", healthHandler.GetHealth)
@@ -240,9 +288,9 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	protected.GET("/tags", tagHandler.ListTags)
 	protected.PUT("/tags/:id", tagHandler.UpdateTag)
 	protected.DELETE("/tags/:id", tagHandler.DeleteTag)
-	protected.POST("/images", imageHandler.InitiateUpload)
-	protected.POST("/images/:id/complete", imageHandler.CompleteUpload)
-	protected.POST("/images/:id/accept-suggestion", imageHandler.AcceptSuggestion)
+	protected.POST("/images", uploadHandler.InitiateUpload)
+	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
+	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
 	protected.GET("/images/trash", imageHandler.ListTrashed)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
@@ -253,5 +301,5 @@ func initApp(cfg *config.Config, db *gorm.DB, tel *observability.Telemetry, e *e
 	protected.DELETE("/images/:id", imageHandler.SoftDelete)
 	protected.POST("/images/:id/restore", imageHandler.Restore)
 
-	return imageUsecase
+	return riverClient, riverPool
 }

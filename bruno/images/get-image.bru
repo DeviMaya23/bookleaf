@@ -17,4 +17,8 @@ params:path {
 docs {
   Response includes `folder_ids: string[]` — an array of all folder UUIDs this image belongs to (empty array when unfiled).
   The singular `folder_id` and `position` fields have been removed.
+
+  `suggested_folder_name: string | null` — derived from the top-scoring AI vision label stored on the image.
+  Null when the vision job has not yet run (ai_labels is null) or produced no labels (ai_labels is []).
+  Intended for post-upload polling: poll this endpoint after upload to detect when the vision job completes.
 }

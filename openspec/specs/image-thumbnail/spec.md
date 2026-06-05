@@ -41,44 +41,66 @@ The system SHALL implement `ThumbnailService` using the `disintegration/imaging`
 
 ### Requirement: Async Thumbnail Storage
 
-After `POST /images/:id/complete` is called, the system SHALL fetch the original image from R2 and generate a thumbnail synchronously within the `CompleteUpload` usecase method. The R2 upload and database update SHALL then be handed off to a background goroutine.
+After `POST /images/:id/complete` is called, the system SHALL fetch the original image from R2 and generate a thumbnail synchronously within the `CompleteUpload` usecase method. The R2 upload and database update SHALL be handed off to a River job (`ThumbnailUploadJob`) immediately after the image DB write succeeds.
 
 Synchronous steps (blocking the HTTP response):
 1. Call `StorageService.GetObject` to fetch the original image bytes
 2. Call `ThumbnailService.Generate` to produce the thumbnail; buffer the result as `[]byte`
 
-If either synchronous step fails, the error SHALL be logged and `CompleteUpload` SHALL return an error. The HTTP response SHALL be non-2xx. `is_uploaded` SHALL NOT be set to `true`. The goroutine SHALL NOT be launched.
+If either synchronous step fails, the error SHALL be logged and `CompleteUpload` SHALL return an error. The HTTP response SHALL be non-2xx. The River job SHALL NOT be inserted.
 
-Goroutine steps (non-blocking):
-3. Call `StorageService.PutObject` to store the pre-generated thumbnail bytes at `users/{kindeID}/thumbnails/{imageID}.jpg` with content type `image/jpeg`
-4. Update `Image.ThumbnailPath` in the database
+River job steps (non-blocking, executed by `ThumbnailUploadWorker`):
+3. Call `StorageService.GetObject` to re-fetch the original image bytes from R2
+4. Call `ThumbnailService.Generate` to re-produce the thumbnail
+5. Call `StorageService.PutObject` to store the thumbnail at `users/{kindeID}/thumbnails/{imageID}.jpg` with content type `image/jpeg`
+6. Update `Image.ThumbnailPath` in the database
 
-If either goroutine step fails, the error SHALL be logged and the goroutine SHALL exit without panicking. The HTTP response is NOT blocked on goroutine steps.
+If any job step fails, River retries the job up to 5 attempts with exponential backoff. The thumbnail bytes are NOT passed via job args; the worker re-fetches and re-generates from R2 on each attempt.
 
 #### Scenario: Successful thumbnail flow updates ThumbnailPath
 
-- **WHEN** GetObject, Generate, PutObject, and UpdateThumbnailPath all succeed
-- **THEN** the `Image` record in the database has `thumbnail_path` set to `users/{kindeID}/thumbnails/{imageID}.jpg`
+- **WHEN** all job steps succeed
+- **THEN** the `Image` record has `thumbnail_path` set to `users/{kindeID}/thumbnails/{imageID}.jpg`
 
-#### Scenario: GetObject failure returns error
+#### Scenario: GetObject failure in synchronous phase returns error
 
-- **WHEN** `StorageService.GetObject` returns an error
+- **WHEN** `StorageService.GetObject` fails during `CompleteUpload`
 - **THEN** `CompleteUpload` returns an error
-- **AND** no goroutine is launched
-- **AND** `is_uploaded` remains false
+- **AND** no River job is inserted
 - **AND** `thumbnail_path` remains nil
 
-#### Scenario: Generate failure returns error
+#### Scenario: Generate failure in synchronous phase returns error
 
-- **WHEN** `StorageService.GetObject` succeeds but `ThumbnailService.Generate` returns an error
+- **WHEN** `ThumbnailService.Generate` fails during `CompleteUpload`
 - **THEN** `CompleteUpload` returns an error
-- **AND** no goroutine is launched
-- **AND** `is_uploaded` remains false
-- **AND** `thumbnail_path` remains nil
+- **AND** no River job is inserted
 
-#### Scenario: Goroutine PutObject failure is logged and does not crash
+#### Scenario: Job failure triggers retry
 
-- **WHEN** GetObject and Generate succeed but `StorageService.PutObject` returns an error
-- **THEN** the error is logged
-- **AND** the goroutine exits without panicking
-- **AND** `thumbnail_path` remains nil
+- **WHEN** the `ThumbnailUploadWorker` returns an error on an attempt
+- **THEN** River retries the job up to 5 attempts total before discarding
+
+---
+
+### Requirement: ProcessThumbnailUpload Usecase Method
+
+The system SHALL add `ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error` to `imageUploadUsecase`. This is the method called by `ThumbnailUploadWorker` on each attempt.
+
+The method SHALL:
+1. Call `StorageService.GetObject(ctx, r2Path)` to fetch the original image
+2. Call `ThumbnailService.Generate(ctx, src)` to produce the thumbnail
+3. Call `StorageService.PutObject(ctx, thumbnailKey, bytes, "image/jpeg")` to upload it
+4. Call `ImageRepository.UpdateThumbnailPath(ctx, imageID, thumbnailKey)` to persist the path
+
+Any failure at any step SHALL return a non-nil error so River can retry.
+
+#### Scenario: All steps succeed
+
+- **WHEN** `ProcessThumbnailUpload` is called and all steps complete without error
+- **THEN** the image record has `thumbnail_path` set to `thumbnailKey`
+- **AND** nil is returned
+
+#### Scenario: Any step failure returns error
+
+- **WHEN** any step in `ProcessThumbnailUpload` returns an error
+- **THEN** `ProcessThumbnailUpload` returns a non-nil error
