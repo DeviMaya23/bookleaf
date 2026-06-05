@@ -104,10 +104,11 @@ interface ImageGridProps {
   view: AppView
   layoutMode?: LayoutMode
   onImageSelect: (image: Image) => void
+  onImageDeleted?: (id: string) => void
   sortEndTrigger?: SortEndTrigger | null
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect, onImageDeleted, sortEndTrigger }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const isTrash = view.type === 'trash'
@@ -167,9 +168,11 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteImage(getToken, id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['images'] })
+    onSuccess: (_, id) => {
+      setOrderedImages((prev) => prev.filter((img) => img.id !== id))
+      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
       toast.success('Image moved to trash')
+      onImageDeleted?.(id)
     },
     onError: () => toast.error('Failed to delete image'),
   })

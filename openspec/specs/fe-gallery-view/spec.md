@@ -104,13 +104,17 @@ The system SHALL show a context menu with a "Delete" option when the user right-
 - **THEN** a context menu appears with a "Delete" option
 
 ### Requirement: Delete image moves it to trash
-Selecting "Delete" from the context menu SHALL immediately call `DELETE /images/:id` (no confirmation dialog) and refresh the image list. A success toast reading "Image moved to trash" SHALL be shown on success.
+Selecting "Delete" from the context menu SHALL call `DELETE /images/:id` (no confirmation dialog). On success, the image SHALL be removed from the local gallery array without triggering a full gallery refetch. The right panel SHALL close if the deleted image was selected. A success toast reading "Image moved to trash" SHALL be shown on success.
 
 #### Scenario: Delete moves the image to trash
 - **WHEN** the user selects "Delete" from the image context menu
 - **THEN** the app calls `DELETE /images/<id>`
-- **AND** the image list is refreshed and the image no longer appears
+- **AND** the deleted image is removed from the gallery without a full reload
 - **AND** a success toast "Image moved to trash" is shown
+
+#### Scenario: Right panel closes when the selected image is deleted
+- **WHEN** the user deletes an image that is currently open in the right panel
+- **THEN** the right panel closes on successful deletion
 
 #### Scenario: Delete fails with an error toast
 - **WHEN** the user selects "Delete" from the image context menu

@@ -222,6 +222,7 @@ export default function AppLayout() {
               <ImageGrid
                 view={view}
                 onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
+                onImageDeleted={(id) => { if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) } }}
                 sortEndTrigger={sortEndTrigger}
               />
             </div>
