@@ -53,9 +53,7 @@ type UploadInitResult struct {
 }
 
 type CompleteUploadResult struct {
-	ImageID             uuid.UUID
-	SuggestedFolderName *string
-	Warning             string
+	ImageID uuid.UUID
 }
 
 type imageUploadUsecase struct {
@@ -66,6 +64,7 @@ type imageUploadUsecase struct {
 	store             StorageService
 	thumbnails        ThumbnailService
 	visionService     VisionService
+	enqueuer          JobEnqueuer
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
 	thumbnailDuration metric.Float64Histogram
@@ -80,6 +79,7 @@ func NewImageUploadUsecase(
 	store StorageService,
 	thumbnails ThumbnailService,
 	visionService VisionService,
+	enqueuer JobEnqueuer,
 	tel *observability.Telemetry,
 ) *imageUploadUsecase {
 	uploadCount, _ := tel.Meter.Int64Counter(
@@ -104,6 +104,7 @@ func NewImageUploadUsecase(
 		store:             store,
 		thumbnails:        thumbnails,
 		visionService:     visionService,
+		enqueuer:          enqueuer,
 		tel:               tel,
 		uploadCount:       uploadCount,
 		thumbnailDuration: thumbnailDuration,
@@ -195,15 +196,20 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	thumbnailBytes, width, height, fileSize, err := u.prepareThumbnail(ctx, pending.ID, pending.UserID, pending.R2Path)
+	width, height, fileSize, rawBytes, err := u.extractImageMetadata(ctx, pending.R2Path)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("prepare thumbnail: %w", err)
+		return nil, fmt.Errorf("extract image metadata: %w", err)
 	}
 
-	fileSizeValue := fileSize
-	image := &domain.Image{
+	if _, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes)); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("thumbnail preflight: %w", err)
+	}
+
+	img := &domain.Image{
 		ID:          pending.ID,
 		UserID:      pending.UserID,
 		Title:       pending.Title,
@@ -211,33 +217,28 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		SourceURL:   pending.SourceURL,
 		R2Path:      pending.R2Path,
 		MIMEType:    pending.MIMEType,
-		FileSize:    &fileSizeValue,
+		FileSize:    &fileSize,
 	}
 	if width > 0 {
 		widthValue := width
-		image.Width = &widthValue
+		img.Width = &widthValue
 	}
 	if height > 0 {
 		heightValue := height
-		image.Height = &heightValue
+		img.Height = &heightValue
 	}
 
-	var created *domain.Image
 	if err := u.pendingUploadRepo.Transaction(ctx, func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error {
-		createdImage, createErr := imageRepo.Create(ctx, image)
+		createdImage, createErr := imageRepo.Create(ctx, img)
 		if createErr != nil {
 			return createErr
 		}
-		created = createdImage
 		if pending.FolderID != nil {
 			if setErr := imageRepo.SetImageFolder(ctx, createdImage.ID, pending.FolderID); setErr != nil {
 				return setErr
 			}
 		}
-		if deleteErr := pendingRepo.Delete(ctx, pending.ID); deleteErr != nil {
-			return deleteErr
-		}
-		return nil
+		return pendingRepo.Delete(ctx, pending.ID)
 	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -245,12 +246,28 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 	}
 
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
-	if created == nil {
-		created = image
-	}
-	go u.uploadThumbnail(created, thumbnailKey, thumbnailBytes)
 
-	result.SuggestedFolderName, result.Warning = u.runVisionFlow(ctx, id, userID, thumbnailBytes)
+	if err := u.enqueuer.Insert(ctx, ThumbnailUploadArgs{
+		ImageID:      pending.ID,
+		UserID:       pending.UserID,
+		R2Path:       pending.R2Path,
+		ThumbnailKey: thumbnailKey,
+	}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("enqueue thumbnail upload: %w", err)
+	}
+
+	if err := u.enqueuer.Insert(ctx, VisionArgs{
+		ImageID: pending.ID,
+		UserID:  pending.UserID,
+		R2Path:  pending.R2Path,
+	}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("enqueue vision labelling: %w", err)
+	}
+
 	return result, nil
 }
 
@@ -335,128 +352,39 @@ func (u *imageUploadUsecase) CleanupStaleUploads(ctx context.Context, threshold 
 	return nil
 }
 
-func (u *imageUploadUsecase) prepareThumbnail(ctx context.Context, imageID uuid.UUID, userID, r2Path string) ([]byte, int, int, int64, error) {
-	logger := observability.LoggerFromContext(ctx, u.tel.Logger).With(
-		zap.String("image_id", imageID.String()),
-		zap.String("user_id", userID),
-	)
-
+func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path string) (width, height int, fileSize int64, rawBytes []byte, err error) {
 	src, err := u.store.GetObject(ctx, r2Path)
 	if err != nil {
-		logger.Error("prepare thumbnail failed",
-			zap.String("event", "thumbnail.prepare.failed"),
-			zap.Error(err),
-		)
-		return nil, 0, 0, 0, err
+		return 0, 0, 0, nil, err
+	}
+	defer src.Close()
+
+	rawBytes, err = io.ReadAll(src)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+
+	if cfg, _, decodeErr := stdimage.DecodeConfig(bytes.NewReader(rawBytes)); decodeErr == nil {
+		width = cfg.Width
+		height = cfg.Height
+	}
+
+	return width, height, int64(len(rawBytes)), rawBytes, nil
+}
+
+func (u *imageUploadUsecase) ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error {
+	src, err := u.store.GetObject(ctx, r2Path)
+	if err != nil {
+		return fmt.Errorf("fetch original: %w", err)
 	}
 	defer src.Close()
 
 	rawBytes, err := io.ReadAll(src)
 	if err != nil {
-		logger.Error("prepare thumbnail failed",
-			zap.String("event", "thumbnail.prepare.failed"),
-			zap.Error(err),
-		)
-		return nil, 0, 0, 0, err
+		return fmt.Errorf("read original: %w", err)
 	}
 
-	width, height := 0, 0
-	if cfg, _, decodeErr := stdimage.DecodeConfig(bytes.NewReader(rawBytes)); decodeErr != nil {
-		logger.Warn("prepare thumbnail metadata decode failed",
-			zap.String("event", "thumbnail.metadata.decode_failed"),
-			zap.Error(decodeErr),
-		)
-	} else {
-		width = cfg.Width
-		height = cfg.Height
-	}
-
-	thumb, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes))
-	if err != nil {
-		logger.Error("prepare thumbnail failed",
-			zap.String("event", "thumbnail.prepare.failed"),
-			zap.Error(err),
-		)
-		return nil, 0, 0, 0, err
-	}
-
-	thumbnailBytes, err := io.ReadAll(thumb)
-	if err != nil {
-		logger.Error("prepare thumbnail failed",
-			zap.String("event", "thumbnail.prepare.failed"),
-			zap.Error(err),
-		)
-		return nil, 0, 0, 0, err
-	}
-
-	return thumbnailBytes, width, height, int64(len(rawBytes)), nil
-}
-
-func (u *imageUploadUsecase) runVisionFlow(ctx context.Context, imageID uuid.UUID, userID string, thumbnailBytes []byte) (suggestion *string, warning string) {
-	user, err := u.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to fetch user",
-			zap.String("event", "vision.user.fetch_failed"),
-			zap.String("image_id", imageID.String()),
-			zap.Error(err),
-		)
-		return nil, "ai labelling skipped: could not fetch user"
-	}
-
-	if !user.VisionEnabled || u.visionService == nil {
-		return nil, ""
-	}
-
-	visionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	labels, err := u.visionService.AnnotateImage(visionCtx, thumbnailBytes)
-	if err != nil {
-		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: annotation failed",
-			zap.String("event", "vision.annotation.failed"),
-			zap.String("image_id", imageID.String()),
-			zap.Error(err),
-		)
-		return nil, "ai labelling failed"
-	}
-
-	if len(labels) == 0 {
-		return nil, ""
-	}
-
-	labelsJSON, err := json.Marshal(labels)
-	if err != nil {
-		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to marshal labels",
-			zap.String("event", "vision.marshal.failed"),
-			zap.String("image_id", imageID.String()),
-			zap.Error(err),
-		)
-		return nil, "ai labelling failed"
-	}
-
-	if err := u.imageRepo.UpdateAILabels(ctx, imageID, labelsJSON); err != nil {
-		observability.LoggerFromContext(ctx, u.tel.Logger).Error("vision: failed to save labels",
-			zap.String("event", "vision.labels.save_failed"),
-			zap.String("image_id", imageID.String()),
-			zap.Error(err),
-		)
-		return nil, "ai labelling failed"
-	}
-
-	topLabel := labels[0]
-	return &topLabel.Description, ""
-}
-
-func (u *imageUploadUsecase) uploadThumbnail(image *domain.Image, thumbnailKey string, thumbnailBytes []byte) {
-	ctx := context.Background()
-	logger := u.tel.Logger.With(
-		zap.String("image_id", image.ID.String()),
-		zap.String("user_id", image.UserID),
-	)
-
-	logger.Info("upload thumbnail job started", zap.String("event", "upload.thumbnail.job.started"))
 	start := time.Now()
-
 	recordMetrics := func(status string) {
 		elapsed := float64(time.Since(start).Milliseconds())
 		attrs := metric.WithAttributes(attribute.String("r2.status", status))
@@ -464,27 +392,77 @@ func (u *imageUploadUsecase) uploadThumbnail(image *domain.Image, thumbnailKey s
 		u.thumbnailCount.Add(ctx, 1, attrs)
 	}
 
-	if err := u.store.PutObject(ctx, thumbnailKey, bytes.NewReader(thumbnailBytes), "image/jpeg"); err != nil {
-		logger.Error("upload thumbnail job failed",
-			zap.String("event", "upload.thumbnail.job.failed"),
-			zap.Error(err),
-		)
+	thumb, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes))
+	if err != nil {
 		recordMetrics("error")
-		return
+		return fmt.Errorf("generate thumbnail: %w", err)
 	}
 
-	if err := u.imageRepo.UpdateThumbnailPath(ctx, image.ID, thumbnailKey); err != nil {
-		logger.Error("upload thumbnail job failed",
-			zap.String("event", "upload.thumbnail.job.failed"),
-			zap.Error(err),
-		)
+	thumbBytes, err := io.ReadAll(thumb)
+	if err != nil {
 		recordMetrics("error")
-		return
+		return fmt.Errorf("read thumbnail: %w", err)
 	}
 
-	logger.Info("upload thumbnail job completed",
-		zap.String("event", "upload.thumbnail.job.completed"),
-		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
-	)
+	if err := u.store.PutObject(ctx, thumbnailKey, bytes.NewReader(thumbBytes), "image/jpeg"); err != nil {
+		recordMetrics("error")
+		return fmt.Errorf("upload thumbnail: %w", err)
+	}
+
+	if err := u.imageRepo.UpdateThumbnailPath(ctx, imageID, thumbnailKey); err != nil {
+		recordMetrics("error")
+		return fmt.Errorf("update thumbnail path: %w", err)
+	}
+
 	recordMetrics("success")
+	return nil
+}
+
+func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error {
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("fetch user: %w", err)
+	}
+
+	if !user.VisionEnabled || u.visionService == nil {
+		return nil
+	}
+
+	img, err := u.imageRepo.GetByID(ctx, imageID, userID)
+	if err != nil {
+		return fmt.Errorf("fetch image: %w", err)
+	}
+
+	src, err := u.store.GetObject(ctx, img.R2Path)
+	if err != nil {
+		return fmt.Errorf("fetch image bytes: %w", err)
+	}
+	defer src.Close()
+
+	imgBytes, err := io.ReadAll(src)
+	if err != nil {
+		return fmt.Errorf("read image bytes: %w", err)
+	}
+
+	visionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	labels, err := u.visionService.AnnotateImage(visionCtx, imgBytes)
+	if err != nil {
+		return fmt.Errorf("annotate image: %w", err)
+	}
+
+	if len(labels) == 0 {
+		return nil
+	}
+
+	labelsJSON, err := json.Marshal(labels)
+	if err != nil {
+		return fmt.Errorf("marshal labels: %w", err)
+	}
+
+	if err := u.imageRepo.UpdateAILabels(ctx, imageID, labelsJSON); err != nil {
+		return fmt.Errorf("save labels: %w", err)
+	}
+
+	return nil
 }

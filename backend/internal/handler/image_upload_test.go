@@ -146,23 +146,8 @@ func TestUploadHandler_CompleteUpload(t *testing.T) {
 		wantErrStatus int
 	}{
 		{
-			name: "returns 200 with suggested folder name",
-			uc: &mockUploadUsecase{
-				completeResult: &usecase.CompleteUploadResult{
-					ImageID:             imageID,
-					SuggestedFolderName: func() *string { v := "Nature"; return &v }(),
-				},
-			},
-			wantStatus: http.StatusOK,
-		},
-		{
-			name: "returns 200 with warning when suggestion unavailable",
-			uc: &mockUploadUsecase{
-				completeResult: &usecase.CompleteUploadResult{
-					ImageID: imageID,
-					Warning: "ai labelling failed",
-				},
-			},
+			name:       "returns 200 with image_id",
+			uc:         &mockUploadUsecase{completeResult: &usecase.CompleteUploadResult{ImageID: imageID}},
 			wantStatus: http.StatusOK,
 		},
 		{
@@ -196,12 +181,10 @@ func TestUploadHandler_CompleteUpload(t *testing.T) {
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["image_id"])
-			if tt.uc.completeResult.SuggestedFolderName != nil {
-				assert.Equal(t, *tt.uc.completeResult.SuggestedFolderName, resp["suggested_folder_name"])
-			}
-			if tt.uc.completeResult.Warning != "" {
-				assert.Equal(t, tt.uc.completeResult.Warning, resp["warning"])
-			}
+			_, hasSuggestion := resp["suggested_folder_name"]
+			assert.False(t, hasSuggestion)
+			_, hasWarning := resp["warning"]
+			assert.False(t, hasWarning)
 		})
 	}
 }

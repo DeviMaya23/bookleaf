@@ -158,6 +158,19 @@ func defaultUserRepo() *stubUserRepo {
 	return &stubUserRepo{user: &domain.User{ID: "kp_abc123"}}
 }
 
+type noopJobEnqueuer struct{}
+
+func (n *noopJobEnqueuer) Insert(_ context.Context, _ JobArgs) error { return nil }
+
+type spyJobEnqueuer struct {
+	insertCalls int
+}
+
+func (s *spyJobEnqueuer) Insert(_ context.Context, _ JobArgs) error {
+	s.insertCalls++
+	return nil
+}
+
 func newImageUploadUsecase(
 	imageRepo UploadImageRepository,
 	pendingRepo PendingUploadRepository,
@@ -167,7 +180,7 @@ func newImageUploadUsecase(
 	thumbnails ThumbnailService,
 	vision VisionService,
 ) *imageUploadUsecase {
-	return NewImageUploadUsecase(imageRepo, pendingRepo, folderRepo, userRepo, store, thumbnails, vision, noopTel())
+	return NewImageUploadUsecase(imageRepo, pendingRepo, folderRepo, userRepo, store, thumbnails, vision, &noopJobEnqueuer{}, noopTel())
 }
 
 // --- InitiateUpload ---
@@ -246,7 +259,7 @@ func TestImageUploadUsecase_CompleteUpload_PersistsImageMetadata(t *testing.T) {
 	}
 	pendingRepo.transactionImageRepo = imageRepo
 	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, &noopJobEnqueuer{}, noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -268,7 +281,7 @@ func TestImageUploadUsecase_CompleteUpload_DecodeFailurePersistsFileSize(t *test
 	}
 	pendingRepo.transactionImageRepo = imageRepo
 	store := &mockStorageService{objectBytes: []byte("not-an-image")}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, &mockThumbnailService{}, nil, &noopJobEnqueuer{}, noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -287,7 +300,7 @@ func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *t
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg", FolderID: &folderID},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, &mockThumbnailService{}, nil, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, &mockThumbnailService{}, nil, &noopJobEnqueuer{}, noopTel())
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 
@@ -296,61 +309,103 @@ func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *t
 	assert.Equal(t, folderID, *imageRepo.setFolderFolderID)
 }
 
-func TestImageUploadUsecase_CompleteUpload_VisionEnabled(t *testing.T) {
+func TestImageUploadUsecase_CompleteUpload_ThumbnailPreflightFails(t *testing.T) {
 	imageID := uuid.New()
 	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
-	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, userRepo, &mockStorageService{}, &mockThumbnailService{}, visionSvc, noopTel())
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4)}
+	thumbSvc := &mockThumbnailService{err: errors.New("codec unavailable")}
+	enqueuer := &spyJobEnqueuer{}
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, thumbSvc, nil, enqueuer, noopTel())
 
-	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "thumbnail preflight")
+	assert.Equal(t, 0, enqueuer.insertCalls)
+}
+
+// --- ProcessThumbnailUpload ---
+
+func TestImageUploadUsecase_ProcessThumbnailUpload_Success(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{}
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4)}
+	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, nil, nil, store, &mockThumbnailService{}, nil)
+
+	err := uc.ProcessThumbnailUpload(context.Background(), imageID, "users/u1/images/img.png", "users/u1/thumbnails/img.jpg")
 
 	require.NoError(t, err)
-	require.NotNil(t, result.SuggestedFolderName)
-	assert.Equal(t, "Nature", *result.SuggestedFolderName)
-	assert.Empty(t, result.Warning)
+	assert.Equal(t, 1, store.getCalls)
+	assert.Equal(t, 1, store.putCalls)
+}
+
+func TestImageUploadUsecase_ProcessThumbnailUpload_FetchFails(t *testing.T) {
+	imageID := uuid.New()
+	store := &mockStorageService{getObjectErr: errors.New("r2 unavailable")}
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, store, &mockThumbnailService{}, nil)
+
+	err := uc.ProcessThumbnailUpload(context.Background(), imageID, "users/u1/images/img.png", "users/u1/thumbnails/img.jpg")
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "fetch original")
+	assert.Equal(t, 0, store.putCalls)
+}
+
+func TestImageUploadUsecase_ProcessThumbnailUpload_UploadFails(t *testing.T) {
+	imageID := uuid.New()
+	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 4, 4), putObjectErr: errors.New("r2 write error")}
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, store, &mockThumbnailService{}, nil)
+
+	err := uc.ProcessThumbnailUpload(context.Background(), imageID, "users/u1/images/img.png", "users/u1/thumbnails/img.jpg")
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "upload thumbnail")
+}
+
+// --- ProcessVisionLabelling ---
+
+func TestImageUploadUsecase_ProcessVisionLabelling_SavesLabels(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	store := &mockStorageService{objectBytes: []byte("img-bytes")}
+	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
+	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, nil, userRepo, store, &mockThumbnailService{}, visionSvc)
+
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
 	assert.Equal(t, 1, visionSvc.calls)
 }
 
-func TestImageUploadUsecase_CompleteUpload_VisionDisabled(t *testing.T) {
+func TestImageUploadUsecase_ProcessVisionLabelling_VisionDisabledReturnsNil(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-	pendingRepo := &mockPendingUploadRepository{
-		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
-	}
-	pendingRepo.transactionImageRepo = imageRepo
-	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	visionSvc := &mockVisionService{}
 	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: false}}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, userRepo, &mockStorageService{}, &mockThumbnailService{}, visionSvc, noopTel())
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, userRepo, &mockStorageService{}, &mockThumbnailService{}, visionSvc)
 
-	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
 
 	require.NoError(t, err)
-	assert.Nil(t, result.SuggestedFolderName)
-	assert.Empty(t, result.Warning)
 	assert.Equal(t, 0, visionSvc.calls)
 }
 
-func TestImageUploadUsecase_CompleteUpload_VisionFails(t *testing.T) {
+func TestImageUploadUsecase_ProcessVisionLabelling_VisionAPIErrorReturnsError(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
-	pendingRepo := &mockPendingUploadRepository{
-		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
-	}
-	pendingRepo.transactionImageRepo = imageRepo
-	visionSvc := &mockVisionService{err: errors.New("vision unavailable")}
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	store := &mockStorageService{objectBytes: []byte("img-bytes")}
+	visionSvc := &mockVisionService{err: errors.New("vision API unavailable")}
 	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, userRepo, &mockStorageService{}, &mockThumbnailService{}, visionSvc, noopTel())
+	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, nil, userRepo, store, &mockThumbnailService{}, visionSvc)
 
-	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
 
-	require.NoError(t, err)
-	assert.Nil(t, result.SuggestedFolderName)
-	assert.NotEmpty(t, result.Warning)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "annotate image")
 }
 
 func TestImageUploadUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
@@ -361,7 +416,7 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, &mockThumbnailService{}, nil, tel)
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, &mockThumbnailService{}, nil, &noopJobEnqueuer{}, tel)
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.NoError(t, err)
@@ -378,7 +433,7 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	imageID := uuid.New()
 	tel, collect := makeMetricsTel(t)
 	pendingRepo := &mockPendingUploadRepository{getErr: gorm.ErrRecordNotFound}
-	uc := NewImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, &mockThumbnailService{}, nil, tel)
+	uc := NewImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, &mockThumbnailService{}, nil, &noopJobEnqueuer{}, tel)
 
 	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
 	require.Error(t, err)

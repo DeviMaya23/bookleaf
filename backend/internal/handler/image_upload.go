@@ -30,9 +30,7 @@ type initiateImageUploadResponse struct {
 }
 
 type completeUploadResponse struct {
-	ImageID             uuid.UUID `json:"image_id"`
-	SuggestedFolderName *string   `json:"suggested_folder_name"`
-	Warning             string    `json:"warning,omitempty"`
+	ImageID uuid.UUID `json:"image_id"`
 }
 
 type acceptSuggestionRequest struct {
@@ -113,9 +111,7 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, completeUploadResponse{
-		ImageID:             result.ImageID,
-		SuggestedFolderName: result.SuggestedFolderName,
-		Warning:             result.Warning,
+		ImageID: result.ImageID,
 	})
 }
 
