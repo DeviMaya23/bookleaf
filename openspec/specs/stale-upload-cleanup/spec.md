@@ -60,16 +60,18 @@ For each stale record, the method SHALL:
 
 ---
 
-### Requirement: Background goroutine runs cleanup on a ticker
+### Requirement: Background periodic job runs cleanup every 10 minutes
 
-The system SHALL start a background goroutine in `cmd/server/main.go` after dependency wiring that calls `imageUsecase.CleanupStaleUploads` on a 10-minute interval with a 30-minute stale threshold.
+The system SHALL run `CleanupStaleUploads` as a River periodic job firing every 10 minutes with a 30-minute stale threshold, replacing the ticker goroutine previously started in `main.go`.
 
-#### Scenario: Goroutine starts with the server
+The ticker goroutine, `startWorkers` call, `imageWorkerUsecase` interface, and `compositeImageWorker` struct SHALL be removed from `main.go`.
 
-- **WHEN** the server starts
-- **THEN** a goroutine is running that invokes `CleanupStaleUploads` every 10 minutes
+#### Scenario: Cleanup fires on schedule via River
 
-#### Scenario: Cleanup goroutine does not block server startup
+- **WHEN** the server is running
+- **THEN** `CleanupStaleUploads(ctx, 30*time.Minute)` is invoked approximately every 10 minutes by River's periodic job scheduler
 
-- **WHEN** the server starts
-- **THEN** the goroutine is launched asynchronously and `e.Start()` is called immediately after
+#### Scenario: main.go contains no ticker goroutine for cleanup
+
+- **WHEN** the Go package is compiled
+- **THEN** `main.go` contains no `time.NewTicker` call for stale upload cleanup
