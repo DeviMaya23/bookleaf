@@ -63,8 +63,8 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const { data: imageDetail, isLoading: isLoadingDetail } = useQuery({
     queryKey: ['image', image.id],
     queryFn: () => getImage(getToken, image.id),
-    enabled: lightboxOpen,
     staleTime: 0,
+    refetchInterval: (query) => !query.state.data?.thumbnail_url ? 1000 : false,
   })
 
   const { data: allFolders } = useQuery({
@@ -231,6 +231,8 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     }
   }
 
+  const thumbnailUrl = imageDetail?.thumbnail_url ?? image.thumbnail_url
+
   return (
     <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
       {/* Thumbnail */}
@@ -239,9 +241,9 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
           className="cursor-pointer"
           onClick={() => setLightboxOpen(true)}
         >
-          {image.thumbnail_url ? (
+          {thumbnailUrl ? (
             <img
-              src={image.thumbnail_url}
+              src={thumbnailUrl}
               alt={image.title}
               className="max-h-[33vh] w-auto mx-auto block"
             />

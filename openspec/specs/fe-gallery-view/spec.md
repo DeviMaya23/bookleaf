@@ -85,6 +85,17 @@ The system SHALL use `useInfiniteQuery` to fetch images in pages. A "Load more" 
 - **THEN** the accumulated pages are discarded
 - **AND** only the first page of the new folder's images is shown
 
+### Requirement: Gallery self-polls while any image has a pending thumbnail
+The system SHALL set `refetchInterval` on the gallery's `useInfiniteQuery` to 1000ms while any loaded image has `thumbnail_url === null`. Polling SHALL stop automatically (interval returns `false`) once all loaded images have a non-null `thumbnail_url`. This covers all upload paths without any upload-specific wiring.
+
+#### Scenario: Polling active while pending thumbnails exist
+- **WHEN** the gallery's loaded image list contains at least one image with `thumbnail_url === null`
+- **THEN** the gallery refetches `GET /images` every 1 second
+
+#### Scenario: Polling stops once all thumbnails resolve
+- **WHEN** all loaded images have a non-null `thumbnail_url`
+- **THEN** the gallery stops polling and makes no further periodic refetch requests
+
 ### Requirement: Right-click context menu with delete option
 The system SHALL show a context menu with a "Delete" option when the user right-clicks an image card.
 
@@ -93,13 +104,17 @@ The system SHALL show a context menu with a "Delete" option when the user right-
 - **THEN** a context menu appears with a "Delete" option
 
 ### Requirement: Delete image moves it to trash
-Selecting "Delete" from the context menu SHALL immediately call `DELETE /images/:id` (no confirmation dialog) and refresh the image list. A success toast reading "Image moved to trash" SHALL be shown on success.
+Selecting "Delete" from the context menu SHALL call `DELETE /images/:id` (no confirmation dialog). On success, the image SHALL be removed from the local gallery array without triggering a full gallery refetch. The right panel SHALL close if the deleted image was selected. A success toast reading "Image moved to trash" SHALL be shown on success.
 
 #### Scenario: Delete moves the image to trash
 - **WHEN** the user selects "Delete" from the image context menu
 - **THEN** the app calls `DELETE /images/<id>`
-- **AND** the image list is refreshed and the image no longer appears
+- **AND** the deleted image is removed from the gallery without a full reload
 - **AND** a success toast "Image moved to trash" is shown
+
+#### Scenario: Right panel closes when the selected image is deleted
+- **WHEN** the user deletes an image that is currently open in the right panel
+- **THEN** the right panel closes on successful deletion
 
 #### Scenario: Delete fails with an error toast
 - **WHEN** the user selects "Delete" from the image context menu

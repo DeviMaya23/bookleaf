@@ -78,6 +78,7 @@ backend/
     repository/      ← database access; implements interfaces defined in usecase/
     handler/         ← HTTP delivery layer
       middleware/    ← HTTP-specific middleware
+    worker/          ← background job workers (River queue)
     platform/        ← cross-cutting infrastructure; startup concerns only
       config/        ← environment/config parsing
       observability/ ← OpenTelemetry, logging, metrics setup
