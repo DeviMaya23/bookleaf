@@ -15,6 +15,23 @@ The system SHALL render a 320px right panel (`RightPanel` component) as a siblin
 
 ---
 
+### Requirement: Right panel self-polls while the selected image has a pending thumbnail
+
+The system SHALL poll `GET /images/:id` every 1000ms while the selected image's `thumbnail_url` is null. Polling SHALL stop automatically once `thumbnail_url` resolves to a non-null value. The panel SHALL display the resolved thumbnail as soon as it arrives, without requiring any user interaction.
+
+#### Scenario: Panel polls and updates thumbnail when it resolves
+
+- **WHEN** the right panel is open for an image with `thumbnail_url === null`
+- **THEN** the panel polls `GET /images/:id` every 1000ms
+- **AND** when the response contains a non-null `thumbnail_url`, the thumbnail is displayed and polling stops
+
+#### Scenario: No polling when thumbnail is already present
+
+- **WHEN** the right panel opens for an image that already has a non-null `thumbnail_url`
+- **THEN** no periodic polling is performed
+
+---
+
 ### Requirement: Right panel displays a thumbnail at the top
 
 The system SHALL display the image's `thumbnail_url` at the top of the right panel. The thumbnail SHALL be rendered at full panel width with natural aspect ratio (not a fixed height). A close button (✕) SHALL be overlaid on the thumbnail (top-right corner). Clicking the thumbnail SHALL open the lightbox.
