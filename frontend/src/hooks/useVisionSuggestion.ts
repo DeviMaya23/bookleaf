@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { toast } from 'sonner'
@@ -24,7 +24,7 @@ export function useVisionSuggestion(): { checkVision: (imageId: string) => void 
     staleTime: Infinity,
   })
 
-  function showSuggestionToast(imageId: string, folderName: string) {
+  const showSuggestionToast = useCallback((imageId: string, folderName: string) => {
     toast(`Suggested folder: "${folderName}"`, {
       action: {
         label: 'Accept',
@@ -43,9 +43,9 @@ export function useVisionSuggestion(): { checkVision: (imageId: string) => void 
         onClick: () => {},
       },
     })
-  }
+  }, [getToken, queryClient])
 
-  function checkVision(imageId: string) {
+  const checkVision = useCallback((imageId: string) => {
     if (!me?.vision_enabled) return
 
     timer1.current = setTimeout(async () => {
@@ -73,7 +73,7 @@ export function useVisionSuggestion(): { checkVision: (imageId: string) => void 
         }
       }, 2000)
     }, 1000)
-  }
+  }, [me, getToken, showSuggestionToast])
 
   return { checkVision }
 }

@@ -1,6 +1,6 @@
 ## 1. Gallery Thumbnail Self-Poll
 
-- [x] 1.1 Add `refetchInterval` to `useInfiniteQuery` in `ImageGrid.tsx` — return `2000` when any flat-mapped image has `thumbnail_url === null`, `false` otherwise
+- [x] 1.1 Add `refetchInterval` to `useInfiniteQuery` in `ImageGrid.tsx` — return `1000` when any flat-mapped image has `thumbnail_url === null`, `false` otherwise
 
 ## 2. useVisionSuggestion Hook
 
