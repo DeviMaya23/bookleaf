@@ -8,7 +8,7 @@ Allows authenticated users to permanently delete individual trashed images or em
 
 ### Requirement: ListAllTrashed retrieves all trashed images for a user without pagination
 
-The system SHALL provide a `ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error)` method on `ImageRepository` that returns all soft-deleted image records for the given user, with no cursor or limit. It SHALL return an empty slice (not an error) when the user has no trashed images.
+The system SHALL provide a `ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error)` method on `TrashRepository` that returns all soft-deleted image records for the given user, with no cursor or limit. It SHALL return an empty slice (not an error) when the user has no trashed images.
 
 #### Scenario: Returns all trashed images for the user
 
@@ -27,7 +27,7 @@ The system SHALL provide a `ListAllTrashed(ctx context.Context, userID string) (
 The system SHALL provide a `DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error` method on `TrashUsecase` (not `ImageUsecase`) that permanently removes a single soft-deleted image owned by the given user.
 
 The method SHALL:
-1. Fetch the image via `GetDeletedByID` on `ImageRepository`; return a not-found error if it does not exist in trash
+1. Fetch the image via `GetDeletedByID` on `TrashRepository`; return a not-found error if it does not exist in trash
 2. Attempt to delete the R2 object at `r2_path` (synchronous, best-effort; log warn on failure, continue)
 3. Attempt to delete the R2 object at `thumbnail_path` if not nil (synchronous, best-effort; log warn on failure, continue)
 4. Hard-delete the DB record

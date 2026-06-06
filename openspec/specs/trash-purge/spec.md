@@ -29,7 +29,7 @@ For each expired record, the method SHALL:
 
 ### Requirement: ListExpiredTrash queries images past the retention window
 
-The system SHALL provide a `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)` method on `ImageRepository` that returns all images where `deleted_at IS NOT NULL AND deleted_at < olderThan`.
+The system SHALL provide a `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)` method on `TrashRepository` that returns all images where `deleted_at IS NOT NULL AND deleted_at < olderThan`.
 
 #### Scenario: Returns images past retention window
 
@@ -44,7 +44,7 @@ The system SHALL provide a `ListExpiredTrash(ctx context.Context, olderThan time
 
 ### Requirement: HardDelete permanently removes an image record
 
-The system SHALL provide a `HardDelete(ctx context.Context, id uuid.UUID, userID string) error` method on `ImageRepository` that permanently removes the image record using an unscoped delete, scoped to the given `userID`.
+The system SHALL provide a `HardDelete(ctx context.Context, id uuid.UUID, userID string) error` method on `TrashRepository` that permanently removes the image record using an unscoped delete, scoped to the given `userID`.
 
 #### Scenario: Hard delete removes the record permanently
 

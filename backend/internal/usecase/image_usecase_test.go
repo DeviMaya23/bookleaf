@@ -27,7 +27,6 @@ type mockImageRepository struct {
 	updateFields         map[string]any
 	lastUpdateID         uuid.UUID
 	lastUpdateBy         string
-	hardDeleteCalls      int
 	setFolderCalls       int
 	setFolderImageID     uuid.UUID
 	setFolderFolderID    *uuid.UUID
@@ -52,9 +51,6 @@ func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ 
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
 }
-func (m *mockImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
-	return m.image, m.err
-}
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
@@ -68,28 +64,6 @@ func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID str
 	m.lastUpdateBy = userID
 	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
-}
-func (m *mockImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
-	return 0, m.err
-}
-func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	m.hardDeleteCalls++
-	return m.err
 }
 func (m *mockImageRepository) SetImageFolder(_ context.Context, imageID uuid.UUID, folderID *uuid.UUID) error {
 	m.setFolderCalls++

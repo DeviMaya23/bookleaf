@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
@@ -13,6 +14,39 @@ import (
 )
 
 // --- test doubles ---
+
+type mockTrashRepository struct {
+	image           *domain.Image
+	images          []*domain.Image
+	err             error
+	hardDeleteCalls int
+}
+
+func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+	return m.image, m.err
+}
+func (m *mockTrashRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+	return m.image, m.err
+}
+func (m *mockTrashRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+func (m *mockTrashRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+func (m *mockTrashRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+func (m *mockTrashRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+	m.hardDeleteCalls++
+	return m.err
+}
 
 type mockJobEnqueuer struct {
 	err        error
@@ -24,7 +58,7 @@ func (m *mockJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
 	return m.err
 }
 
-func newTrashUsecase(repo ImageRepository, store StorageService, enqueuer JobEnqueuer) *trashUsecase {
+func newTrashUsecase(repo TrashRepository, store StorageService, enqueuer JobEnqueuer) *trashUsecase {
 	return NewTrashUsecase(repo, store, enqueuer, noopTel())
 }
 
@@ -37,7 +71,7 @@ func TestTrashUsecase_EmptyTrash_DeletesAndEnqueues(t *testing.T) {
 		{ID: uuid.New(), UserID: "u1", R2Path: r2Path, ThumbnailPath: &thumb},
 		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/b.jpg"},
 	}
-	repo := &mockImageRepository{images: images}
+	repo := &mockTrashRepository{images: images}
 	enqueuer := &mockJobEnqueuer{}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
@@ -52,7 +86,7 @@ func TestTrashUsecase_EmptyTrash_DeletesAndEnqueues(t *testing.T) {
 }
 
 func TestTrashUsecase_EmptyTrash_NoOp(t *testing.T) {
-	repo := &mockImageRepository{images: nil}
+	repo := &mockTrashRepository{images: nil}
 	enqueuer := &mockJobEnqueuer{}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
@@ -68,7 +102,7 @@ func TestTrashUsecase_EmptyTrash_EnqueueErrorContinues(t *testing.T) {
 		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/a.jpg"},
 		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/b.jpg"},
 	}
-	repo := &mockImageRepository{images: images}
+	repo := &mockTrashRepository{images: images}
 	enqueuer := &mockJobEnqueuer{err: errors.New("queue unavailable")}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
@@ -86,7 +120,7 @@ func TestTrashUsecase_DeleteFromTrash_DeletesR2AndDB(t *testing.T) {
 	r2Path := "users/u1/images/a.jpg"
 	thumb := "users/u1/thumbnails/a.jpg"
 	img := &domain.Image{ID: uuid.New(), UserID: "u1", R2Path: r2Path, ThumbnailPath: &thumb}
-	repo := &mockImageRepository{image: img}
+	repo := &mockTrashRepository{image: img}
 	store := &mockStorageService{}
 	uc := newTrashUsecase(repo, store, &mockJobEnqueuer{})
 
@@ -100,7 +134,7 @@ func TestTrashUsecase_DeleteFromTrash_DeletesR2AndDB(t *testing.T) {
 }
 
 func TestTrashUsecase_DeleteFromTrash_NotFound(t *testing.T) {
-	repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
+	repo := &mockTrashRepository{err: gorm.ErrRecordNotFound}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
 
 	err := uc.DeleteFromTrash(context.Background(), uuid.New(), "u1")
@@ -112,7 +146,7 @@ func TestTrashUsecase_DeleteFromTrash_NotFound(t *testing.T) {
 
 func TestTrashUsecase_DeleteFromTrash_R2FailureDoesNotBlockHardDelete(t *testing.T) {
 	img := &domain.Image{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/a.jpg"}
-	repo := &mockImageRepository{image: img}
+	repo := &mockTrashRepository{image: img}
 	store := &mockStorageService{deleteObjectErr: errors.New("r2 error")}
 	uc := newTrashUsecase(repo, store, &mockJobEnqueuer{})
 
@@ -128,7 +162,7 @@ func TestTrashUsecase_ProcessR2Delete_WithThumbnail(t *testing.T) {
 	r2Path := "users/u1/images/a.jpg"
 	thumb := "users/u1/thumbnails/a.jpg"
 	store := &mockStorageService{}
-	uc := newTrashUsecase(&mockImageRepository{}, store, &mockJobEnqueuer{})
+	uc := newTrashUsecase(&mockTrashRepository{}, store, &mockJobEnqueuer{})
 
 	err := uc.ProcessR2Delete(context.Background(), r2Path, &thumb)
 
@@ -141,7 +175,7 @@ func TestTrashUsecase_ProcessR2Delete_WithThumbnail(t *testing.T) {
 func TestTrashUsecase_ProcessR2Delete_WithoutThumbnail(t *testing.T) {
 	r2Path := "users/u1/images/a.jpg"
 	store := &mockStorageService{}
-	uc := newTrashUsecase(&mockImageRepository{}, store, &mockJobEnqueuer{})
+	uc := newTrashUsecase(&mockTrashRepository{}, store, &mockJobEnqueuer{})
 
 	err := uc.ProcessR2Delete(context.Background(), r2Path, nil)
 
@@ -152,7 +186,7 @@ func TestTrashUsecase_ProcessR2Delete_WithoutThumbnail(t *testing.T) {
 
 func TestTrashUsecase_ProcessR2Delete_StorageError(t *testing.T) {
 	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
-	uc := newTrashUsecase(&mockImageRepository{}, store, &mockJobEnqueuer{})
+	uc := newTrashUsecase(&mockTrashRepository{}, store, &mockJobEnqueuer{})
 
 	err := uc.ProcessR2Delete(context.Background(), "users/u1/images/a.jpg", nil)
 
