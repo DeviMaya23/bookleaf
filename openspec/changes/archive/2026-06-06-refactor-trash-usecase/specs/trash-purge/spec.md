@@ -1,4 +1,4 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: PurgeExpiredTrash permanently removes old trashed images
 
@@ -27,34 +27,7 @@ For each expired record, the method SHALL:
 - **THEN** the error is logged at warn level
 - **AND** the DB record is still hard-deleted
 
-### Requirement: ListExpiredTrash queries images past the retention window
-
-The system SHALL provide a `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)` method on `ImageRepository` that returns all images where `deleted_at IS NOT NULL AND deleted_at < olderThan`.
-
-#### Scenario: Returns images past retention window
-
-- **WHEN** `ListExpiredTrash` is called with a cutoff time
-- **THEN** it returns all image records with `deleted_at` set and older than the cutoff
-- **AND** records with `deleted_at` newer than the cutoff are not returned
-
-#### Scenario: Returns empty slice when no records match
-
-- **WHEN** `ListExpiredTrash` is called and no images are past the cutoff
-- **THEN** it returns an empty slice and no error
-
-### Requirement: HardDelete permanently removes an image record
-
-The system SHALL provide a `HardDelete(ctx context.Context, id uuid.UUID, userID string) error` method on `ImageRepository` that permanently removes the image record using an unscoped delete, scoped to the given `userID`.
-
-#### Scenario: Hard delete removes the record permanently
-
-- **WHEN** `HardDelete` is called with a valid image ID and user ID
-- **THEN** the image record is removed from the database and cannot be restored
-
-#### Scenario: Hard delete on non-existent record returns error
-
-- **WHEN** `HardDelete` is called with an image ID that does not match the given user ID
-- **THEN** the operation returns an error
+---
 
 ### Requirement: Background periodic job runs purge every 24 hours
 
