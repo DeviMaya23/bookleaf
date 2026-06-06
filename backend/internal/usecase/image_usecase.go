@@ -456,3 +456,101 @@ func (u *imageUsecase) PurgeExpiredTrash(ctx context.Context, threshold time.Dur
 
 	return nil
 }
+
+func (u *imageUsecase) DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DeleteFromTrash")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	img, err := u.imageRepo.GetDeletedByID(ctx, id, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	if err := u.store.DeleteObject(ctx, img.R2Path); err != nil {
+		logger.Warn("failed to delete R2 object from trash",
+			zap.String("event", "r2.trash.delete_failed"),
+			zap.String("image_id", img.ID.String()),
+			zap.String("r2_path", img.R2Path),
+			zap.Error(err),
+		)
+	}
+	if img.ThumbnailPath != nil {
+		if err := u.store.DeleteObject(ctx, *img.ThumbnailPath); err != nil {
+			logger.Warn("failed to delete thumbnail from trash",
+				zap.String("event", "r2.trash.thumbnail_delete_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.String("thumbnail_path", *img.ThumbnailPath),
+				zap.Error(err),
+			)
+		}
+	}
+	if err := u.imageRepo.HardDelete(ctx, img.ID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("hard delete image: %w", err)
+	}
+
+	logger.Info("image mutated",
+		zap.String("event", "image.mutated"),
+		zap.String("image_id", img.ID.String()),
+		zap.String("user_id", userID),
+		zap.String("operation", "deleted_from_trash"),
+	)
+	return nil
+}
+
+func (u *imageUsecase) EmptyTrash(ctx context.Context, userID string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.EmptyTrash")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	images, err := u.imageRepo.ListAllTrashed(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("list all trashed: %w", err)
+	}
+
+	for _, img := range images {
+		if err := u.store.DeleteObject(ctx, img.R2Path); err != nil {
+			logger.Warn("failed to delete R2 object during empty trash",
+				zap.String("event", "r2.trash.delete_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.String("r2_path", img.R2Path),
+				zap.Error(err),
+			)
+		}
+		if img.ThumbnailPath != nil {
+			if err := u.store.DeleteObject(ctx, *img.ThumbnailPath); err != nil {
+				logger.Warn("failed to delete thumbnail during empty trash",
+					zap.String("event", "r2.trash.thumbnail_delete_failed"),
+					zap.String("image_id", img.ID.String()),
+					zap.String("thumbnail_path", *img.ThumbnailPath),
+					zap.Error(err),
+				)
+			}
+		}
+		if err := u.imageRepo.HardDelete(ctx, img.ID, userID); err != nil {
+			logger.Warn("failed to hard delete during empty trash",
+				zap.String("event", "r2.trash.hard_delete_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(err),
+			)
+		}
+	}
+
+	if len(images) > 0 {
+		logger.Info("trash emptied",
+			zap.String("event", "r2.trash.emptied"),
+			zap.String("user_id", userID),
+			zap.Int("deleted", len(images)),
+		)
+	}
+
+	return nil
+}

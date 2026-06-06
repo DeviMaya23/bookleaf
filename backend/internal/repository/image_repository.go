@@ -349,6 +349,18 @@ func (r *imageRepository) ListTrashed(ctx context.Context, userID string, cursor
 	return images, nil
 }
 
+func (r *imageRepository) ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
+		Order("deleted_at ASC, id ASC").
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list all trashed images: %w", err)
+	}
+	return images, nil
+}
+
 func (r *imageRepository) CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).

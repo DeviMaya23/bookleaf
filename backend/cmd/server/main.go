@@ -289,6 +289,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
 	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
 	protected.GET("/images/trash", imageHandler.ListTrashed)
+	protected.DELETE("/images/trash", imageHandler.EmptyTrash)
+	protected.DELETE("/images/trash/:id", imageHandler.DeleteFromTrash)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
 	protected.GET("/images/:id/download", imageHandler.DownloadImage)
