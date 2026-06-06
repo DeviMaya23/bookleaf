@@ -38,10 +38,6 @@ type UploadImageRepository interface {
 
 const uploadURLTTL = 15 * time.Minute
 
-type ThumbnailService interface {
-	Generate(ctx context.Context, src io.Reader) (io.Reader, error)
-}
-
 type VisionService interface {
 	AnnotateImage(ctx context.Context, imageBytes []byte) ([]domain.Label, error)
 }
@@ -64,13 +60,10 @@ type imageUploadUsecase struct {
 	folderRepo        ImageFolderRepository
 	userRepo          UserRepository
 	store             StorageService
-	thumbnails        ThumbnailService
 	visionService     VisionService
 	enqueuer          JobEnqueuer
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
-	thumbnailDuration metric.Float64Histogram
-	thumbnailCount    metric.Int64Counter
 }
 
 func NewImageUploadUsecase(
@@ -79,7 +72,6 @@ func NewImageUploadUsecase(
 	folderRepo ImageFolderRepository,
 	userRepo UserRepository,
 	store StorageService,
-	thumbnails ThumbnailService,
 	visionService VisionService,
 	enqueuer JobEnqueuer,
 	tel *observability.Telemetry,
@@ -88,15 +80,6 @@ func NewImageUploadUsecase(
 		"r2.upload.count",
 		metric.WithDescription("Total number of upload completion requests"),
 	)
-	thumbnailDuration, _ := tel.Meter.Float64Histogram(
-		"r2.thumbnail.duration",
-		metric.WithUnit("ms"),
-		metric.WithDescription("Duration of thumbnail generation in milliseconds"),
-	)
-	thumbnailCount, _ := tel.Meter.Int64Counter(
-		"r2.thumbnail.count",
-		metric.WithDescription("Total number of thumbnail generation attempts"),
-	)
 
 	return &imageUploadUsecase{
 		imageRepo:         imageRepo,
@@ -104,13 +87,10 @@ func NewImageUploadUsecase(
 		folderRepo:        folderRepo,
 		userRepo:          userRepo,
 		store:             store,
-		thumbnails:        thumbnails,
 		visionService:     visionService,
 		enqueuer:          enqueuer,
 		tel:               tel,
 		uploadCount:       uploadCount,
-		thumbnailDuration: thumbnailDuration,
-		thumbnailCount:    thumbnailCount,
 	}
 }
 
@@ -220,25 +200,17 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 	}
 
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
-	thumbnailExists, err := u.store.HeadObject(ctx, thumbnailKey)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("check thumbnail existence: %w", err)
-	}
 
 	img := &domain.Image{
-		ID:          pending.ID,
-		UserID:      pending.UserID,
-		Title:       pending.Title,
-		Description: pending.Description,
-		SourceURL:   pending.SourceURL,
-		R2Path:      pending.R2Path,
-		MIMEType:    pending.MIMEType,
-		FileSize:    &fileSize,
-	}
-	if thumbnailExists {
-		img.ThumbnailPath = &thumbnailKey
+		ID:            pending.ID,
+		UserID:        pending.UserID,
+		Title:         pending.Title,
+		Description:   pending.Description,
+		SourceURL:     pending.SourceURL,
+		R2Path:        pending.R2Path,
+		MIMEType:      pending.MIMEType,
+		FileSize:      &fileSize,
+		ThumbnailPath: &thumbnailKey,
 	}
 	if width > 0 {
 		widthValue := width
@@ -264,19 +236,6 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
-	}
-
-	if !thumbnailExists {
-		if err := u.enqueuer.Insert(ctx, ThumbnailUploadArgs{
-			ImageID:      pending.ID,
-			UserID:       pending.UserID,
-			R2Path:       pending.R2Path,
-			ThumbnailKey: thumbnailKey,
-		}); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, fmt.Errorf("enqueue thumbnail upload: %w", err)
-		}
 	}
 
 	if err := u.enqueuer.Insert(ctx, VisionArgs{
@@ -391,52 +350,6 @@ func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path st
 	}
 
 	return width, height, int64(len(rawBytes)), nil
-}
-
-func (u *imageUploadUsecase) ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error {
-	src, err := u.store.GetObject(ctx, r2Path)
-	if err != nil {
-		return fmt.Errorf("fetch original: %w", err)
-	}
-	defer src.Close()
-
-	rawBytes, err := io.ReadAll(src)
-	if err != nil {
-		return fmt.Errorf("read original: %w", err)
-	}
-
-	start := time.Now()
-	recordMetrics := func(status string) {
-		elapsed := float64(time.Since(start).Milliseconds())
-		attrs := metric.WithAttributes(attribute.String("r2.status", status))
-		u.thumbnailDuration.Record(ctx, elapsed, attrs)
-		u.thumbnailCount.Add(ctx, 1, attrs)
-	}
-
-	thumb, err := u.thumbnails.Generate(ctx, bytes.NewReader(rawBytes))
-	if err != nil {
-		recordMetrics("error")
-		return fmt.Errorf("generate thumbnail: %w", err)
-	}
-
-	thumbBytes, err := io.ReadAll(thumb)
-	if err != nil {
-		recordMetrics("error")
-		return fmt.Errorf("read thumbnail: %w", err)
-	}
-
-	if err := u.store.PutObject(ctx, thumbnailKey, bytes.NewReader(thumbBytes), "image/jpeg"); err != nil {
-		recordMetrics("error")
-		return fmt.Errorf("upload thumbnail: %w", err)
-	}
-
-	if err := u.imageRepo.UpdateThumbnailPath(ctx, imageID, thumbnailKey); err != nil {
-		recordMetrics("error")
-		return fmt.Errorf("update thumbnail path: %w", err)
-	}
-
-	recordMetrics("success")
-	return nil
 }
 
 func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error {

@@ -35,17 +35,46 @@ async function fetchImageBlob(
   return { blob, mimeType };
 }
 
+async function generateThumbnail(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob);
+
+  const { width, height } = bitmap;
+  const scale = Math.min(1, 600 / Math.max(width, height));
+  const tw = Math.round(width * scale);
+  const th = Math.round(height * scale);
+
+  const canvas = new OffscreenCanvas(tw, th);
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(bitmap, 0, 0, tw, th);
+  bitmap.close();
+
+  return canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return `data:image/jpeg;base64,${btoa(binary)}`;
+}
+
 async function saveImage({
   blob,
   mimeType,
   title,
   pageUrl,
+  thumbnailBlob,
 }: {
   blob: Blob;
   mimeType: string;
   title: string;
   pageUrl: string;
   accessToken: string;
+  thumbnailBlob?: Blob;
 }): Promise<string> {
   const initRes = await apiFetch("/images", {
     method: "POST",
@@ -58,17 +87,33 @@ async function saveImage({
   });
   if (!initRes.ok) throw new Error(`POST /images failed: ${initRes.status}`);
 
-  const { upload_url, id: image_id } = (await initRes.json()) as {
+  const { upload_url, thumbnail_upload_url, id: image_id } = (await initRes.json()) as {
     upload_url: string;
+    thumbnail_upload_url: string;
     id: string;
   };
 
-  const putRes = await fetch(upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": mimeType },
-    body: blob,
-  });
-  if (!putRes.ok) throw new Error(`PUT to R2 failed: ${putRes.status}`);
+  const puts: Promise<Response>[] = [
+    fetch(upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": mimeType },
+      body: blob,
+    }),
+  ];
+  if (thumbnailBlob) {
+    puts.push(
+      fetch(thumbnail_upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": "image/jpeg" },
+        body: thumbnailBlob,
+      }),
+    );
+  }
+
+  const results = await Promise.all(puts);
+  for (const res of results) {
+    if (!res.ok) throw new Error(`PUT to R2 failed: ${res.status}`);
+  }
 
   const completeRes = await apiFetch(`/images/${image_id}/complete`, {
     method: "POST",
@@ -77,34 +122,6 @@ async function saveImage({
     throw new Error(`POST /complete failed: ${completeRes.status}`);
 
   return image_id;
-}
-
-async function generateThumbnail(blob: Blob): Promise<string> {
-  const bitmap = await createImageBitmap(blob);
-  const canvas = new OffscreenCanvas(60, 60);
-  const ctx = canvas.getContext("2d")!;
-
-  const { width, height } = bitmap;
-  const scale = Math.max(60 / width, 60 / height);
-  const sw = width * scale;
-  const sh = height * scale;
-  const dx = (60 - sw) / 2;
-  const dy = (60 - sh) / 2;
-
-  ctx.drawImage(bitmap, dx, dy, sw, sh);
-  bitmap.close();
-
-  const thumbBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.7 });
-  const buffer = await thumbBlob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-
-  let binary = "";
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-
-  return `data:image/jpeg;base64,${btoa(binary)}`;
 }
 
 async function handleSave({
@@ -126,17 +143,22 @@ async function handleSave({
   }
 
   let imageId: string | null = null;
-  let blob: Blob | null = null;
+  let thumbnailBlob: Blob | null = null;
 
   try {
     const fetched = await fetchImageBlob(srcUrl);
-    blob = fetched.blob;
+
+    if (typeof OffscreenCanvas !== "undefined") {
+      thumbnailBlob = await generateThumbnail(fetched.blob);
+    }
+
     imageId = await saveImage({
-      blob,
+      blob: fetched.blob,
       mimeType: fetched.mimeType,
       title,
       pageUrl,
       accessToken: auth.accessToken,
+      thumbnailBlob: thumbnailBlob ?? undefined,
     });
     await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
   } catch {
@@ -144,17 +166,9 @@ async function handleSave({
     return;
   }
 
-  if (blob && imageId) {
-    if (typeof OffscreenCanvas !== "undefined") {
-      try {
-        const dataUrl = await generateThumbnail(blob);
-        await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
-      } catch (err) {
-        console.error("[Bookleaf] Thumbnail generation failed:", err);
-      }
-    } else {
-      await addRecentSave({ imageId, title, dataUrl: "", savedAt: Date.now() });
-    }
+  if (imageId) {
+    const dataUrl = thumbnailBlob ? await blobToDataUrl(thumbnailBlob) : "";
+    await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
   }
 }
 

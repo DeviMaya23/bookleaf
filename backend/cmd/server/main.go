@@ -18,7 +18,6 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/devi/bookleaf/internal/vision"
 	"github.com/devi/bookleaf/internal/worker"
-	"github.com/devi/bookleaf/pkg/thumbnail"
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v4"
@@ -197,7 +196,6 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	userUsecase := usecase.NewUserUsecase(userRepository, tel)
 	folderRepository := repository.NewFolderRepository(db)
 	storageService := storage.NewR2Storage(cfg.R2, tel)
-	thumbnailService := thumbnail.NewThumbnailService()
 	imageRepository := repository.NewImageRepository(db)
 	pendingUploadRepository := repository.NewPendingUploadRepository(db)
 	tagRepository := repository.NewTagRepository(db)
@@ -225,10 +223,9 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	enqueuer := &riverEnqueuer{}
 
 	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, tel)
-	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, thumbnailService, visionService, enqueuer, tel)
+	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
 
 	workers := river.NewWorkers()
-	river.AddWorker(workers, worker.NewThumbnailUploadWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewVisionWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewCleanupStaleUploadsWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewTrashPurgeWorker(imageUsecase))
