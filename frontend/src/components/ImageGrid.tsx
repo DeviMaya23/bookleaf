@@ -191,8 +191,12 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
   const orderedImagesRef = useRef(orderedImages)
   useEffect(() => { orderedImagesRef.current = orderedImages }, [orderedImages])
 
+  const lastProcessedTriggerTs = useRef<number>(-1)
+
   useEffect(() => {
     if (!sortEndTrigger || view.type !== 'folder') return
+    if (sortEndTrigger.ts <= lastProcessedTriggerTs.current) return
+    lastProcessedTriggerTs.current = sortEndTrigger.ts
     const { activeId, overId } = sortEndTrigger
     const current = orderedImagesRef.current
 
