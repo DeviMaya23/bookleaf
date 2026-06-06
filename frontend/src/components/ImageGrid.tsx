@@ -153,10 +153,6 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
     queryFn: fetcherFor(view, getToken),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
-    refetchInterval: (query) => {
-      const images = query.state.data?.pages.flatMap((p) => p.images) ?? []
-      return images.some((img) => img.thumbnail_url === null) ? 1000 : false
-    },
   })
 
   const allImages = data?.pages.flatMap((p) => p.images) ?? []
