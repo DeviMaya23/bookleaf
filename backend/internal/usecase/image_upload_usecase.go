@@ -241,7 +241,6 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 	if err := u.enqueuer.Insert(ctx, VisionArgs{
 		ImageID: pending.ID,
 		UserID:  pending.UserID,
-		R2Path:  pending.R2Path,
 	}); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -367,9 +366,13 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 		return fmt.Errorf("fetch image: %w", err)
 	}
 
-	src, err := u.store.GetObject(ctx, img.R2Path)
+	if img.ThumbnailPath == nil {
+		return fmt.Errorf("image has no thumbnail path")
+	}
+
+	src, err := u.store.GetObject(ctx, *img.ThumbnailPath)
 	if err != nil {
-		return fmt.Errorf("fetch image bytes: %w", err)
+		return fmt.Errorf("fetch thumbnail bytes: %w", err)
 	}
 	defer src.Close()
 
