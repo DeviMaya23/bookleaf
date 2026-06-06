@@ -32,3 +32,5 @@ If, while implementing a task, you discover that something not covered by the de
 
 ### Others to keep in mind during proposals
 - When creating tasks for a new endpoint, always include a bruno file creation.
+- On any BE development, include a task to run golang-ci lint at the end, and fix whatever issue arises.
+- On any FE development, include a task to run npm run build at the end, and fix whatever issue arises.
