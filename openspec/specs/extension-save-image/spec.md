@@ -26,15 +26,23 @@ When the user clicks "Save to Bookleaf", the extension SHALL:
 1. Read the stored auth token from `chrome.storage.local`
 2. If no token exists or the token is expired, send a toast message to the active tab with title "Bookleaf" and body "Please log in first." and abort
 3. Fetch the image blob from `info.srcUrl` via the background service worker
-4. Execute the 3-step upload sequence: `POST /images` → `PUT` blob to presigned R2 URL → `POST /images/:id/complete`
+4. Execute the 4-step upload sequence:
+   a. `POST /images` → receives `{ upload_url, thumbnail_upload_url, id }`
+   b. If `OffscreenCanvas` is available, generate a thumbnail blob from the image blob (600px max, JPEG)
+   c. `PUT` image blob to `upload_url` and (if thumbnail was generated) `PUT` thumbnail blob to `thumbnail_upload_url`, in parallel
+   d. `POST /images/:id/complete`
 5. Send a success toast to the active tab with title "Saved to Bookleaf." and body "Added to Unsorted."
 
 The image title SHALL be set to the current tab's title (`tab.title`). The `source_url` SHALL be set to `info.pageUrl`. No `folder_id` SHALL be sent (image saves to root). The `tabId` from the context menu event SHALL be threaded into the save handler and used for all `browser.tabs.sendMessage` calls.
 
+If thumbnail generation or the thumbnail PUT fails, the entire save SHALL fail (no partial save with a missing thumbnail).
+
+If `OffscreenCanvas` is not available, the thumbnail PUT is skipped and the save proceeds with only the image PUT. The backend `HeadObject` fallback will enqueue the thumbnail worker in this case.
+
 #### Scenario: Successful save shows in-page success toast
 
 - **WHEN** the user clicks "Save to Bookleaf" while authenticated and the image is fetchable
-- **THEN** the image is uploaded to Bookleaf with the page title as its title and page URL as its source_url
+- **THEN** the image and thumbnail are uploaded to Bookleaf with the page title as its title and page URL as its source_url
 - **AND** an in-page toast with title "Saved to Bookleaf." and body "Added to Unsorted." is shown in the active tab
 
 #### Scenario: Unauthenticated save is rejected
@@ -61,7 +69,7 @@ If any step in the save flow fails (image fetch error, API error, presigned PUT 
 
 #### Scenario: Upload API failure shows in-page error toast
 
-- **WHEN** any step of the 3-step upload sequence returns a non-2xx response
+- **WHEN** any step of the 4-step upload sequence returns a non-2xx response
 - **THEN** an in-page toast with title "Couldn't save image." and body "Check your connection and try again." is shown
 
 #### Scenario: sendMessage rejection is silently ignored
