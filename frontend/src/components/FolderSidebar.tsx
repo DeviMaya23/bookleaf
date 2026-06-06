@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import FolderNameDialog from './FolderNameDialog'
 import ProfileMenu from './ProfileMenu'
 import { getFolders, createFolder, renameFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
+import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 
@@ -245,6 +246,7 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   const [subfolderParent, setSubfolderParent] = useState<Folder | null>(null)
   const [renameTarget, setRenameTarget] = useState<Folder | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
+  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['folders'] })
 
@@ -268,6 +270,15 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
     onError: () => {
       toast.error('Failed to delete folder')
     },
+  })
+
+  const emptyTrashMutation = useMutation({
+    mutationFn: () => emptyTrash(getToken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
+      toast.success('Trash emptied')
+    },
+    onError: () => toast.error('Failed to empty trash'),
   })
 
   function handleDelete() {
@@ -305,16 +316,28 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
           onClick={() => navigate('/unsorted')}
         />
         <div className="mt-[8px]">
-          <div
-            className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
-              view.type === 'trash'
-                ? 'bg-accent text-accent-foreground font-medium'
-                : 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
-            }`}
-            onClick={() => navigate('/trash')}
-          >
-            Trash
-          </div>
+          <ContextMenu>
+            <ContextMenuTrigger>
+              <div
+                className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+                  view.type === 'trash'
+                    ? 'bg-accent text-accent-foreground font-medium'
+                    : 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
+                }`}
+                onClick={() => navigate('/trash')}
+              >
+                Trash
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem
+                onClick={() => setConfirmEmptyTrash(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                Empty trash
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
 
         <div className="pt-2 pb-1">
@@ -397,6 +420,32 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Empty trash confirmation */}
+      <Dialog open={confirmEmptyTrash} onOpenChange={setConfirmEmptyTrash}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Empty trash?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            All images in trash will be permanently deleted. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmEmptyTrash(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                emptyTrashMutation.mutate()
+                setConfirmEmptyTrash(false)
+              }}
+            >
+              Empty trash
             </Button>
           </DialogFooter>
         </DialogContent>

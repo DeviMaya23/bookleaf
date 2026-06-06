@@ -69,6 +69,16 @@ export async function deleteImage(getToken: GetToken, id: string): Promise<void>
   if (!res.ok) throw new Error('Failed to delete image')
 }
 
+export async function hardDeleteImage(getToken: GetToken, id: string): Promise<void> {
+  const res = await apiFetch(`/images/trash/${id}`, getToken, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to permanently delete image')
+}
+
+export async function emptyTrash(getToken: GetToken): Promise<void> {
+  const res = await apiFetch('/images/trash', getToken, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to empty trash')
+}
+
 export interface InitiateUploadParams {
   title: string
   mimeType: string

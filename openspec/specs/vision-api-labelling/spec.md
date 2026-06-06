@@ -101,8 +101,8 @@ The system SHALL add `ProcessVisionLabelling(ctx context.Context, imageID uuid.U
 
 The method SHALL:
 1. Fetch the user record via `UserRepository.GetByID(ctx, userID)`; return nil (not an error) if `vision_enabled` is false or if `visionService` is nil
-2. Fetch the image record via `ImageRepository.GetByID(ctx, imageID, userID)` to get `r2_path`
-3. Call `StorageService.GetObject(ctx, r2Path)` to fetch the image bytes
+2. Fetch the image record via `ImageRepository.GetByID(ctx, imageID, userID)` to get `thumbnail_path`
+3. Call `StorageService.GetObject(ctx, thumbnailPath)` to fetch the thumbnail bytes; return a non-nil error if `thumbnail_path` is nil
 4. Call `VisionService.AnnotateImage` with a 5-second context timeout
 5. Marshal the returned labels as JSON (empty array `[]` if Vision returned zero labels) and call `ImageRepository.UpdateAILabels(ctx, imageID, labelsJSON)`
 

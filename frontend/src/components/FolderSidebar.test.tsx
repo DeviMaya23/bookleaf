@@ -1,6 +1,72 @@
-import { describe, it, expect } from 'vitest'
-import { getFolderSubtreeIds } from '@/lib/folders'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
+import { getFolderSubtreeIds, getFolders } from '@/lib/folders'
+import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
+import FolderSidebar from './FolderSidebar'
+
+vi.mock('@kinde-oss/kinde-auth-react', () => ({
+  useKindeAuth: () => ({
+    getToken: vi.fn().mockResolvedValue('token'),
+    getUserProfile: vi.fn().mockResolvedValue(null),
+  }),
+}))
+
+vi.mock('./ProfileMenu', () => ({
+  default: () => null,
+}))
+
+vi.mock('@dnd-kit/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@dnd-kit/core')>()),
+  useDndContext: () => ({ active: null }),
+}))
+
+vi.mock('@/lib/folders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/folders')>()),
+  getFolders: vi.fn(),
+}))
+
+vi.mock('@/lib/images', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/images')>()),
+  emptyTrash: vi.fn(),
+}))
+
+vi.mock('@/components/ui/context-menu', async () => {
+  const React = await import('react')
+  return {
+    ContextMenu: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    ContextMenuTrigger: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    ContextMenuContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    ContextMenuSeparator: () => React.createElement('hr'),
+    ContextMenuItem: ({
+      children,
+      onClick,
+      className,
+    }: {
+      children: React.ReactNode
+      onClick?: (e: React.MouseEvent) => void
+      className?: string
+    }) =>
+      React.createElement('button', { role: 'menuitem', className, onClick }, children),
+  }
+})
+
+function renderSidebar() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <FolderSidebar view={{ type: 'trash' }} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
 
 function makeFolder(id: string, parentId: string | null = null): Folder {
   return {
@@ -12,6 +78,40 @@ function makeFolder(id: string, parentId: string | null = null): Folder {
     updated_at: '2026-01-01T00:00:00Z',
   }
 }
+
+describe('FolderSidebar trash context menu', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+  })
+
+  it('shows Empty trash item when right-clicking the Trash entry', async () => {
+    renderSidebar()
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /empty trash/i })).toBeInTheDocument()
+    })
+  })
+
+  it('calls emptyTrash after confirming the dialog', async () => {
+    vi.mocked(emptyTrash).mockResolvedValue(undefined)
+
+    renderSidebar()
+
+    await waitFor(() => {
+      expect(screen.getByRole('menuitem', { name: /empty trash/i })).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /empty trash/i }))
+
+    const confirmButton = await screen.findByRole('button', { name: /empty trash/i })
+    await userEvent.click(confirmButton)
+
+    await waitFor(() => {
+      expect(emptyTrash).toHaveBeenCalledWith(expect.any(Function))
+    })
+  })
+})
 
 describe('getFolderSubtreeIds', () => {
   it('returns subtree including self and all descendants', () => {

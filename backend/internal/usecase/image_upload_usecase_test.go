@@ -327,7 +327,8 @@ func TestImageUploadUsecase_CompleteUpload_AlwaysSetsThumbnailPath(t *testing.T)
 
 func TestImageUploadUsecase_ProcessVisionLabelling_SavesLabels(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	thumb := "users/kp_abc123/thumbnails/thumb.jpg"
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg", ThumbnailPath: &thumb}}
 	store := &mockStorageService{objectBytes: []byte("img-bytes")}
 	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
 	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
@@ -346,7 +347,8 @@ func TestImageUploadUsecase_ProcessVisionLabelling_SavesLabels(t *testing.T) {
 
 func TestImageUploadUsecase_ProcessVisionLabelling_ZeroLabelsWritesEmpty(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	thumb := "users/kp_abc123/thumbnails/thumb.jpg"
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg", ThumbnailPath: &thumb}}
 	store := &mockStorageService{objectBytes: []byte("img-bytes")}
 	visionSvc := &mockVisionService{labels: []domain.Label{}}
 	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
@@ -373,7 +375,8 @@ func TestImageUploadUsecase_ProcessVisionLabelling_VisionDisabledReturnsNil(t *t
 
 func TestImageUploadUsecase_ProcessVisionLabelling_VisionAPIErrorReturnsError(t *testing.T) {
 	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg"}}
+	thumb := "users/kp_abc123/thumbnails/thumb.jpg"
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/img.jpg", ThumbnailPath: &thumb}}
 	store := &mockStorageService{objectBytes: []byte("img-bytes")}
 	visionSvc := &mockVisionService{err: errors.New("vision API unavailable")}
 	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
