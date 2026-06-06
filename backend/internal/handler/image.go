@@ -28,6 +28,8 @@ type ImageUsecase interface {
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error)
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageItem, error)
+	DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error
+	EmptyTrash(ctx context.Context, userID string) error
 }
 
 type ImageHandler struct {
@@ -330,6 +332,50 @@ func (h *ImageHandler) Restore(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, toImageResponse(*item))
+}
+
+func (h *ImageHandler) DeleteFromTrash(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteFromTrash")
+	defer span.End()
+
+	imageID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	if err := h.imageUsecase.DeleteFromTrash(ctx, imageID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "image not found in trash")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete image from trash")
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *ImageHandler) EmptyTrash(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.EmptyTrash")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	if err := h.imageUsecase.EmptyTrash(ctx, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to empty trash")
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *ImageHandler) UpdateImage(c echo.Context) error {

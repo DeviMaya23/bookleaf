@@ -35,6 +35,7 @@ type ImageRepository interface {
 	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
 	Restore(ctx context.Context, id uuid.UUID, userID string) error
 	ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error)
 	// CountByFolderID counts non-deleted images with a row in image_folders for the given folder.
 	// Queries via Model(&domain.Image{}) + JOIN image_folders so soft-delete scope applies automatically.
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)

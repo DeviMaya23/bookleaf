@@ -95,6 +95,14 @@ func (m *mockImageUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*u
 	return m.imageItem, m.err
 }
 
+func (m *mockImageUsecase) DeleteFromTrash(_ context.Context, _ uuid.UUID, _ string) error {
+	return m.err
+}
+
+func (m *mockImageUsecase) EmptyTrash(_ context.Context, _ string) error {
+	return m.err
+}
+
 func strPtr(s string) *string { return &s }
 
 // --- toImageResponse ---
@@ -952,4 +960,76 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, rec.Code)
 		})
 	}
+}
+
+// --- DeleteFromTrash ---
+
+func TestImageHandler_DeleteFromTrash(t *testing.T) {
+	imageID := uuid.New()
+
+	tests := []struct {
+		name          string
+		uc            *mockImageUsecase
+		wantStatus    int
+		wantErrStatus int
+	}{
+		{
+			name:       "returns 204 on success",
+			uc:         &mockImageUsecase{},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name:          "returns 404 when image not in trash",
+			uc:            &mockImageUsecase{err: gorm.ErrRecordNotFound},
+			wantErrStatus: http.StatusNotFound,
+		},
+		{
+			name:          "returns 500 on generic error",
+			uc:            &mockImageUsecase{err: errors.New("db error")},
+			wantErrStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodDelete, "/images/trash/"+imageID.String(), "")
+			c.SetPath("/images/trash/:id")
+			c.SetParamNames("id")
+			c.SetParamValues(imageID.String())
+
+			err := h.DeleteFromTrash(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
+	}
+}
+
+func TestImageHandler_DeleteFromTrash_InvalidUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodDelete, "/images/trash/not-a-uuid", "")
+	c.SetPath("/images/trash/:id")
+	c.SetParamNames("id")
+	c.SetParamValues("not-a-uuid")
+
+	err := h.DeleteFromTrash(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- EmptyTrash ---
+
+func TestImageHandler_EmptyTrash(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodDelete, "/images/trash", "")
+
+	err := h.EmptyTrash(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
 }

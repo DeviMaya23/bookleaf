@@ -1,0 +1,15 @@
+meta {
+  name: Delete From Trash
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/images/trash/{{imageId}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  imageId: 1913b146-b2c7-46b2-b314-905de8e95c01
+}
