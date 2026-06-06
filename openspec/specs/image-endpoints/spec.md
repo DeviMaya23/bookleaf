@@ -1,25 +1,24 @@
 ### Requirement: Image Repository Interface
 
-The system SHALL define an `ImageRepository` interface in `internal/usecase/` that the SQL repository implements.
+The system SHALL define an `ImageRepository` interface in `internal/usecase/image_repository.go` containing only the methods used by `imageUsecase` and the upload transaction callback. Per the conventions, each usecase defines its own interface for its dependencies — trash-related and upload-related methods live on `TrashRepository` and `UploadImageRepository` respectively.
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
 - `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — when `folderID` is non-nil: returns all non-deleted images for that folder ordered by `image_folders.position ASC`; `cursor` and `limit` are ignored; images are returned with `Tags` and `ImageFolders` preloaded. When `folderID` is nil: returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` applies a keyset filter; `unfiled` true limits to images with no entry in `image_folders`; `tagID` non-nil filters by tag.
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` and `ImageFolders` preloaded
-- `GetDeletedByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns soft-deleted images only; result has `ImageFolders` preloaded
-- `UpdateThumbnailPath(ctx, id uuid.UUID, thumbnailPath string) error` — updates `thumbnail_path`; no ownership check (called internally by goroutine)
-- `UpdateAILabels(ctx, id uuid.UUID, labels json.RawMessage) error`
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied scalar fields for the image owned by `userID`; `folder_id` is NOT a valid key in the map (folder assignment is handled by `SetImageFolder`); result has `Tags` and `ImageFolders` preloaded
 - `SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error` — see `image-folders` spec for full behaviour
+- `SyncImageFolders(ctx context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error` — diffs current memberships against folderIDs and applies deletes/inserts in a transaction
+- `MoveImageFolder(ctx context.Context, imageID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) error` — atomically removes image from fromFolderID and adds to toFolderID
 - `UpdateImageFolderPosition(ctx context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error` — see `image-folders` spec for full behaviour
-- `SoftDelete(ctx, id uuid.UUID, userID string) error`
-- `Restore(ctx, id uuid.UUID, userID string) error`
-- `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(deleted_at ASC, id ASC)`; fetches `limit + 1` rows; `cursor` nil means first page
-- `CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)` — counts non-deleted images with a row in `image_folders` for the given folder
-- `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)`
-- `HardDelete(ctx context.Context, id uuid.UUID, userID string) error`
 
 `ListStaleUploads` is REMOVED from this interface. Stale upload detection is now handled by `PendingUploadRepository.ListStale`.
+
+`UpdateThumbnailPath` and `UpdateAILabels` are on `UploadImageRepository` (defined in `image_upload_usecase.go`), not `ImageRepository`.
+
+`CountByFolderID` is on `ImageCounter` (defined in `folder_usecase.go`), not `ImageRepository`.
+
+Trash lifecycle methods (`GetDeletedByID`, `SoftDelete`, `Restore`, `ListTrashed`, `ListAllTrashed`, `ListExpiredTrash`, `HardDelete`) are on `TrashRepository` (defined in `trash_repository.go`), not `ImageRepository`.
 
 #### Scenario: Repository interface is satisfied by SQL implementation
 
@@ -53,10 +52,28 @@ Methods:
 - **WHEN** `List` is called with a non-nil `tagID`
 - **THEN** only images associated with that tag are returned
 
-#### Scenario: CountByFolderID excludes soft-deleted images
+---
 
-- **WHEN** a folder contains 3 images of which one is soft-deleted
-- **THEN** `CountByFolderID` returns `2`
+### Requirement: Trash Repository Interface
+
+The system SHALL define a `TrashRepository` interface in `internal/usecase/trash_repository.go` containing only the methods used by `trashUsecase`. Per the conventions, `trashUsecase` defines its own interface for its repository dependency rather than depending on the broader `ImageRepository`.
+
+Methods:
+- `GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only
+- `GetDeletedByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)` — returns soft-deleted images only
+- `SoftDelete(ctx context.Context, id uuid.UUID, userID string) error`
+- `Restore(ctx context.Context, id uuid.UUID, userID string) error`
+- `ListTrashed(ctx context.Context, userID string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns soft-deleted images ordered by `(deleted_at ASC, id ASC)`; fetches `limit + 1` rows; `cursor` nil means first page
+- `ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error)` — returns all soft-deleted images for the user with no pagination
+- `ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)`
+- `HardDelete(ctx context.Context, id uuid.UUID, userID string) error`
+
+The concrete `*imageRepository` in `internal/repository/` satisfies both `ImageRepository` and `TrashRepository`.
+
+#### Scenario: TrashRepository is satisfied by SQL implementation
+
+- **WHEN** the Go package is compiled
+- **THEN** `imageRepository` in `internal/repository/` implements `usecase.TrashRepository` without compilation errors
 
 ---
 
@@ -99,7 +116,7 @@ This route SHALL be registered before `PATCH /images/:id` to avoid Echo treating
 
 ### Requirement: Image Usecase Interface
 
-The system SHALL define an `ImageUsecase` interface in `internal/usecase/` with methods corresponding to the HTTP operations, including `UpdateImage`. The `CompleteUpload` method SHALL return a result struct alongside the error.
+The system SHALL define an `ImageUsecase` interface in `internal/usecase/` with methods corresponding to image querying and editing operations. The `CompleteUpload` method SHALL return a result struct alongside the error.
 
 ```go
 CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error)
@@ -144,17 +161,15 @@ type ListImagesParams struct {
 }
 ```
 
-`ListImages` and `ListTrashed` SHALL use the paginated signatures:
+`ListImages` SHALL use the paginated signature:
 
 ```go
 ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error)
-ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
 ```
 
-`Restore` and `UpdateImage` SHALL return `*ImageItem` instead of `*domain.Image`:
+`UpdateImage` SHALL return `*ImageItem`:
 
 ```go
-Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
 UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error)
 ```
 
@@ -167,7 +182,7 @@ type ImageItem struct {
 }
 ```
 
-`ListImagesResult.Images` and `ListTrashedResult.Images` SHALL be `[]ImageItem`.
+`ListImagesResult.Images` SHALL be `[]ImageItem`.
 
 `ImageDetail` SHALL include a `ThumbnailURL *string` field alongside `ImageURL`:
 
@@ -183,10 +198,17 @@ All other method signatures are unchanged.
 
 When `UpdateImageParams.Tags` is non-nil, `UpdateImage` SHALL call `tagRepo.ReplaceImageTags` with the image ID and the given tag IDs after the scalar field update.
 
+Trash lifecycle methods (`SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTrash`, `EmptyTrash`, `PurgeExpiredTrash`) are NOT part of `ImageUsecase`. They belong to `TrashUsecase` (defined in `internal/usecase/trash_usecase.go`).
+
 #### Scenario: Usecase interface is satisfied by concrete implementation
 
 - **WHEN** the Go package is compiled
 - **THEN** `imageUsecase` implements `usecase.ImageUsecase` without compilation errors
+
+#### Scenario: ImageUsecase interface contains no trash methods
+
+- **WHEN** the Go package is compiled
+- **THEN** `imageUsecase` in `internal/usecase/` does not define or implement `SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTrash`, `EmptyTrash`, or `PurgeExpiredTrash`
 
 #### Scenario: UpdateImage replaces tags when Tags param is non-nil
 
@@ -218,7 +240,7 @@ The usecase SHALL generate presigned GET URLs for thumbnails with a 24h TTL. A p
 - Call `store.GeneratePresignedGetURL` with `presignedGetTTL` (24h)
 - Return `nil` if presigning fails (non-fatal; thumbnail is cosmetic)
 
-This helper SHALL be called by `ListImages`, `ListTrashed`, `GetImage`, `Restore`, and `UpdateImage`.
+This helper SHALL be called by `ListImages`, `GetImage`, and `UpdateImage` on `imageUsecase`. `trashUsecase` has its own equivalent helper used by `ListTrashed` and `Restore`.
 
 #### Scenario: Thumbnail URL is presigned when thumbnail path exists
 
@@ -727,23 +749,48 @@ The `GET /images` handler SHALL accept an optional `unfiled` boolean query param
 
 ### Requirement: Image Usecase Unit Tests
 
-The system SHALL have unit tests for `imageUsecase` covering each method with mocked `ImageRepository` and `StorageService`. Each method SHALL have at minimum one success scenario and one failure scenario.
+The system SHALL have unit tests for `imageUsecase` in `usecase/image_usecase_test.go` covering each method with mocked `ImageRepository` and `StorageService`. Trash lifecycle methods are covered by `trashUsecase` tests and SHALL NOT appear in `image_usecase_test.go`.
 
 #### Scenario: Usecase unit tests cover the happy path and failure path
 
-- **WHEN** each usecase method is tested with a valid mock setup
+- **WHEN** each imageUsecase method is tested with a valid mock setup
 - **THEN** both the success and at least one error case are asserted
 
 ---
 
 ### Requirement: Image Handler Unit Tests
 
-The system SHALL have unit tests for `ImageHandler` covering each handler method with a mocked `ImageUsecase`. Each handler method SHALL have at minimum one success scenario and one failure scenario.
+The system SHALL have unit tests for `ImageHandler` in `handler/image_test.go` covering each handler method on `ImageHandler` with a mocked `ImageUsecase`. Trash handler methods are covered by `TrashHandler` tests in `handler/trash_test.go` and SHALL NOT appear in `image_test.go`.
 
 #### Scenario: Handler unit tests cover HTTP status codes and response shape
 
-- **WHEN** each handler method is tested with a mock usecase
+- **WHEN** each ImageHandler method is tested with a mock usecase
 - **THEN** both the success status code and at least one error status code are asserted
+
+---
+
+### Requirement: TrashUsecase interface and TrashHandler defined
+
+The system SHALL define a `TrashUsecase` interface in `internal/usecase/trash_usecase.go` owning the full trash lifecycle: `SoftDelete`, `ListTrashed`, `Restore`, `PurgeExpiredTrash`, `DeleteFromTrash`, `EmptyTrash`, `ProcessR2Delete`.
+
+A `TrashHandler` in `internal/handler/trash.go` SHALL depend on a `TrashUsecase` interface defined locally in that file (following the same pattern as `ImageHandler`). `TrashHandler` SHALL handle all trash lifecycle routes:
+
+- `DELETE /images/:id` → SoftDelete
+- `POST /images/:id/restore` → Restore
+- `GET /images/trash` → ListTrashed
+- `DELETE /images/trash` → EmptyTrash
+- `DELETE /images/trash/:id` → DeleteFromTrash
+
+#### Scenario: TrashHandler registered for trash lifecycle routes
+
+- **WHEN** the Go package is compiled and the server starts
+- **THEN** `TrashHandler` handles `DELETE /images/:id`, `POST /images/:id/restore`, `GET /images/trash`, `DELETE /images/trash`, and `DELETE /images/trash/:id`
+- **AND** `ImageHandler` does not handle any of those routes
+
+#### Scenario: TrashHandler unit tests exist in handler/trash_test.go
+
+- **WHEN** `handler/trash_test.go` is compiled
+- **THEN** it covers each `TrashHandler` method with a mocked `TrashUsecase` with at minimum one success and one error scenario per method
 
 ---
 

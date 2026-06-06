@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupImageTest(t *testing.T) (usecase.ImageRepository, string) {
+func setupImageTest(t *testing.T) (*imageRepository, string) {
 	t.Helper()
 	tx := testutil.NewTestTx(t, testDB)
 

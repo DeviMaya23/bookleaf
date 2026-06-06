@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 // --- test doubles ---
@@ -28,7 +27,6 @@ type mockImageRepository struct {
 	updateFields         map[string]any
 	lastUpdateID         uuid.UUID
 	lastUpdateBy         string
-	hardDeleteCalls      int
 	setFolderCalls       int
 	setFolderImageID     uuid.UUID
 	setFolderFolderID    *uuid.UUID
@@ -53,9 +51,6 @@ func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ 
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
 }
-func (m *mockImageRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
-	return m.image, m.err
-}
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
@@ -69,28 +64,6 @@ func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID str
 	m.lastUpdateBy = userID
 	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
-}
-func (m *mockImageRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockImageRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
-	return m.err
-}
-func (m *mockImageRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) CountByFolderID(_ context.Context, _ uuid.UUID) (int64, error) {
-	return 0, m.err
-}
-func (m *mockImageRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
-	return m.images, m.err
-}
-func (m *mockImageRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
-	m.hardDeleteCalls++
-	return m.err
 }
 func (m *mockImageRepository) SetImageFolder(_ context.Context, imageID uuid.UUID, folderID *uuid.UUID) error {
 	m.setFolderCalls++
@@ -386,73 +359,6 @@ func TestImageUsecase_DownloadImage(t *testing.T) {
 	assert.Equal(t, downloadURLTTL, store.lastDownloadTTL)
 }
 
-// --- ListTrashed ---
-
-func TestImageUsecase_ListTrashed_NextCursor(t *testing.T) {
-	now := time.Now().UTC()
-	images := make([]*domain.Image, 11)
-	for i := range images {
-		deletedAt := now.Add(time.Duration(i) * time.Second)
-		images[i] = &domain.Image{
-			ID:        uuid.New(),
-			DeletedAt: gorm.DeletedAt{Time: deletedAt, Valid: true},
-		}
-	}
-	repo := &mockImageRepository{images: images}
-	uc := newImageUsecase(repo, nil, &mockStorageService{})
-
-	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
-
-	require.NoError(t, err)
-	assert.Len(t, result.Images, 10)
-	require.NotNil(t, result.NextCursor)
-	assert.Equal(t, result.Images[9].Image.ID, result.NextCursor.ID)
-	require.NotNil(t, result.NextCursor.DeletedAt)
-	assert.Equal(t, result.Images[9].Image.DeletedAt.Time.UTC(), result.NextCursor.DeletedAt.UTC())
-}
-
-func TestImageUsecase_ListTrashed_LastPage(t *testing.T) {
-	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
-	uc := newImageUsecase(repo, nil, &mockStorageService{})
-
-	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Limit: 10})
-
-	require.NoError(t, err)
-	assert.Len(t, result.Images, 2)
-	assert.Nil(t, result.NextCursor)
-}
-
-func TestImageUsecase_ListTrashed_ThumbnailURL(t *testing.T) {
-	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
-	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New(), ThumbnailPath: &thumbnailPath}}}
-	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
-	uc := newImageUsecase(repo, nil, store)
-
-	result, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{})
-
-	require.NoError(t, err)
-	require.Len(t, result.Images, 1)
-	require.NotNil(t, result.Images[0].ThumbnailURL)
-	assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
-}
-
-// --- Restore ---
-
-func TestImageUsecase_Restore(t *testing.T) {
-	imageID := uuid.New()
-	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
-	repo := &mockImageRepository{image: &domain.Image{ID: imageID, ThumbnailPath: &thumbnailPath}}
-	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
-	uc := newImageUsecase(repo, nil, store)
-
-	item, err := uc.Restore(context.Background(), imageID, "kp_abc123")
-
-	require.NoError(t, err)
-	assert.Equal(t, imageID, item.Image.ID)
-	require.NotNil(t, item.ThumbnailURL)
-	assert.Equal(t, "https://r2.example.com/thumb", *item.ThumbnailURL)
-}
-
 // --- UpdateImage ---
 
 func TestImageUsecase_UpdateImage_FieldsAssembled(t *testing.T) {
@@ -557,139 +463,3 @@ func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
 	assert.Equal(t, to, *repo.lastMoveToFolderID)
 }
 
-// --- PurgeExpiredTrash ---
-
-func TestImageUsecase_PurgeExpiredTrash_WithThumbnail(t *testing.T) {
-	thumbnailPath := "users/kp_u1/thumbnails/b.jpg"
-	expired := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg", ThumbnailPath: &thumbnailPath},
-	}
-	repo := &mockImageRepository{images: expired}
-	store := &mockStorageService{}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, store.deleteCalls)
-	assert.Contains(t, store.deletedKeys, "users/kp_u1/images/a.jpg")
-	assert.Contains(t, store.deletedKeys, thumbnailPath)
-	assert.Equal(t, 1, repo.hardDeleteCalls)
-}
-
-func TestImageUsecase_PurgeExpiredTrash_WithoutThumbnail(t *testing.T) {
-	expired := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
-	}
-	repo := &mockImageRepository{images: expired}
-	store := &mockStorageService{}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, store.deleteCalls)
-	assert.Equal(t, 1, repo.hardDeleteCalls)
-}
-
-func TestImageUsecase_PurgeExpiredTrash_StorageErrorContinues(t *testing.T) {
-	expired := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
-	}
-	repo := &mockImageRepository{images: expired}
-	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.PurgeExpiredTrash(context.Background(), 30*24*time.Hour)
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, repo.hardDeleteCalls)
-}
-
-// --- DeleteFromTrash ---
-
-func TestImageUsecase_DeleteFromTrash_Success(t *testing.T) {
-	imageID := uuid.New()
-	thumbnailPath := "users/kp_u1/thumbnails/b.jpg"
-	img := &domain.Image{ID: imageID, UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg", ThumbnailPath: &thumbnailPath}
-	repo := &mockImageRepository{image: img}
-	store := &mockStorageService{}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.DeleteFromTrash(context.Background(), imageID, "kp_u1")
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, store.deleteCalls)
-	assert.Contains(t, store.deletedKeys, img.R2Path)
-	assert.Contains(t, store.deletedKeys, thumbnailPath)
-	assert.Equal(t, 1, repo.hardDeleteCalls)
-}
-
-func TestImageUsecase_DeleteFromTrash_NotInTrash(t *testing.T) {
-	repo := &mockImageRepository{err: gorm.ErrRecordNotFound}
-	uc := newImageUsecase(repo, nil, &mockStorageService{})
-
-	err := uc.DeleteFromTrash(context.Background(), uuid.New(), "kp_u1")
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
-}
-
-func TestImageUsecase_DeleteFromTrash_StorageErrorContinues(t *testing.T) {
-	imageID := uuid.New()
-	img := &domain.Image{ID: imageID, UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"}
-	repo := &mockImageRepository{image: img}
-	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.DeleteFromTrash(context.Background(), imageID, "kp_u1")
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, repo.hardDeleteCalls)
-}
-
-// --- EmptyTrash ---
-
-func TestImageUsecase_EmptyTrash_Success(t *testing.T) {
-	thumbnailPath := "users/kp_u1/thumbnails/b.jpg"
-	images := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg", ThumbnailPath: &thumbnailPath},
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/b.jpg"},
-	}
-	repo := &mockImageRepository{images: images}
-	store := &mockStorageService{}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.EmptyTrash(context.Background(), "kp_u1")
-
-	require.NoError(t, err)
-	assert.Equal(t, 3, store.deleteCalls) // 2 R2 objects + 1 thumbnail
-	assert.Equal(t, 2, repo.hardDeleteCalls)
-}
-
-func TestImageUsecase_EmptyTrash_NoOp(t *testing.T) {
-	repo := &mockImageRepository{images: []*domain.Image{}}
-	store := &mockStorageService{}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.EmptyTrash(context.Background(), "kp_u1")
-
-	require.NoError(t, err)
-	assert.Equal(t, 0, store.deleteCalls)
-	assert.Equal(t, 0, repo.hardDeleteCalls)
-}
-
-func TestImageUsecase_EmptyTrash_StorageErrorContinues(t *testing.T) {
-	images := []*domain.Image{
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/a.jpg"},
-		{ID: uuid.New(), UserID: "kp_u1", R2Path: "users/kp_u1/images/b.jpg"},
-	}
-	repo := &mockImageRepository{images: images}
-	store := &mockStorageService{deleteObjectErr: errors.New("r2 unavailable")}
-	uc := newImageUsecase(repo, nil, store)
-
-	err := uc.EmptyTrash(context.Background(), "kp_u1")
-
-	require.NoError(t, err)
-	assert.Equal(t, 2, repo.hardDeleteCalls)
-}

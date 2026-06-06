@@ -41,7 +41,7 @@ func (e *riverEnqueuer) Insert(ctx context.Context, args usecase.JobArgs) error 
 	if !ok {
 		return fmt.Errorf("unsupported job args type %T", args)
 	}
-	_, err := e.client.Insert(ctx, riverArgs, nil)
+	_, err := e.client.Insert(ctx, riverArgs, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
 	return err
 }
 
@@ -223,12 +223,14 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	enqueuer := &riverEnqueuer{}
 
 	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, tel)
+	trashUsecase := usecase.NewTrashUsecase(imageRepository, storageService, enqueuer, tel)
 	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
 
 	workers := river.NewWorkers()
 	river.AddWorker(workers, worker.NewVisionWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewCleanupStaleUploadsWorker(uploadUsecase))
-	river.AddWorker(workers, worker.NewTrashPurgeWorker(imageUsecase))
+	river.AddWorker(workers, worker.NewTrashPurgeWorker(trashUsecase))
+	river.AddWorker(workers, worker.NewR2DeleteWorker(trashUsecase))
 
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -267,6 +269,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
+	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
@@ -288,17 +291,17 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.POST("/images", uploadHandler.InitiateUpload)
 	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
 	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
-	protected.GET("/images/trash", imageHandler.ListTrashed)
-	protected.DELETE("/images/trash", imageHandler.EmptyTrash)
-	protected.DELETE("/images/trash/:id", imageHandler.DeleteFromTrash)
+	protected.GET("/images/trash", trashHandler.ListTrashed)
+	protected.DELETE("/images/trash", trashHandler.EmptyTrash)
+	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
 	protected.GET("/images/:id/download", imageHandler.DownloadImage)
 	protected.POST("/images/:id/move-folder", imageHandler.MoveImageFolder)
 	protected.PATCH("/images/:id/position", imageHandler.UpdateImagePosition)
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
-	protected.DELETE("/images/:id", imageHandler.SoftDelete)
-	protected.POST("/images/:id/restore", imageHandler.Restore)
+	protected.DELETE("/images/:id", trashHandler.SoftDelete)
+	protected.POST("/images/:id/restore", trashHandler.Restore)
 
 	return riverClient, riverPool
 }
