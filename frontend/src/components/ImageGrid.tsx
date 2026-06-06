@@ -44,9 +44,10 @@ interface ImageCardProps {
   onAction: (image: Image) => void
   onDeletePermanent?: (image: Image) => void
   onSelect: (image: Image) => void
+  onDoubleClick?: (image: Image) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect, onDoubleClick }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
     disabled: isTrash,
@@ -69,6 +70,7 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
           {...attributes}
           className={`cursor-pointer rounded-lg overflow-hidden bg-card${isDropTarget ? ' ring-2 ring-primary' : ''}`}
           onClick={() => onSelect(image)}
+          onDoubleClick={() => onDoubleClick?.(image)}
         >
           <MasonryCardContent image={image} imgHeight={imgHeight} />
         </div>
@@ -122,11 +124,12 @@ interface ImageGridProps {
   view: AppView
   layoutMode?: LayoutMode
   onImageSelect: (image: Image) => void
+  onImageDoubleClick?: (image: Image) => void
   onImageDeleted?: (id: string) => void
   sortEndTrigger?: SortEndTrigger | null
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect, onImageDeleted, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const isTrash = view.type === 'trash'
@@ -293,6 +296,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
           onAction={handleAction}
           onDeletePermanent={setConfirmDeleteImage}
           onSelect={onImageSelect}
+          onDoubleClick={onImageDoubleClick}
         />
       )}
     />

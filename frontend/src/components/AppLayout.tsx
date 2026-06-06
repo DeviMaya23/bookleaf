@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { Plus, UploadCloud, ChevronDown, Images } from 'lucide-react'
 import {
@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import FolderSidebar from './FolderSidebar'
 import ImageGrid from './ImageGrid'
+import ImageViewer from './ImageViewer'
 import UploadModal from './UploadModal'
 import BatchUploadModal from './BatchUploadModal'
 import RightPanel from './RightPanel'
@@ -74,6 +75,7 @@ export default function AppLayout() {
   const sortEndTriggerRef = useRef<number>(0)
   const [sortEndTrigger, setSortEndTrigger] = useState<SortEndTrigger | null>(null)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
+  const [viewerOpen, setViewerOpen] = useState(false)
 
   const folderId = view.type === 'folder' ? view.id : null
 
@@ -84,6 +86,15 @@ export default function AppLayout() {
   })
 
   const { checkVision } = useVisionSuggestion()
+
+  useEffect(() => {
+    if (!selectedImage) setViewerOpen(false)
+  }, [selectedImage])
+
+  const handleImageDoubleClick = useCallback((img: Image) => {
+    setSelectedImage(img)
+    setViewerOpen(true)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -201,42 +212,47 @@ export default function AppLayout() {
               </p>
             </div>
           )}
-          <ScrollArea className="h-full">
-            <div className="p-6">
-              <div className="flex justify-end mb-4">
-                <div className="flex">
-                  <button
-                    className={cn(buttonVariants(), 'rounded-r-none')}
-                    onClick={() => setUploadOpen(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Image
-                  </button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger className={cn(buttonVariants(), 'rounded-l-none border-l border-l-white/20 px-2')}>
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                        <UploadCloud className="w-4 h-4" />
-                        Upload image
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
-                        <Images className="w-4 h-4" />
-                        Upload multiple images
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+          {viewerOpen && selectedImage ? (
+            <ImageViewer image={selectedImage} onClose={() => setViewerOpen(false)} />
+          ) : (
+            <ScrollArea className="h-full">
+              <div className="p-6">
+                <div className="flex justify-end mb-4">
+                  <div className="flex">
+                    <button
+                      className={cn(buttonVariants(), 'rounded-r-none')}
+                      onClick={() => setUploadOpen(true)}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Image
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className={cn(buttonVariants(), 'rounded-l-none border-l border-l-white/20 px-2')}>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                          <UploadCloud className="w-4 h-4" />
+                          Upload image
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
+                          <Images className="w-4 h-4" />
+                          Upload multiple images
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
+                <ImageGrid
+                  view={view}
+                  onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
+                  onImageDoubleClick={handleImageDoubleClick}
+                  onImageDeleted={(id) => { if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) } }}
+                  sortEndTrigger={sortEndTrigger}
+                />
               </div>
-              <ImageGrid
-                view={view}
-                onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
-                onImageDeleted={(id) => { if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) } }}
-                sortEndTrigger={sortEndTrigger}
-              />
-            </div>
-          </ScrollArea>
+            </ScrollArea>
+          )}
         </main>
         {selectedImage && (
           <RightPanel
