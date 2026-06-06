@@ -19,6 +19,7 @@ vi.mock('@/lib/images', async (importOriginal) => ({
   getAllImages: vi.fn(),
   getTrashedImages: vi.fn(),
   deleteImage: vi.fn(),
+  hardDeleteImage: vi.fn(),
   restoreImage: vi.fn(),
   updateImagePosition: vi.fn(),
 }))
@@ -32,6 +33,7 @@ vi.mock('@/components/ui/context-menu', async () => {
       React.createElement(React.Fragment, null, children),
     ContextMenuContent: ({ children }: { children: React.ReactNode }) =>
       React.createElement(React.Fragment, null, children),
+    ContextMenuSeparator: () => React.createElement('hr'),
     ContextMenuItem: ({
       children,
       onClick,
@@ -49,7 +51,23 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-import { getImages, deleteImage, updateImagePosition } from '@/lib/images'
+vi.mock('@/components/ui/dialog', async () => {
+  const React = await import('react')
+  return {
+    Dialog: ({ open, children }: { open: boolean; onOpenChange?: (v: boolean) => void; children: React.ReactNode }) =>
+      open ? React.createElement(React.Fragment, null, children) : null,
+    DialogContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('div', { role: 'dialog' }, children),
+    DialogHeader: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    DialogTitle: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('h2', null, children),
+    DialogFooter: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+  }
+})
+
+import { getImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
 import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
@@ -238,6 +256,62 @@ describe('ImageGrid delete flow', () => {
     })
 
     expect(deleteImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('ImageGrid trash view — permanent delete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows Restore and Delete permanently items in context menu', async () => {
+    vi.mocked(getTrashedImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'trash' })
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('menuitem', { name: /restore/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /delete permanently/i })).toBeInTheDocument()
+  })
+
+  it('calls hardDeleteImage after confirming the dialog', async () => {
+    vi.mocked(getTrashedImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+    vi.mocked(hardDeleteImage).mockResolvedValue(undefined)
+
+    renderImageGrid({ type: 'trash' })
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /delete permanently/i }))
+
+    const confirmButton = await screen.findByRole('button', { name: /delete permanently/i })
+    await userEvent.click(confirmButton)
+
+    await waitFor(() => {
+      expect(hardDeleteImage).toHaveBeenCalledWith(expect.any(Function), '1')
+    })
+  })
+
+  it('does not call hardDeleteImage when the confirmation dialog is cancelled', async () => {
+    vi.mocked(getTrashedImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'trash' })
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /delete permanently/i }))
+
+    const cancelButton = await screen.findByRole('button', { name: /cancel/i })
+    await userEvent.click(cancelButton)
+
+    expect(hardDeleteImage).not.toHaveBeenCalled()
   })
 })
 

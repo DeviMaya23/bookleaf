@@ -9,11 +9,19 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, getAllImages, getTrashedImages, deleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
+import { getImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
@@ -34,10 +42,11 @@ interface ImageCardProps {
   isDropTarget: boolean
   currentFolderId: string | null
   onAction: (image: Image) => void
+  onDeletePermanent?: (image: Image) => void
   onSelect: (image: Image) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onSelect }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect }: ImageCardProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
     disabled: isTrash,
@@ -66,7 +75,16 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
       </ContextMenuTrigger>
       <ContextMenuContent>
         {isTrash ? (
-          <ContextMenuItem onClick={() => onAction(image)}>Restore</ContextMenuItem>
+          <>
+            <ContextMenuItem onClick={() => onAction(image)}>Restore</ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={() => onDeletePermanent?.(image)}
+              className="text-destructive focus:text-destructive"
+            >
+              Delete permanently
+            </ContextMenuItem>
+          </>
         ) : (
           <ContextMenuItem
             onClick={() => onAction(image)}
@@ -119,6 +137,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
   const [orderedImages, setOrderedImages] = useState<Image[]>([])
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const activeDragIdRef = useRef<string | null>(null)
+  const [confirmDeleteImage, setConfirmDeleteImage] = useState<Image | null>(null)
 
   useDndMonitor({
     onDragStart(event) {
@@ -180,6 +199,17 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
       toast.success('Image restored')
     },
     onError: () => toast.error('Failed to restore image'),
+  })
+
+  const hardDeleteMutation = useMutation({
+    mutationFn: (id: string) => hardDeleteImage(getToken, id),
+    onSuccess: (_, id) => {
+      setOrderedImages((prev) => prev.filter((img) => img.id !== id))
+      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
+      toast.success('Image permanently deleted')
+      onImageDeleted?.(id)
+    },
+    onError: () => toast.error('Failed to permanently delete image'),
   })
 
   const positionMutation = useMutation({
@@ -261,6 +291,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
           isDropTarget={isDropTarget}
           currentFolderId={folderId}
           onAction={handleAction}
+          onDeletePermanent={setConfirmDeleteImage}
           onSelect={onImageSelect}
         />
       )}
@@ -304,6 +335,29 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
           </Button>
         </div>
       )}
+
+      <Dialog open={!!confirmDeleteImage} onOpenChange={(open) => { if (!open) setConfirmDeleteImage(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete permanently?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This image will be permanently deleted. This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteImage(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirmDeleteImage) {
+                  hardDeleteMutation.mutate(confirmDeleteImage.id)
+                  setConfirmDeleteImage(null)
+                }
+              }}
+            >
+              Delete permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
