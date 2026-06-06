@@ -1,94 +1,3 @@
-## ADDED Requirements
-
-### Requirement: ThumbnailService Interface
-
-The system SHALL define a `ThumbnailService` interface in `internal/thumbnail/` with a single `Generate` method. The image usecase SHALL depend on this interface.
-
-Method:
-- `Generate(ctx context.Context, src io.Reader) (io.Reader, error)` — reads the source image, returns a resized JPEG reader
-
-#### Scenario: Interface is satisfied by imaging implementation
-
-- **WHEN** the Go package is compiled
-- **THEN** the concrete thumbnail implementation satisfies `ThumbnailService` without compilation errors
-
----
-
-### Requirement: Thumbnail Generation
-
-The system SHALL implement `ThumbnailService` using the `disintegration/imaging` library. The generated thumbnail SHALL:
-
-- Fit within a 600×600 pixel bounding box while preserving the original aspect ratio (no distortion)
-- Be encoded as JPEG regardless of the source image format
-- Use `imaging.Lanczos` as the resampling filter
-
-#### Scenario: Landscape image is resized to fit 600×600
-
-- **WHEN** a 1200×600 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 600×300
-
-#### Scenario: Portrait image is resized to fit 600×600
-
-- **WHEN** a 600×1200 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 300×600
-
-#### Scenario: Image already within bounds is not upscaled
-
-- **WHEN** a 200×100 image is passed to `Generate`
-- **THEN** the output JPEG dimensions are 200×100
-
----
-
-### Requirement: Async Thumbnail Storage
-
-After `POST /images/:id/complete` is called, the system SHALL check whether a thumbnail has already been uploaded to R2 by the client. If the thumbnail exists, `thumbnail_path` SHALL be set on the image record at creation time and no thumbnail worker job SHALL be enqueued. If the thumbnail does not exist, `thumbnail_path` SHALL remain null and a `ThumbnailUploadJob` SHALL be enqueued as a fallback.
-
-The check SHALL be a `StorageService.HeadObject` call on `users/{kindeID}/thumbnails/{imageID}.jpg` performed during `CompleteUpload`, after the DB transaction succeeds.
-
-The synchronous preflight (`ThumbnailService.Generate` called before the DB write) is removed. `CompleteUpload` SHALL NOT call `ThumbnailService.Generate` or `StorageService.GetObject` for thumbnail purposes.
-
-Thumbnail-present path (client uploaded thumbnail):
-1. `StorageService.HeadObject` on the thumbnail key — found
-2. Image record created with `thumbnail_path` set to the thumbnail key
-3. No `ThumbnailUploadJob` inserted
-
-Thumbnail-absent path (fallback, e.g. extension):
-1. `StorageService.HeadObject` on the thumbnail key — not found
-2. Image record created with `thumbnail_path` = null
-3. `ThumbnailUploadJob` inserted as before
-
-River job steps (unchanged, non-blocking, executed by `ThumbnailUploadWorker`):
-1. Call `StorageService.GetObject` to fetch the original image bytes from R2
-2. Call `ThumbnailService.Generate` to produce the thumbnail
-3. Call `StorageService.PutObject` to store the thumbnail at `users/{kindeID}/thumbnails/{imageID}.jpg`
-4. Call `ImageRepository.UpdateThumbnailPath` to persist the path
-
-#### Scenario: Client-uploaded thumbnail skips the worker
-
-- **WHEN** the client uploads a JPEG thumbnail to `thumbnail_upload_url` before calling `/complete`
-- **AND** `HeadObject` on the thumbnail key returns found
-- **THEN** the image record is created with `thumbnail_path` set
-- **AND** no `ThumbnailUploadJob` is inserted
-
-#### Scenario: Missing thumbnail enqueues the worker
-
-- **WHEN** no thumbnail has been uploaded before `/complete` is called
-- **AND** `HeadObject` on the thumbnail key returns not found
-- **THEN** the image record is created with `thumbnail_path` = null
-- **AND** a `ThumbnailUploadJob` is inserted
-
-#### Scenario: Successful worker run updates ThumbnailPath
-
-- **WHEN** all job steps succeed
-- **THEN** the `Image` record has `thumbnail_path` set to `users/{kindeID}/thumbnails/{imageID}.jpg`
-
-#### Scenario: Job failure triggers retry
-
-- **WHEN** the `ThumbnailUploadWorker` returns an error on an attempt
-- **THEN** River retries the job up to 5 attempts total before discarding
-
----
-
 ### Requirement: InitiateUpload response includes thumbnail_upload_url
 
 `POST /images` SHALL return a `thumbnail_upload_url` field alongside `upload_url` and `id`. The `thumbnail_upload_url` SHALL be a presigned PUT URL for `users/{kindeID}/thumbnails/{imageID}.jpg` with content type `image/jpeg`, valid for the same TTL as the original upload URL.
@@ -101,25 +10,13 @@ River job steps (unchanged, non-blocking, executed by `ThumbnailUploadWorker`):
 
 ---
 
-### Requirement: ProcessThumbnailUpload Usecase Method
+### Requirement: CompleteUpload sets thumbnail path unconditionally
 
-The system SHALL add `ProcessThumbnailUpload(ctx context.Context, imageID uuid.UUID, r2Path, thumbnailKey string) error` to `imageUploadUsecase`. This is the method called by `ThumbnailUploadWorker` on each attempt.
+During `CompleteUpload`, the system SHALL compute the thumbnail key as `users/{kindeID}/thumbnails/{imageID}.jpg` and assign it to the image record's `thumbnail_path` at creation time. No R2 existence check is performed. The `ThumbnailUploadArgs` job is never enqueued. Only the vision labelling job is enqueued as before.
 
-The method SHALL:
-1. Call `StorageService.GetObject(ctx, r2Path)` to fetch the original image
-2. Call `ThumbnailService.Generate(ctx, src)` to produce the thumbnail
-3. Call `StorageService.PutObject(ctx, thumbnailKey, bytes, "image/jpeg")` to upload it
-4. Call `ImageRepository.UpdateThumbnailPath(ctx, imageID, thumbnailKey)` to persist the path
+#### Scenario: CompleteUpload always sets thumbnail_path
 
-Any failure at any step SHALL return a non-nil error so River can retry.
-
-#### Scenario: All steps succeed
-
-- **WHEN** `ProcessThumbnailUpload` is called and all steps complete without error
-- **THEN** the image record has `thumbnail_path` set to `thumbnailKey`
-- **AND** nil is returned
-
-#### Scenario: Any step failure returns error
-
-- **WHEN** any step in `ProcessThumbnailUpload` returns an error
-- **THEN** `ProcessThumbnailUpload` returns a non-nil error
+- **WHEN** `POST /images/:id/complete` is called
+- **THEN** the image record is created with `thumbnail_path` set to `users/{kindeID}/thumbnails/{imageID}.jpg`
+- **AND** no `ThumbnailUploadJob` is inserted
+- **AND** a vision labelling job is enqueued as normal
