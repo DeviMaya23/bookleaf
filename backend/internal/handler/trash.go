@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
@@ -74,7 +75,13 @@ func (h *TrashHandler) ListTrashed(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
 	}
 
+	var name *string
+	if trimmed := strings.TrimSpace(c.QueryParam("name")); trimmed != "" {
+		name = &trimmed
+	}
+
 	result, err := h.trashUsecase.ListTrashed(ctx, userID, usecase.ListTrashedParams{
+		Name:   name,
 		Cursor: cursor,
 		Limit:  limit,
 	})

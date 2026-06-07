@@ -29,6 +29,21 @@ interface FolderNode extends Folder {
   children: FolderNode[]
 }
 
+function filterFolderTree(nodes: FolderNode[], term: string): FolderNode[] {
+  const lowerTerm = term.toLowerCase()
+  const result: FolderNode[] = []
+
+  for (const node of nodes) {
+    const filteredChildren = filterFolderTree(node.children, term)
+    const selfMatches = node.name.toLowerCase().includes(lowerTerm)
+    if (selfMatches || filteredChildren.length > 0) {
+      result.push({ ...node, children: filteredChildren })
+    }
+  }
+
+  return result
+}
+
 function buildFolderTree(folders: Folder[]): FolderNode[] {
   const nodeMap = new Map<string, FolderNode>()
   const visited = new Set<string>()
@@ -242,6 +257,7 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
     queryFn: () => getFolders(getToken),
   })
 
+  const [folderFilter, setFolderFilter] = useState('')
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [subfolderParent, setSubfolderParent] = useState<Folder | null>(null)
   const [renameTarget, setRenameTarget] = useState<Folder | null>(null)
@@ -292,6 +308,8 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   }
 
   const tree = buildFolderTree(folders)
+  const trimmedFolderFilter = folderFilter.trim()
+  const visibleTree = trimmedFolderFilter ? filterFolderTree(tree, trimmedFolderFilter) : tree
 
   return (
     <aside className="fixed inset-y-0 left-0 w-[240px] flex flex-col border-r bg-background">
@@ -347,7 +365,7 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
           </p>
         </div>
 
-        {tree.map((folder) => (
+        {visibleTree.map((folder) => (
           <FolderItem
             key={folder.id}
             folder={folder}
@@ -373,6 +391,12 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
         >
           + New folder
         </button>
+        <input
+          value={folderFilter}
+          onChange={(e) => setFolderFilter(e.target.value)}
+          placeholder="Filter folders…"
+          className="w-full rounded-md border bg-background px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+        />
         <ProfileMenu />
       </div>
 

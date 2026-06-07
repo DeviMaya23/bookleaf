@@ -83,7 +83,12 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, params.Cursor, limit)
+	var name *string
+	if params.Name != nil && *params.Name != "" {
+		name = params.Name
+	}
+
+	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, name, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

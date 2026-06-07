@@ -29,6 +29,7 @@ export async function getImages(
   getToken: GetToken,
   folderId: string | null,
   cursor?: string,
+  name?: string,
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (folderId === null) {
@@ -37,22 +38,25 @@ export async function getImages(
     params.set('folder_id', folderId)
   }
   if (cursor) params.set('cursor', cursor)
+  if (name) params.set('name', name)
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
 }
 
-export async function getAllImages(getToken: GetToken, cursor?: string): Promise<ImagesPage> {
+export async function getAllImages(getToken: GetToken, cursor?: string, name?: string): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
+  if (name) params.set('name', name)
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
 }
 
-export async function getTrashedImages(getToken: GetToken, cursor?: string): Promise<ImagesPage> {
+export async function getTrashedImages(getToken: GetToken, cursor?: string, name?: string): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
+  if (name) params.set('name', name)
   const res = await apiFetch(`/images/trash?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch trashed images')
   return res.json()

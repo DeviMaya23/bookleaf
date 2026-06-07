@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
-import { Plus, UploadCloud, ChevronDown, Images } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images, Search } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -32,6 +32,7 @@ import RightPanel from './RightPanel'
 import { useQuery } from '@tanstack/react-query'
 import { getFolders } from '@/lib/folders'
 import { useVisionSuggestion } from '@/hooks/useVisionSuggestion'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/dragHandlers'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
@@ -76,6 +77,8 @@ export default function AppLayout() {
   const [sortEndTrigger, setSortEndTrigger] = useState<SortEndTrigger | null>(null)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
   const [viewerImage, setViewerImage] = useState<Image | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
 
   const folderId = view.type === 'folder' ? view.id : null
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
@@ -84,6 +87,10 @@ export default function AppLayout() {
     setViewerImage(null)
     setSelectedImage(null)
     setAutoFocusTitle(false)
+  }, [viewKey])
+
+  useEffect(() => {
+    setSearchTerm('')
   }, [viewKey])
 
   const { data: folders = [] } = useQuery({
@@ -225,7 +232,16 @@ export default function AppLayout() {
           ) : (
             <ScrollArea className="h-full">
               <div className="p-6">
-                <div className="flex justify-end mb-4">
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div className="relative w-full max-w-xs">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search images by name…"
+                      className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
                   <div className="flex">
                     <button
                       className={cn(buttonVariants(), 'rounded-r-none')}
@@ -253,6 +269,8 @@ export default function AppLayout() {
                 </div>
                 <ImageGrid
                   view={view}
+                  searchTerm={searchTerm}
+                  debouncedSearchTerm={debouncedSearchTerm}
                   onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}

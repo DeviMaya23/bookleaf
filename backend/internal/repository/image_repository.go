@@ -31,7 +31,7 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
 	if folderID != nil {
@@ -66,6 +66,10 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 
 	if tagID != nil {
 		query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
+	}
+
+	if name != nil && *name != "" {
+		query = query.Where("images.title ILIKE ?", "%"+*name+"%")
 	}
 
 	if cursor != nil {
@@ -329,7 +333,7 @@ func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (r *imageRepository) ListTrashed(ctx context.Context, userID string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 
 	query := r.db.WithContext(ctx).
@@ -337,6 +341,10 @@ func (r *imageRepository) ListTrashed(ctx context.Context, userID string, cursor
 		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
 		Order("deleted_at ASC, id ASC").
 		Limit(limit + 1)
+
+	if name != nil && *name != "" {
+		query = query.Where("images.title ILIKE ?", "%"+*name+"%")
+	}
 
 	if cursor != nil && cursor.DeletedAt != nil {
 		query = query.Where("(deleted_at, id) > (?, ?)", cursor.DeletedAt, cursor.ID)

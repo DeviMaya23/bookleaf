@@ -12,7 +12,7 @@ type ImageRepository interface {
 	// List returns non-deleted images ordered by (created_at DESC, id DESC), fetching limit+1 rows.
 	// folderID filters via JOIN on image_folders; unfiled filters images with no image_folders row via LEFT JOIN.
 	// Results include Tags and ImageFolders preloaded.
-	List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
 	// GetByID returns a non-deleted image with Tags and ImageFolders preloaded.
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	// Update selectively updates scalar fields for the image. folder_id is not a valid key; use SyncImageFolders or SetImageFolder.

@@ -99,7 +99,7 @@ function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = v
     <DndContext sensors={[]}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ImageGrid view={view} onImageSelect={onImageSelect} />
+          <ImageGrid view={view} searchTerm="" debouncedSearchTerm="" onImageSelect={onImageSelect} />
         </MemoryRouter>
       </QueryClientProvider>
     </DndContext>,
@@ -337,6 +337,8 @@ describe('ImageGrid reorder rollback', () => {
           <MemoryRouter>
             <ImageGrid
               view={{ type: 'folder', id: 'folder-1' }}
+              searchTerm=""
+              debouncedSearchTerm=""
               onImageSelect={vi.fn()}
               sortEndTrigger={sortEndTrigger}
             />
