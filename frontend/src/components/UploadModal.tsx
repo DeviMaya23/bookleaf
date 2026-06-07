@@ -130,13 +130,13 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
         sourceUrl: sourceUrl.trim() || undefined,
       })
 
-      const thumbnail = await generateThumbnail(uploadBlob)
+      const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
       await Promise.all([
         putToR2(initiated.upload_url, uploadBlob),
         putToR2(initiated.thumbnail_upload_url, thumbnail),
       ])
 
-      return completeUpload(getToken, initiated.id)
+      return completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['images'] })

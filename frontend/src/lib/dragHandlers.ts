@@ -108,12 +108,12 @@ export async function handleFileAutoUpload(
     folderId: folderId ?? undefined,
   })
 
-  const thumbnail = await generateThumbnail(uploadBlob)
+  const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
   await Promise.all([
     putToR2(initiated.upload_url, uploadBlob),
     putToR2(initiated.thumbnail_upload_url, thumbnail),
   ])
 
-  const result = await completeUpload(getToken, initiated.id)
+  const result = await completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
   return getImage(getToken, result.image_id)
 }

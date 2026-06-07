@@ -23,6 +23,9 @@ type mockUploadUsecase struct {
 	err                 error
 	acceptSuggestionErr error
 	lastDescription     *string
+	lastWidth           *int
+	lastHeight          *int
+	lastFileSize        *int64
 	lastAcceptImageID   uuid.UUID
 	lastAcceptUserID    string
 	lastSuggestedFolder string
@@ -33,7 +36,10 @@ func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ 
 	return m.uploadResult, m.err
 }
 
-func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string) (*usecase.CompleteUploadResult, error) {
+func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string, width, height *int, fileSize *int64) (*usecase.CompleteUploadResult, error) {
+	m.lastWidth = width
+	m.lastHeight = height
+	m.lastFileSize = fileSize
 	return m.completeResult, m.err
 }
 
@@ -187,6 +193,44 @@ func TestUploadHandler_CompleteUpload(t *testing.T) {
 			assert.False(t, hasWarning)
 		})
 	}
+}
+
+func TestUploadHandler_CompleteUpload_ForwardsRequestBodyToUsecase(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockUploadUsecase{completeResult: &usecase.CompleteUploadResult{ImageID: imageID}}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", `{"width":1920,"height":1080,"file_size":245760}`)
+	c.SetPath("/images/:id/complete")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.CompleteUpload(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastWidth)
+	require.NotNil(t, uc.lastHeight)
+	require.NotNil(t, uc.lastFileSize)
+	assert.Equal(t, 1920, *uc.lastWidth)
+	assert.Equal(t, 1080, *uc.lastHeight)
+	assert.EqualValues(t, 245760, *uc.lastFileSize)
+}
+
+func TestUploadHandler_CompleteUpload_MissingBodyTreatsValuesAsAbsent(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockUploadUsecase{completeResult: &usecase.CompleteUploadResult{ImageID: imageID}}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", "")
+	c.SetPath("/images/:id/complete")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.CompleteUpload(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Nil(t, uc.lastWidth)
+	assert.Nil(t, uc.lastHeight)
+	assert.Nil(t, uc.lastFileSize)
 }
 
 func TestUploadHandler_CompleteUpload_InvalidUUID(t *testing.T) {

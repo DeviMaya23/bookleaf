@@ -15,7 +15,11 @@ vi.mock('@/lib/images', () => ({
 }))
 
 vi.mock('@/lib/thumbnail', () => ({
-  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  generateThumbnail: vi.fn().mockResolvedValue({
+    blob: new Blob(['thumb'], { type: 'image/jpeg' }),
+    width: 1920,
+    height: 1080,
+  }),
   convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
 }))
 
@@ -71,7 +75,11 @@ describe('UploadModal', () => {
     })
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', expect.any(File))
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
-    expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'upload-1')
+    expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'upload-1', {
+      width: 1920,
+      height: 1080,
+      fileSize: makeImageFile().size,
+    })
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onUploadSuccess).toHaveBeenCalledWith('img-1')
   })

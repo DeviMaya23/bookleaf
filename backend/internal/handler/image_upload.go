@@ -30,6 +30,12 @@ type initiateImageUploadResponse struct {
 	R2Path             string    `json:"r2_path"`
 }
 
+type completeUploadRequest struct {
+	Width    *int   `json:"width"`
+	Height   *int   `json:"height"`
+	FileSize *int64 `json:"file_size"`
+}
+
 type completeUploadResponse struct {
 	ImageID uuid.UUID `json:"image_id"`
 }
@@ -40,7 +46,7 @@ type acceptSuggestionRequest struct {
 
 type UploadUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
-	CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*usecase.CompleteUploadResult, error)
+	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64) (*usecase.CompleteUploadResult, error)
 	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 }
 
@@ -102,7 +108,12 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	result, err := h.uploadUsecase.CompleteUpload(ctx, imageID, userID)
+	var req completeUploadRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	result, err := h.uploadUsecase.CompleteUpload(ctx, imageID, userID, req.Width, req.Height, req.FileSize)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

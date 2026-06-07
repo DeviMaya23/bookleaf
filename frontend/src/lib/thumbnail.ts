@@ -2,7 +2,13 @@ const THUMBNAIL_MAX_PX = 600
 const THUMBNAIL_QUALITY = 0.9
 const HEIC_QUALITY = 0.93
 
-export async function generateThumbnail(source: Blob): Promise<Blob> {
+export interface ThumbnailResult {
+  blob: Blob
+  width: number
+  height: number
+}
+
+export async function generateThumbnail(source: Blob): Promise<ThumbnailResult> {
   const bitmap = await createImageBitmap(source)
 
   const { width, height } = bitmap
@@ -15,7 +21,8 @@ export async function generateThumbnail(source: Blob): Promise<Blob> {
   ctx.drawImage(bitmap, 0, 0, tw, th)
   bitmap.close()
 
-  return canvas.convertToBlob({ type: 'image/jpeg', quality: THUMBNAIL_QUALITY })
+  const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMBNAIL_QUALITY })
+  return { blob, width, height }
 }
 
 export async function convertHeicToJpeg(file: File): Promise<Blob> {

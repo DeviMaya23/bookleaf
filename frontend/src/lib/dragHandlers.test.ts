@@ -14,7 +14,11 @@ vi.mock('./folders', () => ({
 }))
 
 vi.mock('./thumbnail', () => ({
-  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  generateThumbnail: vi.fn().mockResolvedValue({
+    blob: new Blob(['thumb'], { type: 'image/jpeg' }),
+    width: 1920,
+    height: 1080,
+  }),
   convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
 }))
 
@@ -206,7 +210,7 @@ describe('handleFileAutoUpload', () => {
     expect(initiateUpload).toHaveBeenCalledWith(getToken, { title: 'sunset', mimeType: 'image/jpeg', folderId: 'folder-1' })
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', file)
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
-    expect(completeUpload).toHaveBeenCalledWith(getToken, 'upload-1')
+    expect(completeUpload).toHaveBeenCalledWith(getToken, 'upload-1', { width: 1920, height: 1080, fileSize: file.size })
     expect(getImage).toHaveBeenCalledWith(getToken, 'img-new')
     expect(result).toBe(imageData)
   })

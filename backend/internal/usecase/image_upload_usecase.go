@@ -1,14 +1,10 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	stdimage "image"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
 	"strings"
 	"time"
@@ -169,7 +165,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 	}, nil
 }
 
-func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string) (*CompleteUploadResult, error) {
+func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64) (*CompleteUploadResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CompleteUpload")
 	defer span.End()
 
@@ -192,13 +188,6 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
-	width, height, fileSize, err := u.extractImageMetadata(ctx, pending.R2Path)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, fmt.Errorf("extract image metadata: %w", err)
-	}
-
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", pending.UserID, pending.ID.String())
 
 	img := &domain.Image{
@@ -209,16 +198,10 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		SourceURL:     pending.SourceURL,
 		R2Path:        pending.R2Path,
 		MIMEType:      pending.MIMEType,
-		FileSize:      &fileSize,
+		Width:         positiveIntOrNil(width),
+		Height:        positiveIntOrNil(height),
+		FileSize:      positiveInt64OrNil(fileSize),
 		ThumbnailPath: &thumbnailKey,
-	}
-	if width > 0 {
-		widthValue := width
-		img.Width = &widthValue
-	}
-	if height > 0 {
-		heightValue := height
-		img.Height = &heightValue
 	}
 
 	if err := u.pendingUploadRepo.Transaction(ctx, func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error {
@@ -331,24 +314,18 @@ func (u *imageUploadUsecase) CleanupStaleUploads(ctx context.Context, threshold 
 	return nil
 }
 
-func (u *imageUploadUsecase) extractImageMetadata(ctx context.Context, r2Path string) (width, height int, fileSize int64, err error) {
-	src, err := u.store.GetObject(ctx, r2Path)
-	if err != nil {
-		return 0, 0, 0, err
+func positiveIntOrNil(v *int) *int {
+	if v == nil || *v <= 0 {
+		return nil
 	}
-	defer src.Close()
+	return v
+}
 
-	rawBytes, err := io.ReadAll(src)
-	if err != nil {
-		return 0, 0, 0, err
+func positiveInt64OrNil(v *int64) *int64 {
+	if v == nil || *v <= 0 {
+		return nil
 	}
-
-	if cfg, _, decodeErr := stdimage.DecodeConfig(bytes.NewReader(rawBytes)); decodeErr == nil {
-		width = cfg.Width
-		height = cfg.Height
-	}
-
-	return width, height, int64(len(rawBytes)), nil
+	return v
 }
 
 func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error {
