@@ -75,9 +75,14 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
 
+	var name *string
+	if params.Name != nil && *params.Name != "" {
+		name = params.Name
+	}
+
 	// Folder views return all images ordered by position; cursor and limit are ignored.
 	if params.FolderID != nil {
-		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, 0)
+		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, nil, 0)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -105,7 +110,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, name, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

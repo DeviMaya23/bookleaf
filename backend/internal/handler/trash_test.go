@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -20,16 +21,18 @@ import (
 // --- mock ---
 
 type mockTrashUsecase struct {
-	imageItem         *usecase.ImageItem
-	listTrashedResult *usecase.ListTrashedResult
-	err               error
+	imageItem             *usecase.ImageItem
+	listTrashedResult     *usecase.ListTrashedResult
+	err                   error
+	lastListTrashedParams usecase.ListTrashedParams
 }
 
 func (m *mockTrashUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
 
-func (m *mockTrashUsecase) ListTrashed(_ context.Context, _ string, _ usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
+func (m *mockTrashUsecase) ListTrashed(_ context.Context, _ string, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
+	m.lastListTrashedParams = params
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -133,6 +136,42 @@ func TestTrashHandler_ListTrashed_ReturnsList(t *testing.T) {
 	images, ok := resp["images"].([]any)
 	require.True(t, ok)
 	assert.Len(t, images, 1)
+}
+
+func TestTrashHandler_ListTrashed_ParsesAndForwardsName(t *testing.T) {
+	uc := &mockTrashUsecase{}
+	h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images/trash?name=heartopia", "")
+
+	err := h.ListTrashed(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastListTrashedParams.Name)
+	assert.Equal(t, "heartopia", *uc.lastListTrashedParams.Name)
+}
+
+func TestTrashHandler_ListTrashed_BlankNameTreatedAsAbsent(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "absent", query: "/images/trash"},
+		{name: "empty string", query: "/images/trash?name="},
+		{name: "whitespace only", query: "/images/trash?name=" + url.QueryEscape("   ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockTrashUsecase{}
+			h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newEchoContext(t, http.MethodGet, tt.query, "")
+
+			err := h.ListTrashed(c)
+
+			require.NoError(t, err)
+			assert.Nil(t, uc.lastListTrashedParams.Name)
+		})
+	}
 }
 
 func TestTrashHandler_ListTrashed_GenericError(t *testing.T) {

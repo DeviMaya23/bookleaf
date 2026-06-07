@@ -19,6 +19,7 @@ type ListImagesParams struct {
 	FolderID *uuid.UUID
 	Unfiled  bool
 	TagID    *uuid.UUID
+	Name     *string
 	Cursor   *ImageCursor
 	Limit    int
 }
@@ -29,6 +30,7 @@ type ListImagesResult struct {
 }
 
 type ListTrashedParams struct {
+	Name   *string
 	Cursor *ImageCursor
 	Limit  int
 }

@@ -20,6 +20,7 @@ type mockTrashRepository struct {
 	images          []*domain.Image
 	err             error
 	hardDeleteCalls int
+	lastListName    *string
 }
 
 func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -34,7 +35,8 @@ func (m *mockTrashRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ strin
 func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, name *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+	m.lastListName = name
 	return m.images, m.err
 }
 func (m *mockTrashRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
@@ -60,6 +62,43 @@ func (m *mockJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
 
 func newTrashUsecase(repo TrashRepository, store StorageService, enqueuer JobEnqueuer) *trashUsecase {
 	return NewTrashUsecase(repo, store, enqueuer, noopTel())
+}
+
+// --- ListTrashed ---
+
+func TestTrashUsecase_ListTrashed_PassesNameToRepository(t *testing.T) {
+	repo := &mockTrashRepository{images: []*domain.Image{{ID: uuid.New()}}}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+	name := "heartopia"
+
+	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Name: &name})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.lastListName)
+	assert.Equal(t, "heartopia", *repo.lastListName)
+}
+
+func TestTrashUsecase_ListTrashed_SkipsBlankName(t *testing.T) {
+	empty := ""
+	tests := []struct {
+		name   string
+		params ListTrashedParams
+	}{
+		{name: "nil name", params: ListTrashedParams{}},
+		{name: "empty string name", params: ListTrashedParams{Name: &empty}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockTrashRepository{images: []*domain.Image{{ID: uuid.New()}}}
+			uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+			_, err := uc.ListTrashed(context.Background(), "kp_abc123", tt.params)
+
+			require.NoError(t, err)
+			assert.Nil(t, repo.lastListName)
+		})
+	}
 }
 
 // --- EmptyTrash ---

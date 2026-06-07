@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon } from 'lucide-react'
 import { SortableContext, arrayMove, useSortable } from '@dnd-kit/sortable'
@@ -100,21 +100,21 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
   )
 }
 
-function queryKeyFor(view: AppView): unknown[] {
+function queryKeyFor(view: AppView, debouncedSearch: string): unknown[] {
   switch (view.type) {
-    case 'all': return ['images', 'all']
-    case 'unsorted': return ['images', 'unsorted']
-    case 'trash': return ['images', 'trash']
+    case 'all': return ['images', 'all', debouncedSearch]
+    case 'unsorted': return ['images', 'unsorted', debouncedSearch]
+    case 'trash': return ['images', 'trash', debouncedSearch]
     case 'folder': return ['images', 'folder', view.id]
   }
 }
 
-function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>) {
+function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>, debouncedSearch: string) {
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
-      case 'all': return getAllImages(getToken, pageParam)
-      case 'unsorted': return getImages(getToken, null, pageParam)
-      case 'trash': return getTrashedImages(getToken, pageParam)
+      case 'all': return getAllImages(getToken, pageParam, debouncedSearch)
+      case 'unsorted': return getImages(getToken, null, pageParam, debouncedSearch)
+      case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch)
       case 'folder': return getImages(getToken, view.id, pageParam)
     }
   }
@@ -123,13 +123,15 @@ function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>) 
 interface ImageGridProps {
   view: AppView
   layoutMode?: LayoutMode
+  searchTerm: string
+  debouncedSearchTerm: string
   onImageSelect: (image: Image) => void
   onImageDoubleClick?: (image: Image) => void
   onImageDeleted?: (id: string) => void
   sortEndTrigger?: SortEndTrigger | null
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const isTrash = view.type === 'trash'
@@ -171,18 +173,23 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
   }, [])
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: queryKeyFor(view),
-    queryFn: fetcherFor(view, getToken),
+    queryKey: queryKeyFor(view, debouncedSearchTerm),
+    queryFn: fetcherFor(view, getToken, debouncedSearchTerm),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    placeholderData: keepPreviousData,
   })
 
-  const allImages = data?.pages.flatMap((p) => p.images) ?? []
+  const fetchedImages = data?.pages.flatMap((p) => p.images) ?? []
+  const trimmedSearch = searchTerm.trim().toLowerCase()
+  const allImages = isFolderView && trimmedSearch
+    ? fetchedImages.filter((img) => img.title.toLowerCase().includes(trimmedSearch))
+    : fetchedImages
 
   useEffect(() => {
     setOrderedImages(allImages)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  }, [data, trimmedSearch])
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteImage(getToken, id),
@@ -311,7 +318,11 @@ export default function ImageGrid({ view, layoutMode = 'masonry', onImageSelect,
       ) : orderedImages.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
           <ImageIcon className="w-10 h-10" />
-          <p className="text-sm">{isTrash ? 'Trash is empty' : 'No images here yet'}</p>
+          <p className="text-sm">
+            {searchTerm.trim()
+              ? 'No images match your search'
+              : isTrash ? 'Trash is empty' : 'No images here yet'}
+          </p>
         </div>
       ) : isFolderView ? (
         <SortableContext items={sortableItems} strategy={() => null}>

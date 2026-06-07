@@ -4,7 +4,7 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/imag
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — when `folderID` is non-nil: returns all non-deleted images for that folder ordered by `image_folders.position ASC`; `cursor` and `limit` are ignored; images are returned with `Tags` and `ImageFolders` preloaded. When `folderID` is nil: returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` applies a keyset filter; `unfiled` true limits to images with no entry in `image_folders`; `tagID` non-nil filters by tag.
+- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — when `folderID` is non-nil: returns all non-deleted images for that folder ordered by `image_folders.position ASC`; `cursor`, `limit`, and `name` are ignored; images are returned with `Tags` and `ImageFolders` preloaded. When `folderID` is nil: returns non-deleted images ordered by `(created_at DESC, id DESC)`; fetches `limit + 1` rows; `cursor` applies a keyset filter; `unfiled` true limits to images with no entry in `image_folders`; `tagID` non-nil filters by tag; `name` non-nil and non-empty filters to images whose `title` contains the value, case-insensitively
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` and `ImageFolders` preloaded
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied scalar fields for the image owned by `userID`; `folder_id` is NOT a valid key in the map (folder assignment is handled by `SetImageFolder`); result has `Tags` and `ImageFolders` preloaded
 - `SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error` — see `image-folders` spec for full behaviour
@@ -51,6 +51,17 @@ Trash lifecycle methods (`GetDeletedByID`, `SoftDelete`, `Restore`, `ListTrashed
 
 - **WHEN** `List` is called with a non-nil `tagID`
 - **THEN** only images associated with that tag are returned
+
+#### Scenario: List filters by name in the cursor-paginated branch
+
+- **WHEN** `List` is called with `folderID = nil` and a non-nil, non-empty `name`
+- **THEN** the query includes a case-insensitive substring match (`ILIKE '%<name>%'`) against `images.title`
+- **AND** this filter composes with any `unfiled`, `tagID`, and cursor conditions already present
+
+#### Scenario: List ignores name in the folder-view branch
+
+- **WHEN** `List` is called with a non-nil `folderID` and a non-nil `name`
+- **THEN** the `name` value has no effect on the returned results
 
 ---
 
@@ -149,17 +160,20 @@ type CompleteUploadResult struct {
 }
 ```
 
-`ListImagesParams` SHALL include a `TagID` field:
+`ListImagesParams` SHALL include `TagID` and `Name` fields:
 
 ```go
 type ListImagesParams struct {
     FolderID *uuid.UUID
     Unfiled  bool
     TagID    *uuid.UUID
+    Name     *string
     Cursor   *ImageCursor
     Limit    int
 }
 ```
+
+`Name`, when non-nil and non-empty, filters results to images whose title contains the value, case-insensitively. It is ignored when `FolderID` is non-nil (folder views are filtered client-side on the frontend; see `fe-gallery-search`).
 
 `ListImages` SHALL use the paginated signature:
 
@@ -229,6 +243,17 @@ Trash lifecycle methods (`SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTras
 
 - **WHEN** `ListImages` is called with a non-nil `TagID` param
 - **THEN** only images associated with that tag are returned
+
+#### Scenario: ListImages passes Name to repository
+
+- **WHEN** `ListImages` is called with a non-nil, non-empty `Name` param
+- **THEN** the repository is called with that value as the `name` filter
+- **AND** only images whose title contains the value, case-insensitively, are returned
+
+#### Scenario: ListImages ignores blank Name
+
+- **WHEN** `ListImages` is called with `Name` pointing to an empty string
+- **THEN** the name filter is not applied and results are unaffected
 
 ---
 

@@ -39,13 +39,15 @@ type mockImageRepository struct {
 	lastMoveToFolderID   *uuid.UUID
 	updateAILabelsCalls  int
 	lastAILabels         json.RawMessage
+	lastListName         *string
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
 	m.createdImage = img
 	return m.image, m.err
 }
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, name *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+	m.lastListName = name
 	return m.images, m.err
 }
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -254,6 +256,41 @@ func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
 	require.Len(t, result.Images, 1)
 	require.NotNil(t, result.Images[0].ThumbnailURL)
 	assert.Equal(t, "https://r2.example.com/thumb", *result.Images[0].ThumbnailURL)
+}
+
+func TestImageUsecase_ListImages_PassesNameToRepository(t *testing.T) {
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
+	name := "heartopia"
+
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Name: &name})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.lastListName)
+	assert.Equal(t, "heartopia", *repo.lastListName)
+}
+
+func TestImageUsecase_ListImages_SkipsBlankName(t *testing.T) {
+	empty := ""
+	tests := []struct {
+		name   string
+		params ListImagesParams
+	}{
+		{name: "nil name", params: ListImagesParams{}},
+		{name: "empty string name", params: ListImagesParams{Name: &empty}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
+			uc := newImageUsecase(repo, nil, &mockStorageService{})
+
+			_, err := uc.ListImages(context.Background(), "kp_abc123", tt.params)
+
+			require.NoError(t, err)
+			assert.Nil(t, repo.lastListName)
+		})
+	}
 }
 
 // --- GetImage ---

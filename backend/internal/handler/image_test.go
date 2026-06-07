@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -226,6 +227,42 @@ func TestImageHandler_ListImages_ValidTagID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, uc.lastListImagesParams.TagID)
 	assert.Equal(t, tagID, *uc.lastListImagesParams.TagID)
+}
+
+func TestImageHandler_ListImages_ParsesAndForwardsName(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?name=heartopia", "")
+
+	err := h.ListImages(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastListImagesParams.Name)
+	assert.Equal(t, "heartopia", *uc.lastListImagesParams.Name)
+}
+
+func TestImageHandler_ListImages_BlankNameTreatedAsAbsent(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "absent", query: "/images"},
+		{name: "empty string", query: "/images?name="},
+		{name: "whitespace only", query: "/images?name=" + url.QueryEscape("   ")},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockImageUsecase{}
+			h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newEchoContext(t, http.MethodGet, tt.query, "")
+
+			err := h.ListImages(c)
+
+			require.NoError(t, err)
+			assert.Nil(t, uc.lastListImagesParams.Name)
+		})
+	}
 }
 
 func TestImageHandler_ListImages_FolderView_IgnoresCursor(t *testing.T) {

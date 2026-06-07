@@ -119,6 +119,12 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		folderID = &parsedFolderID
 	}
 	unfiled := c.QueryParam("unfiled") == "true"
+
+	var name *string
+	if trimmed := strings.TrimSpace(c.QueryParam("name")); trimmed != "" {
+		name = &trimmed
+	}
+
 	var tagID *uuid.UUID
 	if tagIDParam := c.QueryParam("tag_id"); tagIDParam != "" {
 		parsedTagID, err := uuid.Parse(tagIDParam)
@@ -144,6 +150,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		FolderID: folderID,
 		Unfiled:  unfiled,
 		TagID:    tagID,
+		Name:     name,
 		Cursor:   cursor,
 		Limit:    limit,
 	})
