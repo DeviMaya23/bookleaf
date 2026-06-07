@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
@@ -122,5 +122,78 @@ describe('ImageViewer — badge', () => {
     renderViewer(makeImage())
 
     expect(screen.getByText('Sunset photo · 1920 × 1080')).toBeInTheDocument()
+  })
+})
+
+describe('ImageViewer — fit zoom on open', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('initialises with a non-zero zoom (label does not show 0%)', () => {
+    renderViewer(makeImage())
+
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+  })
+})
+
+describe('ImageViewer — rotate button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('updates image transform to include rotate(90deg) after one click', async () => {
+    renderViewer(makeImage())
+
+    await userEvent.click(screen.getByRole('button', { name: /rotate/i }))
+
+    expect(screen.getByRole('img').style.transform).toContain('rotate(90deg)')
+  })
+})
+
+describe('ImageViewer — flip button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('updates image transform to include scaleX(-1) after one click', async () => {
+    renderViewer(makeImage())
+
+    await userEvent.click(screen.getByRole('button', { name: /flip/i }))
+
+    expect(screen.getByRole('img').style.transform).toContain('scaleX(-1)')
+  })
+})
+
+describe('ImageViewer — 1:1 button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('sets zoom label to 100% after clicking 1:1', async () => {
+    renderViewer(makeImage())
+
+    await userEvent.click(screen.getByRole('button', { name: /1:1/i }))
+
+    expect(screen.getByText('100%')).toBeInTheDocument()
+  })
+})
+
+describe('ImageViewer — zoom slider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('updates the zoom percentage label when the slider changes', () => {
+    renderViewer(makeImage())
+
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '200' } })
+
+    expect(screen.getByText('200%')).toBeInTheDocument()
   })
 })
