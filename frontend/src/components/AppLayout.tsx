@@ -75,9 +75,16 @@ export default function AppLayout() {
   const sortEndTriggerRef = useRef<number>(0)
   const [sortEndTrigger, setSortEndTrigger] = useState<SortEndTrigger | null>(null)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
-  const [viewerOpen, setViewerOpen] = useState(false)
+  const [viewerImage, setViewerImage] = useState<Image | null>(null)
 
   const folderId = view.type === 'folder' ? view.id : null
+  const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
+
+  useEffect(() => {
+    setViewerImage(null)
+    setSelectedImage(null)
+    setAutoFocusTitle(false)
+  }, [viewKey])
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
@@ -87,14 +94,15 @@ export default function AppLayout() {
 
   const { checkVision } = useVisionSuggestion()
 
-  useEffect(() => {
-    if (!selectedImage) setViewerOpen(false)
-  }, [selectedImage])
-
   const handleImageDoubleClick = useCallback((img: Image) => {
     setSelectedImage(img)
-    setViewerOpen(true)
+    setViewerImage(img)
   }, [])
+
+  const handleImageDeleted = useCallback((id: string) => {
+    if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) }
+    if (viewerImage?.id === id) setViewerImage(null)
+  }, [selectedImage, viewerImage])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -212,8 +220,8 @@ export default function AppLayout() {
               </p>
             </div>
           )}
-          {viewerOpen && selectedImage ? (
-            <ImageViewer image={selectedImage} onClose={() => setViewerOpen(false)} />
+          {viewerImage !== null ? (
+            <ImageViewer image={viewerImage} onClose={() => setViewerImage(null)} />
           ) : (
             <ScrollArea className="h-full">
               <div className="p-6">
@@ -247,7 +255,7 @@ export default function AppLayout() {
                   view={view}
                   onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
                   onImageDoubleClick={handleImageDoubleClick}
-                  onImageDeleted={(id) => { if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) } }}
+                  onImageDeleted={handleImageDeleted}
                   sortEndTrigger={sortEndTrigger}
                 />
               </div>
