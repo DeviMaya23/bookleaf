@@ -1,3 +1,9 @@
+## Purpose
+
+Detail panel for the selected image, rendered as a 320px sibling to the main content area in `AppLayout`. It shows the image's thumbnail, editable metadata (title, notes, source URL, folders, tags), a read-only details grid, and a download action — staying open and self-polling for thumbnail availability while an image is selected.
+
+## Requirements
+
 ### Requirement: Right panel opens when an image card is clicked
 
 The system SHALL render a 320px right panel (`RightPanel` component) as a sibling to the main content area in `AppLayout`. The panel SHALL be hidden when no image is selected. When the user clicks an image card, the panel SHALL become visible and display that image's metadata.
@@ -34,17 +40,18 @@ The system SHALL poll `GET /images/:id` every 1000ms while the selected image's 
 
 ### Requirement: Right panel displays a thumbnail at the top
 
-The system SHALL display the image's `thumbnail_url` at the top of the right panel. The thumbnail SHALL be rendered at full panel width with natural aspect ratio (not a fixed height). A close button (✕) SHALL be overlaid on the thumbnail (top-right corner). Clicking the thumbnail SHALL open the lightbox.
+The system SHALL display the image's `thumbnail_url` at the top of the right panel. The thumbnail SHALL be rendered at full panel width with natural aspect ratio (not a fixed height). A close button (✕) SHALL be overlaid on the thumbnail (top-right corner). The thumbnail itself SHALL be a static display element with no click-to-open behavior.
 
 #### Scenario: Thumbnail is shown at panel top
 
 - **WHEN** the right panel is open for a selected image
 - **THEN** the image thumbnail is displayed at the top of the panel at full panel width
 
-#### Scenario: Clicking the thumbnail opens the lightbox
+#### Scenario: Clicking the thumbnail has no effect
 
 - **WHEN** the user clicks the thumbnail in the right panel
-- **THEN** the lightbox opens and displays the full-resolution image
+- **THEN** no viewer or overlay opens
+- **AND** the right panel remains as is
 
 #### Scenario: Close button dismisses the panel
 
