@@ -256,7 +256,7 @@ export default function BatchUploadModal({
           <DialogTitle>Upload images</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-col gap-4 py-2 min-w-0">
           {!isUploading && (
             <div
               role="button"
@@ -292,9 +292,9 @@ export default function BatchUploadModal({
           )}
 
           {files.length > 0 && (
-            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-1 min-w-0">
               {files.map(f => (
-                <div key={f.id} className="flex items-center gap-3 rounded-lg border px-3 py-2">
+                <div key={f.id} className="flex items-center gap-3 rounded-lg border px-3 py-2 min-w-0">
                   <span className="text-sm truncate flex-1 text-muted-foreground min-w-0">{f.file.name}</span>
                   <StatusCell batchFile={f} onRetry={handleRetry} />
                 </div>

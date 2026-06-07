@@ -156,15 +156,15 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
           <DialogTitle>Upload image</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-col gap-4 py-2 min-w-0">
           {previewUrl && file ? (
-            <div className="flex items-center gap-3 rounded-lg border px-3 py-2 bg-muted/30">
+            <div className="flex items-center gap-3 rounded-lg border px-3 py-2 bg-muted/30 min-w-0">
               <img
                 src={previewUrl}
                 alt={file.name}
                 className="h-12 w-12 rounded object-cover flex-shrink-0"
               />
-              <span className="text-sm truncate flex-1 text-muted-foreground">{file.name}</span>
+              <span className="text-sm truncate flex-1 min-w-0 text-muted-foreground">{file.name}</span>
               <button
                 type="button"
                 onClick={handleRemoveFile}
