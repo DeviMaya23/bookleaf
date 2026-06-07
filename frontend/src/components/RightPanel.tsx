@@ -4,11 +4,6 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon, Download, ExternalLink, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { getImage, updateImage, downloadImage } from '@/lib/images'
 import { getFolders } from '@/lib/folders'
 import { getTags, createTag } from '@/lib/tags'
@@ -43,7 +38,6 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
-  const [lightboxOpen, setLightboxOpen] = useState(false)
   const [title, setTitle] = useState(image.title)
   const [description, setDescription] = useState(image.description ?? '')
   const [sourceUrl, setSourceUrl] = useState(image.source_url ?? '')
@@ -56,11 +50,10 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     setDescription(image.description ?? '')
     setSourceUrl(image.source_url ?? '')
     setTags(image.tags ?? [])
-    setLightboxOpen(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id])
 
-  const { data: imageDetail, isLoading: isLoadingDetail } = useQuery({
+  const { data: imageDetail } = useQuery({
     queryKey: ['image', image.id],
     queryFn: () => getImage(getToken, image.id),
     staleTime: 0,
@@ -237,10 +230,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
     <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
       {/* Thumbnail */}
       <div className="relative flex-shrink-0 max-h-[33vh]">
-        <div
-          className="cursor-pointer"
-          onClick={() => setLightboxOpen(true)}
-        >
+        <div>
           {thumbnailUrl ? (
             <img
               src={thumbnailUrl}
@@ -376,23 +366,6 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
         </Button>
       </div>
 
-      {/* Lightbox */}
-      <Dialog open={lightboxOpen} onOpenChange={(open) => { if (!open) setLightboxOpen(false) }}>
-        <DialogContent className="sm:max-w-fit p-0 overflow-hidden" showCloseButton={false}>
-          <DialogTitle className="sr-only">{image.title}</DialogTitle>
-          {isLoadingDetail ? (
-            <div className="flex items-center justify-center w-64 h-64">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : imageDetail ? (
-            <img
-              src={imageDetail.image_url}
-              alt={image.title}
-              className="max-h-[90vh] max-w-[90vw] object-contain"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </aside>
   )
 }
