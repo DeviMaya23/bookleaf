@@ -15,7 +15,11 @@ vi.mock('@/lib/images', () => ({
 }))
 
 vi.mock('@/lib/thumbnail', () => ({
-  generateThumbnail: vi.fn().mockResolvedValue(new Blob(['thumb'], { type: 'image/jpeg' })),
+  generateThumbnail: vi.fn().mockResolvedValue({
+    blob: new Blob(['thumb'], { type: 'image/jpeg' }),
+    width: 1920,
+    height: 1080,
+  }),
   convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
 }))
 
@@ -76,6 +80,16 @@ describe('BatchUploadModal', () => {
       )
       // 2 files × 2 PUTs each (original + thumbnail)
       expect(putToR2).toHaveBeenCalledTimes(4)
+      expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'u1', {
+        width: 1920,
+        height: 1080,
+        fileSize: file1.size,
+      })
+      expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'u2', {
+        width: 1920,
+        height: 1080,
+        fileSize: file2.size,
+      })
       // folder suggestion from complete is ignored — modal stays open, no suggestion UI
       expect(screen.queryByText(/add to this folder/i)).not.toBeInTheDocument()
     })

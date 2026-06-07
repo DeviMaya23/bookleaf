@@ -31,6 +31,7 @@ If, while implementing a task, you discover that something not covered by the de
 - Failure scenarios must assert the specific error type or message, not just that an error occurred
 
 ### Others to keep in mind during proposals
+- When a change modifies a shared contract (a function signature, API endpoint, hook, etc.), grep for every call site of that symbol across all layers (backend, frontend, extension) before finalizing Impact/Capabilities/tasks — do not rely on a named flow (e.g. "the upload flow") to be exhaustive, as parallel entry points (e.g. drag-and-drop vs. modal vs. batch upload) commonly funnel into the same shared function and are easy to miss.
 - When creating tasks for a new endpoint, always include a bruno file creation.
 - On any BE development, include a task to run golang-ci lint at the end, and fix whatever issue arises.
 - On any FE development, include a task to run npm run build at the end, and fix whatever issue arises.

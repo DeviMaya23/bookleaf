@@ -1,13 +1,9 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"image"
-	"image/color"
-	"image/png"
 	"strings"
 	"testing"
 	"time"
@@ -108,17 +104,12 @@ func (m *mockVisionService) AnnotateImage(_ context.Context, _ []byte) ([]domain
 
 // --- helpers ---
 
-func generateTestPNGBytes(t *testing.T, width, height int) []byte {
-	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			img.Set(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
-		}
-	}
-	var buf bytes.Buffer
-	require.NoError(t, png.Encode(&buf, img))
-	return buf.Bytes()
+func intPtr(v int) *int {
+	return &v
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }
 
 func makeMetricsTel(t *testing.T) (*observability.Telemetry, func() metricdata.ResourceMetrics) {
@@ -247,45 +238,62 @@ func TestImageUploadUsecase_InitiateUpload_CreatePendingFails(t *testing.T) {
 
 // --- CompleteUpload ---
 
-func TestImageUploadUsecase_CompleteUpload_PersistsImageMetadata(t *testing.T) {
+func TestImageUploadUsecase_CompleteUpload_PersistsClientSuppliedValues(t *testing.T) {
 	imageID := uuid.New()
 	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "users/kp_abc123/images/test.png", MIMEType: "image/png"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	store := &mockStorageService{objectBytes: generateTestPNGBytes(t, 8, 6)}
+	store := &mockStorageService{}
 	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(1920), intPtr(1080), int64Ptr(245760))
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.createdImage)
-	require.NotNil(t, imageRepo.createdImage.FileSize)
-	assert.EqualValues(t, len(store.objectBytes), *imageRepo.createdImage.FileSize)
 	require.NotNil(t, imageRepo.createdImage.Width)
 	require.NotNil(t, imageRepo.createdImage.Height)
-	assert.Equal(t, 8, *imageRepo.createdImage.Width)
-	assert.Equal(t, 6, *imageRepo.createdImage.Height)
+	require.NotNil(t, imageRepo.createdImage.FileSize)
+	assert.Equal(t, 1920, *imageRepo.createdImage.Width)
+	assert.Equal(t, 1080, *imageRepo.createdImage.Height)
+	assert.EqualValues(t, 245760, *imageRepo.createdImage.FileSize)
+	assert.Equal(t, 0, store.getCalls, "backend must not fetch image bytes from R2 to derive metadata")
 }
 
-func TestImageUploadUsecase_CompleteUpload_DecodeFailurePersistsFileSize(t *testing.T) {
+func TestImageUploadUsecase_CompleteUpload_NonPositiveValuesStoredAsNull(t *testing.T) {
 	imageID := uuid.New()
 	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	pendingRepo := &mockPendingUploadRepository{
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.bin", MIMEType: "application/octet-stream"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	store := &mockStorageService{objectBytes: []byte("not-an-image")}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, nil, &noopJobEnqueuer{}, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(-1), intPtr(0), int64Ptr(1024))
 
 	require.NoError(t, err)
-	require.NotNil(t, imageRepo.createdImage.FileSize)
-	assert.EqualValues(t, len(store.objectBytes), *imageRepo.createdImage.FileSize)
 	assert.Nil(t, imageRepo.createdImage.Width)
 	assert.Nil(t, imageRepo.createdImage.Height)
+	require.NotNil(t, imageRepo.createdImage.FileSize)
+	assert.EqualValues(t, 1024, *imageRepo.createdImage.FileSize)
+}
+
+func TestImageUploadUsecase_CompleteUpload_OmittedValuesStoredAsNull(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.bin", MIMEType: "application/octet-stream"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Nil(t, imageRepo.createdImage.Width)
+	assert.Nil(t, imageRepo.createdImage.Height)
+	assert.Nil(t, imageRepo.createdImage.FileSize)
 }
 
 func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *testing.T) {
@@ -298,7 +306,7 @@ func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *t
 	pendingRepo.transactionImageRepo = imageRepo
 	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.setFolderFolderID)
@@ -315,7 +323,7 @@ func TestImageUploadUsecase_CompleteUpload_AlwaysSetsThumbnailPath(t *testing.T)
 	enqueuer := &spyJobEnqueuer{}
 	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, enqueuer, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.createdImage.ThumbnailPath)
@@ -398,7 +406,7 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 	pendingRepo.transactionImageRepo = imageRepo
 	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
 	require.NoError(t, err)
 
 	points := findInt64Sum(collect(), "r2.upload.count")
@@ -415,7 +423,7 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	pendingRepo := &mockPendingUploadRepository{getErr: gorm.ErrRecordNotFound}
 	uc := NewImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123")
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
 	require.Error(t, err)
 
 	points := findInt64Sum(collect(), "r2.upload.count")

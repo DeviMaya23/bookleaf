@@ -35,7 +35,9 @@ async function fetchImageBlob(
   return { blob, mimeType };
 }
 
-async function generateThumbnail(blob: Blob): Promise<Blob> {
+async function generateThumbnail(
+  blob: Blob,
+): Promise<{ blob: Blob; width: number; height: number }> {
   const bitmap = await createImageBitmap(blob);
 
   const { width, height } = bitmap;
@@ -48,7 +50,8 @@ async function generateThumbnail(blob: Blob): Promise<Blob> {
   ctx.drawImage(bitmap, 0, 0, tw, th);
   bitmap.close();
 
-  return canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+  const thumbnailBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+  return { blob: thumbnailBlob, width, height };
 }
 
 async function blobToDataUrl(blob: Blob): Promise<string> {
@@ -68,6 +71,8 @@ async function saveImage({
   title,
   pageUrl,
   thumbnailBlob,
+  width,
+  height,
 }: {
   blob: Blob;
   mimeType: string;
@@ -75,6 +80,8 @@ async function saveImage({
   pageUrl: string;
   accessToken: string;
   thumbnailBlob?: Blob;
+  width?: number;
+  height?: number;
 }): Promise<string> {
   const initRes = await apiFetch("/images", {
     method: "POST",
@@ -115,8 +122,16 @@ async function saveImage({
     if (!res.ok) throw new Error(`PUT to R2 failed: ${res.status}`);
   }
 
+  const completeBody: { file_size: number; width?: number; height?: number } = {
+    file_size: blob.size,
+  };
+  if (width !== undefined) completeBody.width = width;
+  if (height !== undefined) completeBody.height = height;
+
   const completeRes = await apiFetch(`/images/${image_id}/complete`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(completeBody),
   });
   if (!completeRes.ok)
     throw new Error(`POST /complete failed: ${completeRes.status}`);
@@ -148,8 +163,11 @@ async function handleSave({
   try {
     const fetched = await fetchImageBlob(srcUrl);
 
+    let dimensions: { width: number; height: number } | undefined;
     if (typeof OffscreenCanvas !== "undefined") {
-      thumbnailBlob = await generateThumbnail(fetched.blob);
+      const thumbnail = await generateThumbnail(fetched.blob);
+      thumbnailBlob = thumbnail.blob;
+      dimensions = { width: thumbnail.width, height: thumbnail.height };
     }
 
     imageId = await saveImage({
@@ -159,6 +177,8 @@ async function handleSave({
       pageUrl,
       accessToken: auth.accessToken,
       thumbnailBlob: thumbnailBlob ?? undefined,
+      width: dimensions?.width,
+      height: dimensions?.height,
     });
     await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
   } catch {

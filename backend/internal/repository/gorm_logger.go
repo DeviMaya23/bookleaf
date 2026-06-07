@@ -74,5 +74,11 @@ func (l *zapGORMLogger) Trace(ctx context.Context, begin time.Time, fc func() (s
 			zap.Int64("rows_affected", rowsAffected),
 			zap.String("sql", sql),
 		)
+	case l.level >= logger.Info:
+		log.Info("query",
+			zap.Float64("elapsed_ms", float64(elapsed.Milliseconds())),
+			zap.Int64("rows_affected", rowsAffected),
+			zap.String("sql", sql),
+		)
 	}
 }

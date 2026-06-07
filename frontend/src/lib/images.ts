@@ -128,11 +128,26 @@ export interface CompleteUploadResult {
   suggested_folder_name: string | null
 }
 
+export interface CompleteUploadParams {
+  width?: number
+  height?: number
+  fileSize?: number
+}
+
 export async function completeUpload(
   getToken: GetToken,
   id: string,
+  params?: CompleteUploadParams,
 ): Promise<CompleteUploadResult> {
-  const res = await apiFetch(`/images/${id}/complete`, getToken, { method: 'POST' })
+  const body: Record<string, number> = {}
+  if (params?.width !== undefined) body.width = params.width
+  if (params?.height !== undefined) body.height = params.height
+  if (params?.fileSize !== undefined) body.file_size = params.fileSize
+  const res = await apiFetch(`/images/${id}/complete`, getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
   if (!res.ok) throw new Error('Failed to complete upload')
   return res.json()
 }

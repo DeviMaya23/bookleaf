@@ -147,12 +147,12 @@ export default function BatchUploadModal({
         folderId: folderId ?? undefined,
       })
 
-      const thumbnail = await generateThumbnail(uploadBlob)
+      const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
       await Promise.all([
         putToR2(initiated.upload_url, uploadBlob),
         putToR2(initiated.thumbnail_upload_url, thumbnail),
       ])
-      await completeUpload(getToken, initiated.id)
+      await completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
       if (!closedRef.current) {
         updateFile(batchFile.id, { status: 'SUCCESS' })
         queryClient.invalidateQueries({ queryKey: ['images'] })
