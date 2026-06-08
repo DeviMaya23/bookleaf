@@ -22,10 +22,11 @@ import (
 )
 
 type mockFolderUsecase struct {
-	folder  *domain.Folder
-	detail  *usecase.FolderDetail
-	folders []*domain.Folder
-	err     error
+	folder           *domain.Folder
+	detail           *usecase.FolderDetail
+	folders          []*domain.Folder
+	err              error
+	lastUpdateParams usecase.UpdateFolderParams
 }
 
 func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID, _ *string) (*domain.Folder, error) {
@@ -40,7 +41,8 @@ func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ string) (*
 	return m.detail, m.err
 }
 
-func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _, _ string, _ *uuid.UUID, _ *string) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateFolderParams) (*domain.Folder, error) {
+	m.lastUpdateParams = params
 	return m.folder, m.err
 }
 
@@ -291,7 +293,7 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := NewFolderHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
-			c, rec := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), tt.body)
+			c, rec := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), tt.body)
 			c.SetPath("/folders/:id")
 			c.SetParamNames("id")
 			c.SetParamValues(folderID.String())
@@ -314,9 +316,67 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 	}
 }
 
+func TestFolderHandler_UpdateFolder_AbsentFieldsLeaveParamsNil(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Name: "updated"}}
+	h := NewFolderHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), `{"name":"updated"}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.Name)
+	assert.Equal(t, "updated", *uc.lastUpdateParams.Name)
+	assert.Nil(t, uc.lastUpdateParams.ParentID)
+	assert.Nil(t, uc.lastUpdateParams.Description)
+}
+
+func TestFolderHandler_UpdateFolder_ExplicitNullClearsParentAndDescription(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockFolderUsecase{folder: &domain.Folder{ID: folderID}}
+	h := NewFolderHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), `{"parent_id":null,"description":null}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.ParentID)
+	assert.Nil(t, *uc.lastUpdateParams.ParentID)
+	require.NotNil(t, uc.lastUpdateParams.Description)
+	assert.Nil(t, *uc.lastUpdateParams.Description)
+}
+
+func TestFolderHandler_UpdateFolder_ProvidedValuesSetParentAndDescription(t *testing.T) {
+	folderID := uuid.New()
+	parentID := uuid.New()
+	uc := &mockFolderUsecase{folder: &domain.Folder{ID: folderID}}
+	h := NewFolderHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := `{"parent_id":"` + parentID.String() + `","description":"new desc"}`
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), body)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.ParentID)
+	require.NotNil(t, *uc.lastUpdateParams.ParentID)
+	assert.Equal(t, parentID, **uc.lastUpdateParams.ParentID)
+	require.NotNil(t, uc.lastUpdateParams.Description)
+	require.NotNil(t, *uc.lastUpdateParams.Description)
+	assert.Equal(t, "new desc", **uc.lastUpdateParams.Description)
+}
+
 func TestFolderHandler_UpdateFolder_InvalidUUID(t *testing.T) {
 	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodPut, "/folders/not-a-uuid", `{"name":"updated"}`)
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/not-a-uuid", `{"name":"updated"}`)
 	c.SetPath("/folders/:id")
 	c.SetParamNames("id")
 	c.SetParamValues("not-a-uuid")
@@ -329,7 +389,7 @@ func TestFolderHandler_UpdateFolder_InvalidUUID(t *testing.T) {
 func TestFolderHandler_UpdateFolder_MalformedJSON(t *testing.T) {
 	folderID := uuid.New()
 	h := NewFolderHandler(&mockFolderUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodPut, "/folders/"+folderID.String(), `{not valid json}`)
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), `{not valid json}`)
 	c.SetPath("/folders/:id")
 	c.SetParamNames("id")
 	c.SetParamValues(folderID.String())

@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { PlusIcon } from 'lucide-react'
 import FolderNameDialog from './FolderNameDialog'
 import ProfileMenu from './ProfileMenu'
-import { getFolders, createFolder, renameFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
+import { getFolders, createFolder, updateFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
 import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
@@ -240,9 +240,10 @@ function RootDropZone() {
 
 interface FolderSidebarProps {
   view: AppView
+  onFolderSelect?: () => void
 }
 
-export default function FolderSidebar({ view }: FolderSidebarProps) {
+export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -274,7 +275,7 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   })
 
   const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => renameFolder(getToken, id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateFolder(getToken, id, { name }),
     onSuccess: invalidate,
   })
 
@@ -305,6 +306,8 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   }
 
   function handleFolderSelect(folder: FolderNode) {
+    const isActive = view.type === 'folder' && view.id === folder.id
+    if (!isActive) onFolderSelect?.()
     navigate(`/folders/${folder.id}`)
   }
 

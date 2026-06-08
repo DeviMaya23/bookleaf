@@ -4,7 +4,7 @@ meta {
   seq: 4
 }
 
-put {
+patch {
   url: {{baseUrl}}/folders/{{folderId}}
   body: json
   auth: inherit
@@ -12,7 +12,6 @@ put {
 
 body:json {
   {
-    "name": "renamed folder",
-    "parent_id": ""
+    "name": "renamed folder"
   }
 }

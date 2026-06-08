@@ -1,31 +1,4 @@
-## ADDED Requirements
-
-### Requirement: Folder items are draggable
-
-Each folder item in `FolderSidebar` SHALL be wrapped with `useDraggable` carrying `{ type: 'folder', folderId: string, name: string, parentId: string | null }`. The same 8px activation constraint SHALL apply.
-
-#### Scenario: User begins dragging a folder item
-
-- **WHEN** the user presses and holds a folder item and moves the pointer at least 8px
-- **THEN** dnd-kit activates the drag with the folder item as the active drag item
-
----
-
-### Requirement: Folder items are also drop targets for folder drags
-
-Each folder item SHALL carry a `useDroppable` with `{ type: 'folder', folderId: string }`. While a folder drag is active and the pointer is over a folder item, that item SHALL highlight — unless the target is in the dragged folder's own subtree (including itself), in which case no highlight is shown.
-
-#### Scenario: Valid folder drop target highlights on hover
-
-- **WHEN** the user drags folder A and hovers over folder B (which is not a descendant of A)
-- **THEN** folder B is visually highlighted
-
-#### Scenario: Dragged folder's own subtree does not highlight
-
-- **WHEN** the user drags folder A and hovers over folder A itself or one of its descendants
-- **THEN** no highlight appears on that target
-
----
+## MODIFIED Requirements
 
 ### Requirement: Dropping folder onto another folder nests it
 

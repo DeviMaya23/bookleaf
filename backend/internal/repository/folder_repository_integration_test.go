@@ -148,25 +148,76 @@ func TestFolderRepository_GetByID_WrongUser(t *testing.T) {
 
 // --- Update ---
 
-func TestFolderRepository_Update_PersistsFields(t *testing.T) {
+func setupUpdateFolder(t *testing.T, tx *gorm.DB, userID string, parentID *uuid.UUID, description *string) *domain.Folder {
+	t.Helper()
+	folder := &domain.Folder{
+		UserID:      userID,
+		Name:        "travel",
+		ParentID:    parentID,
+		Description: description,
+	}
+	require.NoError(t, tx.Create(folder).Error)
+	return folder
+}
+
+func TestFolderRepository_Update_OmittedFieldsPreserved(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	parent := createFolder(t, tx, "kp_abc123", "parent", nil)
-	existing := createFolder(t, tx, "kp_abc123", "travel", nil)
+	description := "original description"
+	existing := setupUpdateFolder(t, tx, "kp_abc123", &parent.ID, &description)
 	repo := NewFolderRepository(tx)
 
-	updated, err := repo.Update(context.Background(), &domain.Folder{
-		ID:          existing.ID,
-		UserID:      "kp_abc123",
-		Name:        "updated",
-		ParentID:    &parent.ID,
-		Description: func() *string { v := "updated description"; return &v }(),
+	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+		"name": "updated",
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, "updated", updated.Name)
 	require.NotNil(t, updated.ParentID)
 	assert.Equal(t, parent.ID, *updated.ParentID)
+	require.NotNil(t, updated.Description)
+	assert.Equal(t, "original description", *updated.Description)
+}
+
+func TestFolderRepository_Update_ExplicitNullClearsField(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_abc123")
+	parent := createFolder(t, tx, "kp_abc123", "parent", nil)
+	description := "original description"
+	existing := setupUpdateFolder(t, tx, "kp_abc123", &parent.ID, &description)
+	repo := NewFolderRepository(tx)
+
+	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+		"parent_id":   (*uuid.UUID)(nil),
+		"description": (*string)(nil),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "travel", updated.Name)
+	assert.Nil(t, updated.ParentID)
+	assert.Nil(t, updated.Description)
+}
+
+func TestFolderRepository_Update_OverwritesProvidedFields(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_abc123")
+	oldParent := createFolder(t, tx, "kp_abc123", "old-parent", nil)
+	newParent := createFolder(t, tx, "kp_abc123", "new-parent", nil)
+	description := "original description"
+	existing := setupUpdateFolder(t, tx, "kp_abc123", &oldParent.ID, &description)
+	repo := NewFolderRepository(tx)
+
+	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+		"name":        "updated",
+		"parent_id":   &newParent.ID,
+		"description": func() *string { v := "updated description"; return &v }(),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "updated", updated.Name)
+	require.NotNil(t, updated.ParentID)
+	assert.Equal(t, newParent.ID, *updated.ParentID)
 	require.NotNil(t, updated.Description)
 	assert.Equal(t, "updated description", *updated.Description)
 }
@@ -175,10 +226,8 @@ func TestFolderRepository_Update_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.Update(context.Background(), &domain.Folder{
-		ID:     uuid.New(),
-		UserID: "kp_abc123",
-		Name:   "updated",
+	_, err := repo.Update(context.Background(), uuid.New(), "kp_abc123", map[string]any{
+		"name": "updated",
 	})
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
@@ -191,10 +240,8 @@ func TestFolderRepository_Update_WrongUser(t *testing.T) {
 	existing := createFolder(t, tx, "kp_owner", "travel", nil)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.Update(context.Background(), &domain.Folder{
-		ID:     existing.ID,
-		UserID: "kp_other",
-		Name:   "updated",
+	_, err := repo.Update(context.Background(), existing.ID, "kp_other", map[string]any{
+		"name": "updated",
 	})
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)

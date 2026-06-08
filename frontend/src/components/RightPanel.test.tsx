@@ -54,7 +54,7 @@ function renderPanel(image: Image, onClose = vi.fn()) {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <RightPanel image={image} onClose={onClose} />
+      <RightPanel mode="image" image={image} onClose={onClose} />
     </QueryClientProvider>,
   )
 }

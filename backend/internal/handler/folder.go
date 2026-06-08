@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -20,7 +22,7 @@ type FolderUsecase interface {
 	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
 	List(ctx context.Context, userID string) ([]*domain.Folder, error)
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*usecase.FolderDetail, error)
-	Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
+	Update(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateFolderParams) (*domain.Folder, error)
 	Delete(ctx context.Context, id uuid.UUID, userID string) error
 }
 
@@ -33,6 +35,12 @@ type folderRequest struct {
 	Name        string     `json:"name"`
 	ParentID    *uuid.UUID `json:"parent_id"`
 	Description *string    `json:"description"`
+}
+
+type updateFolderRequest struct {
+	Name        json.RawMessage `json:"name"`
+	ParentID    json.RawMessage `json:"parent_id"`
+	Description json.RawMessage `json:"description"`
 }
 
 type folderResponse struct {
@@ -148,12 +156,57 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	var req folderRequest
+	var req updateFolderRequest
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Update(ctx, folderID, userID, req.Name, req.ParentID, req.Description)
+	var params usecase.UpdateFolderParams
+
+	if len(req.Name) > 0 && string(req.Name) != "null" {
+		var name string
+		if err := json.Unmarshal(req.Name, &name); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid name")
+		}
+		if strings.TrimSpace(name) == "" {
+			return echo.NewHTTPError(http.StatusBadRequest, "folder name is required")
+		}
+		params.Name = &name
+	}
+
+	if len(req.ParentID) > 0 {
+		if string(req.ParentID) == "null" {
+			params.ParentID = new(*uuid.UUID)
+		} else {
+			var raw string
+			if err := json.Unmarshal(req.ParentID, &raw); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid parent_id")
+			}
+			parsed, err := uuid.Parse(raw)
+			if err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid parent_id")
+			}
+			inner := parsed
+			outer := &inner
+			params.ParentID = &outer
+		}
+	}
+
+	if len(req.Description) > 0 {
+		if string(req.Description) == "null" {
+			params.Description = new(*string)
+		} else {
+			var description string
+			if err := json.Unmarshal(req.Description, &description); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid description")
+			}
+			inner := description
+			outer := &inner
+			params.Description = &outer
+		}
+	}
+
+	folder, err := h.folderUsecase.Update(ctx, folderID, userID, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

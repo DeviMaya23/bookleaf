@@ -1,7 +1,7 @@
 import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
 import { generateThumbnail, convertHeicToJpeg } from './thumbnail'
 import { isSafari } from './browser'
-import { moveFolder } from './folders'
+import { updateFolder } from './folders'
 import { getFolderSubtreeIds } from './folders'
 import type { Folder } from './folders'
 import type { Image } from './images'
@@ -65,12 +65,12 @@ export async function handleFolderDrop(
   if (drop.type === 'folder') {
     if (subtreeIds.has(drop.folderId)) return 'circular'
     if (drag.parentId === drop.folderId) return 'noop'
-    await moveFolder(getToken, drag.folderId, drag.name, drop.folderId)
+    await updateFolder(getToken, drag.folderId, { parent_id: drop.folderId })
     return 'moved'
   }
   if (drop.type === 'root') {
     if (drag.parentId === null) return 'noop'
-    await moveFolder(getToken, drag.folderId, drag.name, null)
+    await updateFolder(getToken, drag.folderId, { parent_id: null })
     return 'moved'
   }
   return 'noop'

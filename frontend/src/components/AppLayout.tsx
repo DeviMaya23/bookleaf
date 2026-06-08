@@ -34,6 +34,7 @@ import BatchUploadModal from './BatchUploadModal'
 import RightPanel from './RightPanel'
 import { useQuery } from '@tanstack/react-query'
 import { getFolders } from '@/lib/folders'
+import type { Folder } from '@/lib/folders'
 import { useVisionSuggestion } from '@/hooks/useVisionSuggestion'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/dragHandlers'
@@ -96,6 +97,7 @@ export default function AppLayout() {
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
   const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([])
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
+  const [folderPanelOpen, setFolderPanelOpen] = useState(false)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [isAutoUploading, setIsAutoUploading] = useState(false)
   const [activeDragImage, setActiveDragImage] = useState<{ id: string; thumbnailUrl: string | null } | null>(null)
@@ -146,10 +148,15 @@ export default function AppLayout() {
     staleTime: 60_000,
   })
 
+  const activeFolder: Folder | null = view.type === 'folder'
+    ? folders.find((f) => f.id === view.id) ?? null
+    : null
+
   const { checkVision } = useVisionSuggestion()
 
   const handleImageDoubleClick = useCallback((img: Image) => {
     setSelectedImage(img)
+    setFolderPanelOpen(false)
     setViewerImage(img)
   }, [])
 
@@ -243,6 +250,7 @@ export default function AppLayout() {
       checkVision(imageDetail.id)
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)
+      setFolderPanelOpen(false)
     } catch (err) {
       if ((err as Error).message === 'heic_safari_only') {
         toast.error('HEIC uploads are only supported in Safari.')
@@ -259,7 +267,10 @@ export default function AppLayout() {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex h-screen">
-        <FolderSidebar view={view} />
+        <FolderSidebar
+          view={view}
+          onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
+        />
         <main
           className="ml-[240px] flex-1 h-screen min-w-0 relative"
           onDragOver={handleMainDragOver}
@@ -351,7 +362,7 @@ export default function AppLayout() {
                   debouncedSearchTerm={debouncedSearchTerm}
                   sortBy={sortBy}
                   sortDir={sortDir}
-                  onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
+                  onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img); setFolderPanelOpen(false) }}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}
                   sortEndTrigger={sortEndTrigger}
@@ -360,13 +371,20 @@ export default function AppLayout() {
             </ScrollArea>
           )}
         </main>
-        {selectedImage && (
+        {selectedImage ? (
           <RightPanel
+            mode="image"
             image={selectedImage}
             onClose={() => { setSelectedImage(null); setAutoFocusTitle(false) }}
             autoFocusTitle={autoFocusTitle}
           />
-        )}
+        ) : folderPanelOpen && activeFolder ? (
+          <RightPanel
+            mode="folder"
+            folder={activeFolder}
+            onClose={() => setFolderPanelOpen(false)}
+          />
+        ) : null}
         <UploadModal
           open={uploadOpen}
           onOpenChange={setUploadOpen}

@@ -29,24 +29,19 @@ export async function createFolder(getToken: GetToken, name: string, parentId?: 
   return res.json()
 }
 
-export async function renameFolder(getToken: GetToken, id: string, name: string): Promise<Folder> {
-  const res = await apiFetch(`/folders/${id}`, getToken, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  })
-  if (!res.ok) throw new Error('Failed to rename folder')
-  return res.json()
+export interface UpdateFolderParams {
+  name?: string
+  description?: string | null
+  parent_id?: string | null
 }
 
-export async function moveFolder(getToken: GetToken, id: string, name: string, parentId: string | null): Promise<Folder> {
-  const body: Record<string, string | null> = { name, parent_id: parentId }
+export async function updateFolder(getToken: GetToken, id: string, params: UpdateFolderParams): Promise<Folder> {
   const res = await apiFetch(`/folders/${id}`, getToken, {
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(params),
   })
-  if (!res.ok) throw new Error('Failed to move folder')
+  if (!res.ok) throw new Error('Failed to update folder')
   return res.json()
 }
 

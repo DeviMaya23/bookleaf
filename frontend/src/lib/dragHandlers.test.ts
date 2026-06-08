@@ -10,7 +10,7 @@ vi.mock('./images', () => ({
 
 vi.mock('./folders', () => ({
   getFolderSubtreeIds: vi.fn(),
-  moveFolder: vi.fn(),
+  updateFolder: vi.fn(),
 }))
 
 vi.mock('./thumbnail', () => ({
@@ -28,7 +28,7 @@ vi.mock('./browser', () => ({
 
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
 import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
-import { moveFolder, getFolderSubtreeIds } from './folders'
+import { updateFolder, getFolderSubtreeIds } from './folders'
 import { generateThumbnail, convertHeicToJpeg } from './thumbnail'
 import { isSafari } from './browser'
 import type { Folder } from './folders'
@@ -102,9 +102,9 @@ describe('handleImageDrop', () => {
 describe('handleFolderDrop', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('calls moveFolder with target parent_id on success', async () => {
+  it('calls updateFolder with target parent_id on success', async () => {
     vi.mocked(getFolderSubtreeIds).mockReturnValueOnce(new Set(['folder-a']))
-    vi.mocked(moveFolder).mockResolvedValueOnce({} as never)
+    vi.mocked(updateFolder).mockResolvedValueOnce({} as never)
 
     const folders = [makeFolder('folder-a'), makeFolder('folder-b')]
     const result = await handleFolderDrop(
@@ -115,7 +115,7 @@ describe('handleFolderDrop', () => {
     )
 
     expect(result).toBe('moved')
-    expect(moveFolder).toHaveBeenCalledWith(getToken, 'folder-a', 'Folder A', 'folder-b')
+    expect(updateFolder).toHaveBeenCalledWith(getToken, 'folder-a', { parent_id: 'folder-b' })
   })
 
   it('returns noop when folder is already a child of target', async () => {
@@ -130,7 +130,7 @@ describe('handleFolderDrop', () => {
     )
 
     expect(result).toBe('noop')
-    expect(moveFolder).not.toHaveBeenCalled()
+    expect(updateFolder).not.toHaveBeenCalled()
   })
 
   it('returns circular when target is in dragged folder subtree', async () => {
@@ -145,12 +145,12 @@ describe('handleFolderDrop', () => {
     )
 
     expect(result).toBe('circular')
-    expect(moveFolder).not.toHaveBeenCalled()
+    expect(updateFolder).not.toHaveBeenCalled()
   })
 
-  it('calls moveFolder with null parent_id when dropped on root zone', async () => {
+  it('calls updateFolder with null parent_id when dropped on root zone', async () => {
     vi.mocked(getFolderSubtreeIds).mockReturnValueOnce(new Set(['folder-a']))
-    vi.mocked(moveFolder).mockResolvedValueOnce({} as never)
+    vi.mocked(updateFolder).mockResolvedValueOnce({} as never)
 
     const folders = [makeFolder('folder-a', 'folder-b')]
     const result = await handleFolderDrop(
@@ -161,12 +161,12 @@ describe('handleFolderDrop', () => {
     )
 
     expect(result).toBe('moved')
-    expect(moveFolder).toHaveBeenCalledWith(getToken, 'folder-a', 'Folder A', null)
+    expect(updateFolder).toHaveBeenCalledWith(getToken, 'folder-a', { parent_id: null })
   })
 
-  it('throws when moveFolder fails', async () => {
+  it('throws when updateFolder fails', async () => {
     vi.mocked(getFolderSubtreeIds).mockReturnValueOnce(new Set(['folder-a']))
-    vi.mocked(moveFolder).mockRejectedValueOnce(new Error('server error'))
+    vi.mocked(updateFolder).mockRejectedValueOnce(new Error('server error'))
 
     const folders = [makeFolder('folder-a')]
     await expect(
