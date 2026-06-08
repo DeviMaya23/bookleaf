@@ -1,13 +1,4 @@
-### Requirement: Two-panel application shell
-The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width.
-
-#### Scenario: Layout renders on load
-- **WHEN** the application root is mounted
-- **THEN** the sidebar and main content area are both visible on screen simultaneously
-
-#### Scenario: Sidebar does not scroll with content
-- **WHEN** the main content area is scrolled
-- **THEN** the sidebar remains fixed in place and does not move
+## MODIFIED Requirements
 
 ### Requirement: Folder list in sidebar
 The system SHALL fetch the folder list from `GET /folders` and display it in the sidebar as a nested tree below a "FOLDERS" section label. The sidebar SHALL show three pinned system entries above the section label: **All**, **Unsorted**, and **Trash** (de-emphasized). A horizontal divider and section label SHALL separate the system entries from the user folder tree. An icon button adjacent to the "FOLDERS" section label SHALL always be available to create a new folder. The full-width "+ New folder" affordance in the footer area SHALL be displayed only when the user's folder list is empty.
@@ -36,10 +27,3 @@ The system SHALL fetch the folder list from `GET /folders` and display it in the
 #### Scenario: Footer new-folder affordance is hidden once folders exist
 - **WHEN** the application shell is rendered and `GET /folders` returns a non-empty list
 - **THEN** the full-width "+ New folder" button is not present in the sidebar footer
-
-### Requirement: Empty image grid in main area
-The system SHALL render an empty image grid placeholder in the main content area. No real image data is required — the grid shell (container and spacing) SHALL be present.
-
-#### Scenario: Image grid area is present
-- **WHEN** the application shell is rendered
-- **THEN** the main content area contains an image grid container element

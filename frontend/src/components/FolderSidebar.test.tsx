@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
-import { getFolderSubtreeIds, getFolders } from '@/lib/folders'
+import { getFolderSubtreeIds, getFolders, createFolder } from '@/lib/folders'
 import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import FolderSidebar from './FolderSidebar'
@@ -27,6 +27,7 @@ vi.mock('@dnd-kit/core', async (importOriginal) => ({
 vi.mock('@/lib/folders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/folders')>()),
   getFolders: vi.fn(),
+  createFolder: vi.fn(),
 }))
 
 vi.mock('@/lib/images', async (importOriginal) => ({
@@ -110,6 +111,69 @@ describe('FolderSidebar trash context menu', () => {
     await waitFor(() => {
       expect(emptyTrash).toHaveBeenCalledWith(expect.any(Function))
     })
+  })
+})
+
+describe('FolderSidebar new folder controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('creates a folder via the icon button beside the "Folders" label', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+    vi.mocked(createFolder).mockResolvedValue(makeFolder('2'))
+
+    renderSidebar()
+
+    const iconButton = await screen.findByRole('button', { name: 'New folder' })
+    await userEvent.click(iconButton)
+
+    const dialogHeading = await screen.findByRole('heading', { name: 'New folder' })
+    expect(dialogHeading).toBeInTheDocument()
+
+    await userEvent.type(screen.getByPlaceholderText('Folder name'), 'New Folder Name')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledWith(expect.any(Function), 'New Folder Name', undefined)
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'New folder' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('creates a folder via the footer "+ New folder" button when the folder list is empty', async () => {
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(createFolder).mockResolvedValue(makeFolder('1'))
+
+    renderSidebar()
+
+    const footerButton = await screen.findByRole('button', { name: '+ New folder' })
+    expect(footerButton).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New folder' })).toBeInTheDocument()
+    await userEvent.click(footerButton)
+
+    const dialogHeading = await screen.findByRole('heading', { name: 'New folder' })
+    expect(dialogHeading).toBeInTheDocument()
+
+    await userEvent.type(screen.getByPlaceholderText('Folder name'), 'First Folder')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledWith(expect.any(Function), 'First Folder', undefined)
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: 'New folder' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('hides the footer "+ New folder" button when folders exist', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+
+    renderSidebar()
+
+    await screen.findByText('Folder 1')
+    expect(screen.queryByRole('button', { name: '+ New folder' })).not.toBeInTheDocument()
   })
 })
 

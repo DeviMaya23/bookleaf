@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { PlusIcon } from 'lucide-react'
 import FolderNameDialog from './FolderNameDialog'
 import ProfileMenu from './ProfileMenu'
 import { getFolders, createFolder, renameFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
@@ -360,9 +361,19 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />
-          <p className="px-3 text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
-            Folders
-          </p>
+          <div className="flex items-center justify-between px-3">
+            <p className="text-[10px] font-semibold tracking-widest uppercase text-muted-foreground/50">
+              Folders
+            </p>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="New folder"
+              onClick={() => setNewFolderOpen(true)}
+            >
+              <PlusIcon />
+            </Button>
+          </div>
         </div>
 
         {visibleTree.map((folder) => (
@@ -385,12 +396,14 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
       </nav>
 
       <div className="p-2 border-t space-y-1">
-        <button
-          className="w-full rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground text-left"
-          onClick={() => setNewFolderOpen(true)}
-        >
-          + New folder
-        </button>
+        {folders.length === 0 && (
+          <button
+            className="w-full rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground text-left"
+            onClick={() => setNewFolderOpen(true)}
+          >
+            + New folder
+          </button>
+        )}
         <input
           value={folderFilter}
           onChange={(e) => setFolderFilter(e.target.value)}
