@@ -82,7 +82,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 
 	// Folder views return all images ordered by position; cursor and limit are ignored.
 	if params.FolderID != nil {
-		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, nil, 0)
+		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, params.Sort, params.Direction, nil, 0)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -110,7 +110,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, name, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, name, params.Sort, params.Direction, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -121,7 +121,14 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	if len(rawImages) > limit {
 		rawImages = rawImages[:limit]
 		last := rawImages[limit-1]
-		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, ID: last.ID}
+
+		dispatch := ResolveSort(params.Sort, params.Direction)
+		var title *string
+		if dispatch.Column == "title" {
+			title = &last.Title
+		}
+
+		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, Title: title, ID: last.ID}
 	}
 
 	items := make([]ImageItem, len(rawImages))

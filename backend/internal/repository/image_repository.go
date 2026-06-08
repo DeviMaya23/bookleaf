@@ -31,17 +31,24 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
+	dispatch := usecase.ResolveSort(sortField, direction)
 
 	if folderID != nil {
 		// Folder view: order by position, return all (no cursor/limit).
 		query := r.db.WithContext(ctx).
 			Where("images.user_id = ?", userID).
 			Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", *folderID).
-			Order("image_folders.position ASC").
 			Preload("Tags").
 			Preload("ImageFolders")
+
+		if sortField != nil {
+			query = query.Order(dispatch.OrderClause)
+		} else {
+			query = query.Order("image_folders.position ASC")
+		}
+
 		if tagID != nil {
 			query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
 		}
@@ -53,7 +60,7 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 
 	query := r.db.WithContext(ctx).
 		Where("images.user_id = ?", userID).
-		Order("images.created_at DESC, images.id DESC").
+		Order(dispatch.OrderClause).
 		Limit(limit + 1).
 		Preload("Tags").
 		Preload("ImageFolders")
@@ -73,7 +80,11 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 	}
 
 	if cursor != nil {
-		query = query.Where("(images.created_at, images.id) < (?, ?)", cursor.CreatedAt, cursor.ID)
+		if dispatch.Column == "title" && cursor.Title != nil {
+			query = query.Where(fmt.Sprintf("(images.title, images.id) %s (?, ?)", dispatch.WhereOperator), *cursor.Title, cursor.ID)
+		} else {
+			query = query.Where(fmt.Sprintf("(images.created_at, images.id) %s (?, ?)", dispatch.WhereOperator), cursor.CreatedAt, cursor.ID)
+		}
 	}
 
 	if err := query.Find(&images).Error; err != nil {

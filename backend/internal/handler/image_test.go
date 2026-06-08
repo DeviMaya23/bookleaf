@@ -781,3 +781,105 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 	}
 }
 
+
+
+func TestImageHandler_ListImages_SortAndDirection(t *testing.T) {
+tests := []struct {
+name              string
+queryParams       string
+expectedStatus    int
+wantErrStatus     int
+expectedSort      *string
+expectedDirection *string
+}{
+{
+name:              "valid sort and direction",
+queryParams:       "?sort=title&direction=desc",
+expectedStatus:    http.StatusOK,
+expectedSort:      strPtr("title"),
+expectedDirection: strPtr("desc"),
+},
+{
+name:              "valid sort created_at with direction",
+queryParams:       "?sort=created_at&direction=asc",
+expectedStatus:    http.StatusOK,
+expectedSort:      strPtr("created_at"),
+expectedDirection: strPtr("asc"),
+},
+{
+name:              "invalid sort returns 400",
+queryParams:       "?sort=invalid",
+wantErrStatus:     http.StatusBadRequest,
+},
+{
+name:              "invalid direction returns 400",
+queryParams:       "?sort=title&direction=invalid",
+wantErrStatus:     http.StatusBadRequest,
+},
+{
+name:              "direction without sort is accepted but ignored for sorting param",
+queryParams:       "?direction=asc",
+expectedStatus:    http.StatusOK,
+expectedSort:      nil,
+expectedDirection: nil,
+},
+{
+name:              "sort without direction resolves default direction (title -> asc)",
+queryParams:       "?sort=title",
+expectedStatus:    http.StatusOK,
+expectedSort:      strPtr("title"),
+expectedDirection: strPtr("asc"),
+},
+{
+name:              "sort without direction resolves default direction (created_at -> desc)",
+queryParams:       "?sort=created_at",
+expectedStatus:    http.StatusOK,
+expectedSort:      strPtr("created_at"),
+expectedDirection: strPtr("desc"),
+},
+{
+name:              "omitting both preserves existing behavior (nil values)",
+queryParams:       "",
+expectedStatus:    http.StatusOK,
+expectedSort:      nil,
+expectedDirection: nil,
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+mockUsecase := &mockImageUsecase{
+listImagesResult: &usecase.ListImagesResult{
+Images: []usecase.ImageItem{},
+},
+}
+h := NewImageHandler(mockUsecase, observability.NewTelemetry(nil, nil, nil))
+
+c, rec := newEchoContext(t, http.MethodGet, "/images"+tt.queryParams, "")
+
+err := h.ListImages(c)
+
+if tt.wantErrStatus > 0 {
+assertHTTPError(t, err, tt.wantErrStatus)
+} else {
+require.NoError(t, err)
+assert.Equal(t, tt.expectedStatus, rec.Code)
+
+params := mockUsecase.lastListImagesParams
+if tt.expectedSort != nil {
+require.NotNil(t, params.Sort)
+assert.Equal(t, *tt.expectedSort, *params.Sort)
+} else {
+assert.Nil(t, params.Sort)
+}
+
+if tt.expectedDirection != nil {
+require.NotNil(t, params.Direction)
+assert.Equal(t, *tt.expectedDirection, *params.Direction)
+} else {
+assert.Nil(t, params.Direction)
+}
+}
+})
+}
+}

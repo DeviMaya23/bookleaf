@@ -134,6 +134,28 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		tagID = &parsedTagID
 	}
 
+	var sortField *string
+	if sortParam := strings.TrimSpace(c.QueryParam("sort")); sortParam != "" {
+		if sortParam != "created_at" && sortParam != "title" {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort field")
+		}
+		sortField = &sortParam
+	}
+
+	var direction *string
+	if dirParam := strings.TrimSpace(c.QueryParam("direction")); dirParam != "" {
+		if sortField != nil {
+			if dirParam != "asc" && dirParam != "desc" {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid direction")
+			}
+			direction = &dirParam
+		}
+	} else if sortField != nil {
+		dispatch := usecase.ResolveSort(sortField, nil)
+		defDir := dispatch.DefaultDirection
+		direction = &defDir
+	}
+
 	var (
 		limit  int
 		cursor *usecase.ImageCursor
@@ -147,12 +169,14 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
-		FolderID: folderID,
-		Unfiled:  unfiled,
-		TagID:    tagID,
-		Name:     name,
-		Cursor:   cursor,
-		Limit:    limit,
+		FolderID:  folderID,
+		Unfiled:   unfiled,
+		TagID:     tagID,
+		Name:      name,
+		Sort:      sortField,
+		Direction: direction,
+		Cursor:    cursor,
+		Limit:     limit,
 	})
 	if err != nil {
 		span.RecordError(err)

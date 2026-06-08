@@ -40,14 +40,18 @@ type mockImageRepository struct {
 	updateAILabelsCalls  int
 	lastAILabels         json.RawMessage
 	lastListName         *string
+	lastListSort         *string
+	lastListDirection    *string
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
 	m.createdImage = img
 	return m.image, m.err
 }
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, name *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastListName = name
+	m.lastListSort = sortField
+	m.lastListDirection = direction
 	return m.images, m.err
 }
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -500,3 +504,36 @@ func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
 	assert.Equal(t, to, *repo.lastMoveToFolderID)
 }
 
+
+func TestImageUsecase_ListImages_PassesSortAndDirection(t *testing.T) {
+sortVal := "title"
+dirVal := "asc"
+
+repo := &mockImageRepository{images: []*domain.Image{}}
+uc := newImageUsecase(repo, nil, &mockStorageService{})
+
+_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+Sort:      &sortVal,
+Direction: &dirVal,
+})
+
+require.NoError(t, err)
+require.NotNil(t, repo.lastListSort)
+assert.Equal(t, "title", *repo.lastListSort)
+require.NotNil(t, repo.lastListDirection)
+assert.Equal(t, "asc", *repo.lastListDirection)
+}
+
+func TestImageUsecase_ListImages_PassesNilSortAndDirection(t *testing.T) {
+repo := &mockImageRepository{images: []*domain.Image{}}
+uc := newImageUsecase(repo, nil, &mockStorageService{})
+
+_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+Sort:      nil,
+Direction: nil,
+})
+
+require.NoError(t, err)
+assert.Nil(t, repo.lastListSort)
+assert.Nil(t, repo.lastListDirection)
+}
