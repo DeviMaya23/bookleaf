@@ -9,6 +9,7 @@ import { getFolders } from '@/lib/folders'
 import { getTags, createTag } from '@/lib/tags'
 import FolderInput from '@/components/FolderInput'
 import TagInput from '@/components/TagInput'
+import FolderPanelContent from '@/components/FolderPanelContent'
 import type { Image } from '@/lib/images'
 import type { Tag } from '@/lib/tags'
 import type { Folder } from '@/lib/folders'
@@ -28,13 +29,29 @@ function formatDate(iso: string): string {
   })
 }
 
-interface RightPanelProps {
+type RightPanelProps =
+  | { mode: 'image'; image: Image; onClose: () => void; autoFocusTitle?: boolean }
+  | { mode: 'folder'; folder: { id: string; name: string; description: string | null }; onClose: () => void }
+
+export default function RightPanel(props: RightPanelProps) {
+  return (
+    <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
+      {props.mode === 'folder' ? (
+        <FolderPanelContent folder={props.folder} onClose={props.onClose} />
+      ) : (
+        <ImagePanelBody image={props.image} onClose={props.onClose} autoFocusTitle={props.autoFocusTitle} />
+      )}
+    </aside>
+  )
+}
+
+interface ImagePanelBodyProps {
   image: Image
   onClose: () => void
   autoFocusTitle?: boolean
 }
 
-export default function RightPanel({ image, onClose, autoFocusTitle }: RightPanelProps) {
+function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
@@ -227,7 +244,7 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
   const thumbnailUrl = imageDetail?.thumbnail_url ?? image.thumbnail_url
 
   return (
-    <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
+    <>
       {/* Thumbnail */}
       <div className="relative flex-shrink-0 max-h-[33vh]">
         <div>
@@ -365,7 +382,6 @@ export default function RightPanel({ image, onClose, autoFocusTitle }: RightPane
           )}
         </Button>
       </div>
-
-    </aside>
+    </>
   )
 }

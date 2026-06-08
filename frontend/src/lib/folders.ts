@@ -39,6 +39,16 @@ export async function renameFolder(getToken: GetToken, id: string, name: string)
   return res.json()
 }
 
+export async function updateFolderDetails(getToken: GetToken, id: string, details: { name?: string; description?: string | null }): Promise<Folder> {
+  const res = await apiFetch(`/folders/${id}`, getToken, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(details),
+  })
+  if (!res.ok) throw new Error('Failed to update folder')
+  return res.json()
+}
+
 export async function moveFolder(getToken: GetToken, id: string, name: string, parentId: string | null): Promise<Folder> {
   const body: Record<string, string | null> = { name, parent_id: parentId }
   const res = await apiFetch(`/folders/${id}`, getToken, {

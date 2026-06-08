@@ -240,9 +240,10 @@ function RootDropZone() {
 
 interface FolderSidebarProps {
   view: AppView
+  onFolderSelect?: () => void
 }
 
-export default function FolderSidebar({ view }: FolderSidebarProps) {
+export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -305,6 +306,8 @@ export default function FolderSidebar({ view }: FolderSidebarProps) {
   }
 
   function handleFolderSelect(folder: FolderNode) {
+    const isActive = view.type === 'folder' && view.id === folder.id
+    if (!isActive) onFolderSelect?.()
     navigate(`/folders/${folder.id}`)
   }
 
