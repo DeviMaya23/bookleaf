@@ -100,22 +100,32 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
   )
 }
 
-function queryKeyFor(view: AppView, debouncedSearch: string): unknown[] {
+type SortBy = 'manual' | 'created_at' | 'title'
+type SortDir = 'asc' | 'desc'
+
+function sortParamsFor(sortBy: SortBy, sortDir: SortDir | undefined): { sort?: 'created_at' | 'title'; direction?: SortDir } {
+  if (sortBy === 'manual') return {}
+  return { sort: sortBy, direction: sortDir }
+}
+
+function queryKeyFor(view: AppView, debouncedSearch: string, sortBy: SortBy, sortDir: SortDir | undefined): unknown[] {
+  const sortKey = sortBy === 'manual' ? undefined : [sortBy, sortDir]
   switch (view.type) {
-    case 'all': return ['images', 'all', debouncedSearch]
-    case 'unsorted': return ['images', 'unsorted', debouncedSearch]
-    case 'trash': return ['images', 'trash', debouncedSearch]
-    case 'folder': return ['images', 'folder', view.id]
+    case 'all': return ['images', 'all', debouncedSearch, sortKey]
+    case 'unsorted': return ['images', 'unsorted', debouncedSearch, sortKey]
+    case 'trash': return ['images', 'trash', debouncedSearch, sortKey]
+    case 'folder': return ['images', 'folder', view.id, sortKey]
   }
 }
 
-function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>, debouncedSearch: string) {
+function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>, debouncedSearch: string, sortBy: SortBy, sortDir: SortDir | undefined) {
+  const { sort, direction } = sortParamsFor(sortBy, sortDir)
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
-      case 'all': return getAllImages(getToken, pageParam, debouncedSearch)
-      case 'unsorted': return getImages(getToken, null, pageParam, debouncedSearch)
+      case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort, direction)
+      case 'unsorted': return getImages(getToken, null, pageParam, debouncedSearch, sort, direction)
       case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch)
-      case 'folder': return getImages(getToken, view.id, pageParam)
+      case 'folder': return getImages(getToken, view.id, pageParam, undefined, sort, direction)
     }
   }
 }
@@ -125,13 +135,15 @@ interface ImageGridProps {
   layoutMode?: LayoutMode
   searchTerm: string
   debouncedSearchTerm: string
+  sortBy: SortBy
+  sortDir: SortDir | undefined
   onImageSelect: (image: Image) => void
   onImageDoubleClick?: (image: Image) => void
   onImageDeleted?: (id: string) => void
   sortEndTrigger?: SortEndTrigger | null
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const isTrash = view.type === 'trash'
@@ -149,7 +161,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
       activeDragIdRef.current = String(event.active.id)
     },
     onDragOver(event) {
-      if (!isFolderView || event.active.data.current?.type !== 'image') return
+      if (!isFolderView || sortBy !== 'manual' || event.active.data.current?.type !== 'image') return
       const overId = event.over ? String(event.over.id) : null
       setDragOverId(overId !== activeDragIdRef.current ? overId : null)
     },
@@ -173,8 +185,8 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
   }, [])
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: queryKeyFor(view, debouncedSearchTerm),
-    queryFn: fetcherFor(view, getToken, debouncedSearchTerm),
+    queryKey: queryKeyFor(view, debouncedSearchTerm, sortBy, sortDir),
+    queryFn: fetcherFor(view, getToken, debouncedSearchTerm, sortBy, sortDir),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     placeholderData: keepPreviousData,
@@ -234,7 +246,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
   const lastProcessedTriggerTs = useRef<number>(-1)
 
   useEffect(() => {
-    if (!sortEndTrigger || view.type !== 'folder') return
+    if (!sortEndTrigger || view.type !== 'folder' || sortBy !== 'manual') return
     if (sortEndTrigger.ts <= lastProcessedTriggerTs.current) return
     lastProcessedTriggerTs.current = sortEndTrigger.ts
     const { activeId, overId } = sortEndTrigger
@@ -269,7 +281,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
       }
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sortEndTrigger, view])
+  }, [sortEndTrigger, view, sortBy])
 
   function handleAction(image: Image) {
     if (isTrash) {
@@ -324,7 +336,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
               : isTrash ? 'Trash is empty' : 'No images here yet'}
           </p>
         </div>
-      ) : isFolderView ? (
+      ) : isFolderView && sortBy === 'manual' ? (
         <SortableContext items={sortableItems} strategy={() => null}>
           {grid}
         </SortableContext>

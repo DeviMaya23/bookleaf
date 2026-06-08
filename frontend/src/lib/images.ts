@@ -30,6 +30,8 @@ export async function getImages(
   folderId: string | null,
   cursor?: string,
   name?: string,
+  sort?: 'created_at' | 'title',
+  direction?: 'asc' | 'desc',
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (folderId === null) {
@@ -39,15 +41,25 @@ export async function getImages(
   }
   if (cursor) params.set('cursor', cursor)
   if (name) params.set('name', name)
+  if (sort) params.set('sort', sort)
+  if (direction) params.set('direction', direction)
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
 }
 
-export async function getAllImages(getToken: GetToken, cursor?: string, name?: string): Promise<ImagesPage> {
+export async function getAllImages(
+  getToken: GetToken,
+  cursor?: string,
+  name?: string,
+  sort?: 'created_at' | 'title',
+  direction?: 'asc' | 'desc',
+): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
   if (name) params.set('name', name)
+  if (sort) params.set('sort', sort)
+  if (direction) params.set('direction', direction)
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()

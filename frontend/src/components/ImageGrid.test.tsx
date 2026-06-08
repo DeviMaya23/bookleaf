@@ -67,7 +67,7 @@ vi.mock('@/components/ui/dialog', async () => {
   }
 })
 
-import { getImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
+import { getImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
 import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
@@ -91,7 +91,12 @@ function makeImage(overrides?: Partial<Image>): Image {
   }
 }
 
-function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = vi.fn()) {
+function renderImageGrid(
+  view: AppView = { type: 'unsorted' },
+  onImageSelect = vi.fn(),
+  sortBy: 'manual' | 'created_at' | 'title' = 'manual',
+  sortDir: 'asc' | 'desc' | undefined = undefined,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -99,7 +104,14 @@ function renderImageGrid(view: AppView = { type: 'unsorted' }, onImageSelect = v
     <DndContext sensors={[]}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <ImageGrid view={view} searchTerm="" debouncedSearchTerm="" onImageSelect={onImageSelect} />
+          <ImageGrid
+            view={view}
+            searchTerm=""
+            debouncedSearchTerm=""
+            sortBy={sortBy}
+            sortDir={sortDir}
+            onImageSelect={onImageSelect}
+          />
         </MemoryRouter>
       </QueryClientProvider>
     </DndContext>,
@@ -315,6 +327,84 @@ describe('ImageGrid trash view — permanent delete', () => {
   })
 })
 
+describe('ImageGrid sort wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('calls getImages with sort=title and the field default direction when Name is selected in a folder view', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'title', 'asc')
+
+    await waitFor(() => {
+      expect(getImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined, 'title', 'asc')
+    })
+  })
+
+  it('calls getImages with no sort/direction params when Manual is selected in a folder view', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'manual', undefined)
+
+    await waitFor(() => {
+      expect(getImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined, undefined, undefined)
+    })
+  })
+
+  it('calls getAllImages with sort/direction params when an explicit sort is active in the All view', async () => {
+    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'all' }, vi.fn(), 'created_at', 'asc')
+
+    await waitFor(() => {
+      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', 'created_at', 'asc')
+    })
+  })
+})
+
+describe('ImageGrid drag gating with explicit sort', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('does not persist a position update when dropping an image onto another image under an explicit sort', async () => {
+    const images = [
+      makeImage({ id: '1', title: 'First', position: 'a0' }),
+      makeImage({ id: '2', title: 'Second', position: 'a1' }),
+    ]
+    vi.mocked(getImages).mockResolvedValue({ images, next_cursor: null })
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const wrap = (sortEndTrigger: SortEndTrigger | null) => (
+      <DndContext sensors={[]}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <ImageGrid
+              view={{ type: 'folder', id: 'folder-1' }}
+              searchTerm=""
+              debouncedSearchTerm=""
+              sortBy="title"
+              sortDir="asc"
+              onImageSelect={vi.fn()}
+              sortEndTrigger={sortEndTrigger}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </DndContext>
+    )
+
+    const { rerender } = render(wrap(null))
+    await waitFor(() => expect(screen.getByText('First')).toBeInTheDocument())
+
+    rerender(wrap({ activeId: 'image-1', overId: 'image-2', ts: 1 }))
+
+    await waitFor(() => expect(screen.getByText('Second')).toBeInTheDocument())
+    expect(updateImagePosition).not.toHaveBeenCalled()
+  })
+})
+
 describe('ImageGrid reorder rollback', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -339,6 +429,8 @@ describe('ImageGrid reorder rollback', () => {
               view={{ type: 'folder', id: 'folder-1' }}
               searchTerm=""
               debouncedSearchTerm=""
+              sortBy="manual"
+              sortDir={undefined}
               onImageSelect={vi.fn()}
               sortEndTrigger={sortEndTrigger}
             />

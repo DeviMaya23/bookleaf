@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
-import { Plus, UploadCloud, ChevronDown, Images, Search } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -21,6 +21,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import FolderSidebar from './FolderSidebar'
@@ -37,6 +40,29 @@ import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/d
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import type { SortEndTrigger } from '@/components/ImageGrid'
+
+type SortBy = 'manual' | 'created_at' | 'title'
+type SortDir = 'asc' | 'desc'
+
+const SORT_FIELD_LABELS: Record<SortBy, string> = {
+  manual: 'Manual',
+  created_at: 'Date added',
+  title: 'Name',
+}
+
+const FIELD_DEFAULT_DIRECTION: Record<'created_at' | 'title', SortDir> = {
+  created_at: 'desc',
+  title: 'asc',
+}
+
+const DIR_LABELS: Record<'created_at' | 'title', Record<SortDir, string>> = {
+  created_at: { asc: 'Oldest first', desc: 'Newest first' },
+  title: { asc: 'A → Z', desc: 'Z → A' },
+}
+
+function defaultSortForViewType(isFolder: boolean): { sortBy: SortBy; sortDir: SortDir | undefined } {
+  return isFolder ? { sortBy: 'manual', sortDir: undefined } : { sortBy: 'created_at', sortDir: 'desc' }
+}
 
 function useAppView(): AppView {
   const { folderId } = useParams<{ folderId: string }>()
@@ -79,9 +105,15 @@ export default function AppLayout() {
   const [viewerImage, setViewerImage] = useState<Image | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
+  const [sortBy, setSortBy] = useState<SortBy>(() => defaultSortForViewType(view.type === 'folder').sortBy)
+  const [sortDir, setSortDir] = useState<SortDir | undefined>(() => defaultSortForViewType(view.type === 'folder').sortDir)
 
   const folderId = view.type === 'folder' ? view.id : null
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
+  const viewDefaultSort = defaultSortForViewType(view.type === 'folder')
+  const sortFieldOptions: SortBy[] = view.type === 'folder' ? ['manual', 'created_at', 'title'] : ['created_at', 'title']
+  const sortActive = sortBy !== viewDefaultSort.sortBy
+    || (sortBy !== 'manual' && sortDir !== FIELD_DEFAULT_DIRECTION[sortBy])
 
   useEffect(() => {
     setViewerImage(null)
@@ -92,6 +124,21 @@ export default function AppLayout() {
   useEffect(() => {
     setSearchTerm('')
   }, [viewKey])
+
+  useEffect(() => {
+    const def = defaultSortForViewType(viewKey.startsWith('folder:'))
+    setSortBy(def.sortBy)
+    setSortDir(def.sortDir)
+  }, [viewKey])
+
+  const handleSortFieldChange = useCallback((value: SortBy) => {
+    setSortBy(value)
+    setSortDir(value === 'manual' ? undefined : FIELD_DEFAULT_DIRECTION[value])
+  }, [])
+
+  const handleSortDirToggle = useCallback(() => {
+    setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+  }, [])
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
@@ -233,14 +280,45 @@ export default function AppLayout() {
             <ScrollArea className="h-full">
               <div className="p-6">
                 <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="relative w-full max-w-xs">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <input
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Search images by name…"
-                      className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
-                    />
+                  <div className="flex items-center gap-2 w-full max-w-xs">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <input
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search images by name…"
+                        className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+                      />
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        aria-label="Sort"
+                        className={cn(buttonVariants({ variant: sortActive ? 'default' : 'outline', size: 'icon' }))}
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-48">
+                        <DropdownMenuRadioGroup
+                          value={sortBy}
+                          onValueChange={(value) => handleSortFieldChange(value as SortBy)}
+                        >
+                          {sortFieldOptions.map((field) => (
+                            <DropdownMenuRadioItem key={field} value={field}>
+                              {SORT_FIELD_LABELS[field]}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                        {sortBy !== 'manual' && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem closeOnClick={false} onClick={handleSortDirToggle}>
+                              {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                              {DIR_LABELS[sortBy][sortDir ?? FIELD_DEFAULT_DIRECTION[sortBy]]}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <div className="flex">
                     <button
@@ -271,6 +349,8 @@ export default function AppLayout() {
                   view={view}
                   searchTerm={searchTerm}
                   debouncedSearchTerm={debouncedSearchTerm}
+                  sortBy={sortBy}
+                  sortDir={sortDir}
                   onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img) }}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}
