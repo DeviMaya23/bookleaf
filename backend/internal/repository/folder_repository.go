@@ -66,24 +66,19 @@ func (r *folderRepository) GetByID(ctx context.Context, id uuid.UUID, userID str
 	return &folder, nil
 }
 
-func (r *folderRepository) Update(ctx context.Context, folder *domain.Folder) (*domain.Folder, error) {
-	existing, err := r.GetByID(ctx, folder.ID, folder.UserID)
-	if err != nil {
-		return nil, err
+func (r *folderRepository) Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Folder, error) {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Folder{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(fields)
+	if result.Error != nil {
+		return nil, fmt.Errorf("update folder: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("update folder: %w", gorm.ErrRecordNotFound)
 	}
 
-	existing.Name = folder.Name
-	existing.ParentID = folder.ParentID
-	existing.Description = folder.Description
-
-	if err := r.db.WithContext(ctx).
-		Model(existing).
-		Select("name", "parent_id", "description").
-		Updates(existing).Error; err != nil {
-		return nil, fmt.Errorf("update folder: %w", err)
-	}
-
-	return existing, nil
+	return r.GetByID(ctx, id, userID)
 }
 
 func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID, userID string) (int, error) {

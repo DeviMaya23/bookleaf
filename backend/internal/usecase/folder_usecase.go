@@ -14,6 +14,12 @@ import (
 
 var ErrInvalidFolderName = errors.New("folder name is required")
 
+type UpdateFolderParams struct {
+	Name        *string
+	ParentID    **uuid.UUID
+	Description **string
+}
+
 type ImageCounter interface {
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
 }
@@ -99,23 +105,28 @@ func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string
 	}, nil
 }
 
-func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error) {
+func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string, params UpdateFolderParams) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateFolder")
 	defer span.End()
 
-	if strings.TrimSpace(name) == "" {
+	if params.Name != nil && strings.TrimSpace(*params.Name) == "" {
 		span.RecordError(ErrInvalidFolderName)
 		span.SetStatus(codes.Error, ErrInvalidFolderName.Error())
 		return nil, ErrInvalidFolderName
 	}
 
-	folder, err := u.folderRepo.Update(ctx, &domain.Folder{
-		ID:          id,
-		UserID:      userID,
-		Name:        name,
-		ParentID:    parentID,
-		Description: description,
-	})
+	fields := make(map[string]any)
+	if params.Name != nil {
+		fields["name"] = *params.Name
+	}
+	if params.ParentID != nil {
+		fields["parent_id"] = *params.ParentID
+	}
+	if params.Description != nil {
+		fields["description"] = *params.Description
+	}
+
+	folder, err := u.folderRepo.Update(ctx, id, userID, fields)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

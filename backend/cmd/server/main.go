@@ -282,7 +282,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)
 	protected.GET("/folders/:id", folderHandler.GetFolder)
-	protected.PUT("/folders/:id", folderHandler.UpdateFolder)
+	protected.PATCH("/folders/:id", folderHandler.UpdateFolder)
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
 	protected.POST("/tags", tagHandler.CreateTag)
 	protected.GET("/tags", tagHandler.ListTags)

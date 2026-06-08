@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
-import { updateFolderDetails } from '@/lib/folders'
+import { updateFolder } from '@/lib/folders'
 
 interface FolderPanelContentProps {
   folder: { id: string; name: string; description: string | null }
@@ -28,8 +28,8 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
   }, [folder.id, folder.name, folder.description])
 
   const saveMutation = useMutation({
-    mutationFn: (params: Parameters<typeof updateFolderDetails>[2]) =>
-      updateFolderDetails(getToken, folder.id, params),
+    mutationFn: (params: Parameters<typeof updateFolder>[2]) =>
+      updateFolder(getToken, folder.id, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['folders'] })
       toast.success('Saved')

@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { PlusIcon } from 'lucide-react'
 import FolderNameDialog from './FolderNameDialog'
 import ProfileMenu from './ProfileMenu'
-import { getFolders, createFolder, renameFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
+import { getFolders, createFolder, updateFolder, deleteFolder, getFolderSubtreeIds } from '@/lib/folders'
 import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
@@ -275,7 +275,7 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
   })
 
   const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => renameFolder(getToken, id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => updateFolder(getToken, id, { name }),
     onSuccess: invalidate,
   })
 

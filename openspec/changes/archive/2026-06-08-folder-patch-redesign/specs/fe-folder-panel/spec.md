@@ -1,8 +1,4 @@
-## Purpose
-
-Folder content for the right panel, rendered via the `FolderPanelContent` component when a folder (rather than an image) is the active panel selection. It shows the folder's editable metadata (title, description) with auto-save on blur.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: FolderPanelContent component
 
