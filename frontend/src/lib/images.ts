@@ -27,18 +27,13 @@ type GetToken = () => Promise<string | undefined>
 
 export async function getImages(
   getToken: GetToken,
-  folderId: string | null,
   cursor?: string,
   name?: string,
   sort?: 'created_at' | 'title',
   direction?: 'asc' | 'desc',
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
-  if (folderId === null) {
-    params.set('unfiled', 'true')
-  } else {
-    params.set('folder_id', folderId)
-  }
+  params.set('unfiled', 'true')
   if (cursor) params.set('cursor', cursor)
   if (name) params.set('name', name)
   if (sort) params.set('sort', sort)
@@ -46,6 +41,21 @@ export async function getImages(
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
+}
+
+export async function getFolderImages(
+  getToken: GetToken,
+  folderId: string,
+  sort?: 'created_at' | 'title',
+  direction?: 'asc' | 'desc',
+): Promise<ImagesPage> {
+  const params = new URLSearchParams()
+  if (sort) params.set('sort', sort)
+  if (direction) params.set('direction', direction)
+  const res = await apiFetch(`/images/in-folder/${folderId}?${params}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch folder images')
+  const images: Image[] = await res.json()
+  return { images, next_cursor: null }
 }
 
 export async function getAllImages(

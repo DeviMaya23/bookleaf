@@ -46,7 +46,7 @@ Selecting `Manual` SHALL cause the image list request to omit `sort` and `direct
 #### Scenario: Selecting Manual omits sort parameters from the request
 
 - **WHEN** the user selects `Manual` in a folder view
-- **THEN** `GET /images` is called with no `sort` or `direction` query parameters
+- **THEN** `GET /images/in-folder/<id>` is called with no `sort` or `direction` query parameters
 - **AND** images are displayed in `image_folders.position ASC` order, matching pre-change behavior
 
 ### Requirement: Direction toggle is shown only for orderable (non-Manual) sort fields
@@ -105,7 +105,7 @@ The sort icon button SHALL visually distinguish itself when the active sort diff
 
 ### Requirement: Selected sort is threaded through to the image list query
 
-`getImages` and `getAllImages` (`src/lib/images.ts`) SHALL accept optional `sort` and `direction` parameters and include them as query parameters on `GET /images` when present (omitted entirely when `Manual` is selected — see above). `ImageGrid`'s query key SHALL include the active `sort`/`direction` so that changing the sort triggers a re-fetch, and `useInfiniteQuery`'s existing `placeholderData: keepPreviousData` SHALL keep the prior results visible during the transition (mirroring how `debouncedSearchTerm` changes are handled today).
+`getImages` and `getAllImages` (`src/lib/images.ts`) SHALL accept optional `sort` and `direction` parameters and include them as query parameters on `GET /images` when present. `getFolderImages` (`src/lib/images.ts`) SHALL accept optional `sort` and `direction` parameters and include them as query parameters on `GET /images/in-folder/:id` when present (omitted entirely when `Manual` is selected — see above). `ImageGrid`'s query key SHALL include the active `sort`/`direction` so that changing the sort triggers a re-fetch, and `useInfiniteQuery`'s existing `placeholderData: keepPreviousData` SHALL keep the prior results visible during the transition (mirroring how `debouncedSearchTerm` changes are handled today).
 
 #### Scenario: Selecting an explicit sort re-fetches with the new ordering
 
@@ -116,5 +116,5 @@ The sort icon button SHALL visually distinguish itself when the active sort diff
 #### Scenario: Selecting Manual re-fetches with no sort parameters
 
 - **WHEN** the user selects `Manual` while viewing a folder that previously had an explicit sort active
-- **THEN** `GET /images?folder_id=<id>` is called with no `sort`/`direction` parameters
+- **THEN** `GET /images/in-folder/<id>` is called with no `sort`/`direction` parameters
 - **AND** the displayed images update to `position`-ordered results
