@@ -222,7 +222,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	// uploadUsecase ↔ riverClient init cycle.
 	enqueuer := &riverEnqueuer{}
 
-	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, storageService, tel)
+	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, folderRepository, storageService, tel)
 	trashUsecase := usecase.NewTrashUsecase(imageRepository, storageService, enqueuer, tel)
 	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
 
@@ -295,6 +295,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.DELETE("/images/trash", trashHandler.EmptyTrash)
 	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)
 	protected.GET("/images", imageHandler.ListImages)
+	protected.GET("/images/in-folder/:id", imageHandler.ListFolderImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
 	protected.GET("/images/:id/download", imageHandler.DownloadImage)
 	protected.POST("/images/:id/move-folder", imageHandler.MoveImageFolder)

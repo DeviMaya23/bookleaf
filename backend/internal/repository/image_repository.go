@@ -31,32 +31,9 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 	dispatch := usecase.ResolveSort(sortField, direction)
-
-	if folderID != nil {
-		// Folder view: order by position, return all (no cursor/limit).
-		query := r.db.WithContext(ctx).
-			Where("images.user_id = ?", userID).
-			Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", *folderID).
-			Preload("Tags").
-			Preload("ImageFolders")
-
-		if sortField != nil {
-			query = query.Order(dispatch.OrderClause)
-		} else {
-			query = query.Order("image_folders.position ASC")
-		}
-
-		if tagID != nil {
-			query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
-		}
-		if err := query.Find(&images).Error; err != nil {
-			return nil, fmt.Errorf("list images: %w", err)
-		}
-		return images, nil
-	}
 
 	query := r.db.WithContext(ctx).
 		Where("images.user_id = ?", userID).
@@ -71,8 +48,16 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 			Where("image_folders.image_id IS NULL")
 	}
 
-	if tagID != nil {
-		query = query.Joins("JOIN image_tags ON image_tags.image_id = images.id AND image_tags.tag_id = ?", *tagID)
+	if len(folderIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM image_folders WHERE image_folders.image_id = images.id AND image_folders.folder_id IN (?))", folderIDs)
+	}
+
+	if len(tagIDs) > 0 {
+		query = query.Where("EXISTS (SELECT 1 FROM image_tags WHERE image_tags.image_id = images.id AND image_tags.tag_id IN (?))", tagIDs)
+	}
+
+	if len(mimeTypes) > 0 {
+		query = query.Where("images.mime_type IN (?)", mimeTypes)
 	}
 
 	if name != nil && *name != "" {
@@ -89,6 +74,29 @@ func (r *imageRepository) List(ctx context.Context, userID string, folderID *uui
 
 	if err := query.Find(&images).Error; err != nil {
 		return nil, fmt.Errorf("list images: %w", err)
+	}
+
+	return images, nil
+}
+
+func (r *imageRepository) ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
+	var images []*domain.Image
+	dispatch := usecase.ResolveSort(sortField, direction)
+
+	query := r.db.WithContext(ctx).
+		Where("images.user_id = ?", userID).
+		Joins("JOIN image_folders ON image_folders.image_id = images.id AND image_folders.folder_id = ?", folderID).
+		Preload("Tags").
+		Preload("ImageFolders")
+
+	if sortField != nil {
+		query = query.Order(dispatch.OrderClause)
+	} else {
+		query = query.Order("image_folders.position ASC")
+	}
+
+	if err := query.Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list images by folder: %w", err)
 	}
 
 	return images, nil

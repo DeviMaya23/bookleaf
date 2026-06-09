@@ -20,6 +20,7 @@ import (
 
 type ImageUsecase interface {
 	ListImages(ctx context.Context, userID string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error)
+	ListFolderImages(ctx context.Context, userID string, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error)
 	GetImage(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageDetail, error)
 	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateImageParams) (*usecase.ImageItem, error)
@@ -79,6 +80,7 @@ type imageDetailResponse struct {
 	Height              *int          `json:"height"`
 	FileSize            *int64        `json:"file_size"`
 	Tags                []tagResponse `json:"tags"`
+	Position            *string       `json:"position"`
 	ImageURL            string        `json:"image_url"`
 	SuggestedFolderName *string       `json:"suggested_folder_name"`
 	CreatedAt           time.Time     `json:"created_at"`
@@ -110,14 +112,6 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	var folderID *uuid.UUID
-	if folderIDParam := c.QueryParam("folder_id"); folderIDParam != "" {
-		parsedFolderID, err := uuid.Parse(folderIDParam)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
-		}
-		folderID = &parsedFolderID
-	}
 	unfiled := c.QueryParam("unfiled") == "true"
 
 	var name *string
@@ -125,14 +119,17 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		name = &trimmed
 	}
 
-	var tagID *uuid.UUID
-	if tagIDParam := c.QueryParam("tag_id"); tagIDParam != "" {
-		parsedTagID, err := uuid.Parse(tagIDParam)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
-		}
-		tagID = &parsedTagID
+	folderIDs, err := parseUUIDListParam(c.QueryParam("folder_ids"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder ids")
 	}
+
+	tagIDs, err := parseUUIDListParam(c.QueryParam("tag_ids"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid tag ids")
+	}
+
+	mimeTypes := parseStringListParam(c.QueryParam("mime_types"))
 
 	var sortField *string
 	if sortParam := strings.TrimSpace(c.QueryParam("sort")); sortParam != "" {
@@ -156,22 +153,16 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 		direction = &defDir
 	}
 
-	var (
-		limit  int
-		cursor *usecase.ImageCursor
-		err    error
-	)
-	if folderID == nil {
-		limit, cursor, err = parsePaginationParams(c)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
-		}
+	limit, cursor, err := parsePaginationParams(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid cursor")
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
-		FolderID:  folderID,
 		Unfiled:   unfiled,
-		TagID:     tagID,
+		FolderIDs: folderIDs,
+		TagIDs:    tagIDs,
+		MIMETypes: mimeTypes,
 		Name:      name,
 		Sort:      sortField,
 		Direction: direction,
@@ -196,6 +187,60 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, listImagesResponse{Images: images, NextCursor: nextCursor})
+}
+
+func (h *ImageHandler) ListFolderImages(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListFolderImages")
+	defer span.End()
+
+	folderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var sortField *string
+	if sortParam := strings.TrimSpace(c.QueryParam("sort")); sortParam != "" {
+		if sortParam != "created_at" && sortParam != "title" {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid sort field")
+		}
+		sortField = &sortParam
+	}
+
+	var direction *string
+	if dirParam := strings.TrimSpace(c.QueryParam("direction")); dirParam != "" {
+		if sortField != nil {
+			if dirParam != "asc" && dirParam != "desc" {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid direction")
+			}
+			direction = &dirParam
+		}
+	} else if sortField != nil {
+		dispatch := usecase.ResolveSort(sortField, nil)
+		defDir := dispatch.DefaultDirection
+		direction = &defDir
+	}
+
+	items, err := h.imageUsecase.ListFolderImages(ctx, userID, folderID, sortField, direction)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list folder images")
+	}
+
+	images := make([]imageResponse, 0, len(items))
+	for _, item := range items {
+		images = append(images, toImageResponse(item))
+	}
+
+	return c.JSON(http.StatusOK, images)
 }
 
 func (h *ImageHandler) GetImage(c echo.Context) error {
@@ -472,6 +517,46 @@ func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCurs
 		}
 	}
 	return limit, cursor, nil
+}
+
+// parseUUIDListParam splits a comma-separated query param into UUIDs, ignoring empty
+// segments (e.g. from a trailing comma). Returns an error if any non-empty segment fails to parse.
+func parseUUIDListParam(raw string) ([]uuid.UUID, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+
+	var ids []uuid.UUID
+	for _, segment := range strings.Split(raw, ",") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		id, err := uuid.Parse(segment)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// parseStringListParam splits a comma-separated query param into non-empty strings,
+// ignoring empty segments (e.g. from a trailing comma).
+func parseStringListParam(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	var values []string
+	for _, segment := range strings.Split(raw, ",") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		values = append(values, segment)
+	}
+	return values
 }
 
 func toImageResponse(item usecase.ImageItem) imageResponse {

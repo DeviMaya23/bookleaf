@@ -5,19 +5,26 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/images
+  url: {{baseUrl}}/images?folder_ids={{folderId}},{{folderId2}},{{folderId3}}
   body: none
   auth: inherit
 }
 
 params:query {
+  folder_ids: {{folderId}},{{folderId2}},{{folderId3}}
   ~unfiled: true
   ~cursor: {{imagesCursor}}
-  ~folder_id: {{folderId}}
+  ~tag_ids: {{tagId}},{{tagId2}}
+  ~mime_types: image/jpeg,image/png
   ~limit: 2
   ~name: heartopia
   ~sort: title
   ~direction: asc
+}
+
+vars:pre-request {
+  folderId2: e7e3d39e-241d-445f-8899-649add262384
+  folderId3: e2ec4d51-de5e-419c-9157-3b93918d312
 }
 
 script:post-response {

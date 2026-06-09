@@ -40,23 +40,26 @@ type ImageItem struct {
 }
 
 type imageUsecase struct {
-	imageRepo ImageRepository
-	tagRepo   TagRepository
-	store     StorageService
-	tel       *observability.Telemetry
+	imageRepo  ImageRepository
+	tagRepo    TagRepository
+	folderRepo ImageFolderRepository
+	store      StorageService
+	tel        *observability.Telemetry
 }
 
 func NewImageUsecase(
 	imageRepo ImageRepository,
 	tagRepo TagRepository,
+	folderRepo ImageFolderRepository,
 	store StorageService,
 	tel *observability.Telemetry,
 ) *imageUsecase {
 	return &imageUsecase{
-		imageRepo: imageRepo,
-		tagRepo:   tagRepo,
-		store:     store,
-		tel:       tel,
+		imageRepo:  imageRepo,
+		tagRepo:    tagRepo,
+		folderRepo: folderRepo,
+		store:      store,
+		tel:        tel,
 	}
 }
 
@@ -80,29 +83,6 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		name = params.Name
 	}
 
-	// Folder views return all images ordered by position; cursor and limit are ignored.
-	if params.FolderID != nil {
-		rawImages, err := u.imageRepo.List(ctx, userID, params.FolderID, false, params.TagID, nil, params.Sort, params.Direction, nil, 0)
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, err
-		}
-		items := make([]ImageItem, len(rawImages))
-		for i, img := range rawImages {
-			var folderPos *string
-			for _, f := range img.ImageFolders {
-				if f.FolderID == *params.FolderID {
-					p := f.Position
-					folderPos = &p
-					break
-				}
-			}
-			items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath), FolderPosition: folderPos}
-		}
-		return &ListImagesResult{Images: items, NextCursor: nil}, nil
-	}
-
 	limit := params.Limit
 	if limit <= 0 {
 		limit = 50
@@ -110,7 +90,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, nil, params.Unfiled, params.TagID, name, params.Sort, params.Direction, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, params.Unfiled, params.FolderIDs, params.TagIDs, params.MIMETypes, name, params.Sort, params.Direction, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -137,6 +117,39 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	}
 
 	return &ListImagesResult{Images: items, NextCursor: nextCursor}, nil
+}
+
+func (u *imageUsecase) ListFolderImages(ctx context.Context, userID string, folderID uuid.UUID, sort *string, direction *string) ([]ImageItem, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListFolderImages")
+	defer span.End()
+
+	if _, err := u.folderRepo.GetByID(ctx, folderID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	rawImages, err := u.imageRepo.ListByFolder(ctx, userID, folderID, sort, direction)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	items := make([]ImageItem, len(rawImages))
+	for i, img := range rawImages {
+		var folderPos *string
+		for _, f := range img.ImageFolders {
+			if f.FolderID == folderID {
+				p := f.Position
+				folderPos = &p
+				break
+			}
+		}
+		items[i] = ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath), FolderPosition: folderPos}
+	}
+
+	return items, nil
 }
 
 func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error) {

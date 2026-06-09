@@ -59,7 +59,7 @@ func TestImageRepository_List_Success(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), userID, nil, false, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 2)
@@ -76,13 +76,13 @@ func TestImageRepository_List_ExcludesOtherUserImages(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(owner.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), other.ID, nil, false, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), other.ID, false, nil, nil, nil, nil, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Empty(t, images)
 }
 
-func TestImageRepository_List_FilterByFolder(t *testing.T) {
+func TestImageRepository_List_FilterByFolderIDs_SingleValue(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 
 	userRepo := NewUserRepository(tx)
@@ -102,12 +102,45 @@ func TestImageRepository_List_FilterByFolder(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, nil, nil, nil, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
 	require.Len(t, images[0].ImageFolders, 1)
 	assert.Equal(t, folder.ID, images[0].ImageFolders[0].FolderID)
+}
+
+func TestImageRepository_List_FilterByFolderIDs_MatchAny(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_folderany")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folderA, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "folder-a"})
+	require.NoError(t, err)
+	folderB, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "folder-b"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	inA, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), inA.ID, &folderA.ID))
+
+	inBoth, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SyncImageFolders(context.Background(), inBoth.ID, []uuid.UUID{folderA.ID, folderB.ID}))
+
+	_, err = repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folderA.ID, folderB.ID}, nil, nil, nil, nil, nil, nil, 200)
+
+	require.NoError(t, err)
+	require.Len(t, images, 2, "inBoth must appear exactly once despite matching both supplied folder IDs")
+	assert.ElementsMatch(t, []uuid.UUID{inA.ID, inBoth.ID}, []uuid.UUID{images[0].ID, images[1].ID})
 }
 
 func TestImageRepository_GetByID_Success(t *testing.T) {
@@ -383,7 +416,7 @@ func TestImageRepository_List_Pagination_FirstPage(t *testing.T) {
 	require.NoError(t, err)
 
 	// limit=2 → repo should return limit+1=3 rows, signalling more data exists
-	images, err := repo.List(context.Background(), userID, nil, false, nil, nil, nil, nil, nil, 2)
+	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 3)
@@ -400,7 +433,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	require.NoError(t, err)
 
 	// first page: returns 3 rows (limit+1), ordered created_at DESC, id DESC
-	firstPage, err := repo.List(context.Background(), userID, nil, false, nil, nil, nil, nil, nil, 2)
+	firstPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 2)
 	require.NoError(t, err)
 	require.Len(t, firstPage, 3)
 
@@ -409,7 +442,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
 
 	// second page: should return only items after the cursor
-	secondPage, err := repo.List(context.Background(), userID, nil, false, nil, nil, nil, nil, cursor, 2)
+	secondPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, cursor, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, secondPage, 1)
@@ -651,7 +684,7 @@ func TestImageRepository_List_Unfiled(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, nil, true, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, true, nil, nil, nil, nil, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
@@ -672,7 +705,7 @@ func TestImageRepository_List_PreloadsTags(t *testing.T) {
 	err = tagRepo.ReplaceImageTags(context.Background(), img.ID, []uuid.UUID{tag.ID})
 	require.NoError(t, err)
 
-	images, err := imageRepo.List(context.Background(), userID, nil, false, nil, nil, nil, nil, nil, 200)
+	images, err := imageRepo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 200)
 	require.NoError(t, err)
 
 	var found *domain.Image
@@ -687,7 +720,7 @@ func TestImageRepository_List_PreloadsTags(t *testing.T) {
 	assert.Equal(t, tag.ID, found.Tags[0].ID)
 }
 
-func TestImageRepository_List_FilterByTagID(t *testing.T) {
+func TestImageRepository_List_FilterByTagIDs_SingleValue(t *testing.T) {
 	tagRepo, imageRepo, userID := setupTagTest(t)
 
 	tagged, err := imageRepo.Create(context.Background(), newTestImage(userID))
@@ -701,10 +734,131 @@ func TestImageRepository_List_FilterByTagID(t *testing.T) {
 	err = tagRepo.ReplaceImageTags(context.Background(), tagged.ID, []uuid.UUID{tag.ID})
 	require.NoError(t, err)
 
-	images, err := imageRepo.List(context.Background(), userID, nil, false, &tag.ID, nil, nil, nil, nil, 200)
+	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tag.ID}, nil, nil, nil, nil, nil, 200)
 	require.NoError(t, err)
 	require.Len(t, images, 1)
 	assert.Equal(t, tagged.ID, images[0].ID)
+}
+
+func TestImageRepository_List_FilterByTagIDs_MatchAny(t *testing.T) {
+	tagRepo, imageRepo, userID := setupTagTest(t)
+
+	tagX, err := tagRepo.Create(context.Background(), newTestTag(userID, "tag-x"))
+	require.NoError(t, err)
+	tagY, err := tagRepo.Create(context.Background(), newTestTag(userID, "tag-y"))
+	require.NoError(t, err)
+
+	withX, err := imageRepo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), withX.ID, []uuid.UUID{tagX.ID}))
+
+	withBoth, err := imageRepo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), withBoth.ID, []uuid.UUID{tagX.ID, tagY.ID}))
+
+	_, err = imageRepo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+
+	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tagX.ID, tagY.ID}, nil, nil, nil, nil, nil, 200)
+
+	require.NoError(t, err)
+	require.Len(t, images, 2, "withBoth must appear exactly once despite matching both supplied tag IDs")
+	assert.ElementsMatch(t, []uuid.UUID{withX.ID, withBoth.ID}, []uuid.UUID{images[0].ID, images[1].ID})
+}
+
+func TestImageRepository_List_FilterByMIMETypes_MatchAny(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_mimefilter")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+
+	jpeg := newTestImage(user.ID)
+	jpeg.MIMEType = "image/jpeg"
+	jpeg, err = repo.Create(context.Background(), jpeg)
+	require.NoError(t, err)
+
+	png := newTestImage(user.ID)
+	png.MIMEType = "image/png"
+	png, err = repo.Create(context.Background(), png)
+	require.NoError(t, err)
+
+	gif := newTestImage(user.ID)
+	gif.MIMEType = "image/gif"
+	_, err = repo.Create(context.Background(), gif)
+	require.NoError(t, err)
+
+	images, err := repo.List(context.Background(), user.ID, false, nil, nil, []string{"image/jpeg", "image/png"}, nil, nil, nil, nil, 200)
+
+	require.NoError(t, err)
+	require.Len(t, images, 2)
+	assert.ElementsMatch(t, []uuid.UUID{jpeg.ID, png.ID}, []uuid.UUID{images[0].ID, images[1].ID})
+}
+
+func TestImageRepository_List_ComposesFolderAndTagFiltersWithAND(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_andcompose")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "compose"})
+	require.NoError(t, err)
+
+	tagRepo := NewTagRepository(tx)
+	tag, err := tagRepo.Create(context.Background(), newTestTag(user.ID, "compose-tag"))
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	// Matches both filters.
+	matchesBoth, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), matchesBoth.ID, &folder.ID))
+	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), matchesBoth.ID, []uuid.UUID{tag.ID}))
+
+	// In the folder but missing the tag.
+	folderOnly, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), folderOnly.ID, &folder.ID))
+
+	// Has the tag but not in the folder.
+	tagOnly, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), tagOnly.ID, []uuid.UUID{tag.ID}))
+
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, []uuid.UUID{tag.ID}, nil, nil, nil, nil, nil, 200)
+
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	assert.Equal(t, matchesBoth.ID, images[0].ID)
+}
+
+func TestImageRepository_List_UnfiledWithFolderIDs_YieldsEmptyResult(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_contradiction")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "contradiction"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	filed, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), filed.ID, &folder.ID))
+
+	_, err = repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	images, err := repo.List(context.Background(), user.ID, true, []uuid.UUID{folder.ID}, nil, nil, nil, nil, nil, nil, 200)
+
+	require.NoError(t, err)
+	assert.Empty(t, images)
 }
 
 func TestImageRepository_GetByID_PreloadsTags(t *testing.T) {
@@ -770,7 +924,7 @@ func TestImageRepository_UpdateImageFolderPosition_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
-func TestImageRepository_List_FolderView_OrderedByPosition(t *testing.T) {
+func TestImageRepository_ListByFolder_OrderedByPosition(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 
 	userRepo := NewUserRepository(tx)
@@ -798,7 +952,7 @@ func TestImageRepository_List_FolderView_OrderedByPosition(t *testing.T) {
 	// Manually reorder: put img3 before img1
 	require.NoError(t, repo.UpdateImageFolderPosition(context.Background(), img3.ID, folder.ID, "Zz"))
 
-	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, nil, nil, nil, 0)
+	images, err := repo.ListByFolder(context.Background(), user.ID, folder.ID, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, images, 3)
@@ -807,29 +961,34 @@ func TestImageRepository_List_FolderView_OrderedByPosition(t *testing.T) {
 	assert.Equal(t, img2.ID, images[2].ID)
 }
 
-func TestImageRepository_List_FolderView_ReturnsAll_IgnoresLimit(t *testing.T) {
+func TestImageRepository_ListByFolder_ScopedToFolder(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 
 	userRepo := NewUserRepository(tx)
-	user, err := userRepo.GetOrCreate(context.Background(), "kp_listall")
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_listscoped")
 	require.NoError(t, err)
 
 	folderRepo := NewFolderRepository(tx)
-	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "full"})
+	folderA, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "a"})
+	require.NoError(t, err)
+	folderB, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "b"})
 	require.NoError(t, err)
 
 	repo := NewImageRepository(tx)
-	for range 5 {
-		img, err := repo.Create(context.Background(), newTestImage(user.ID))
-		require.NoError(t, err)
-		require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, &folder.ID))
-	}
 
-	// Pass limit=2; folder view should return all 5 regardless.
-	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, nil, nil, nil, 2)
+	inA, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), inA.ID, &folderA.ID))
+
+	inB, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), inB.ID, &folderB.ID))
+
+	images, err := repo.ListByFolder(context.Background(), user.ID, folderA.ID, nil, nil)
 
 	require.NoError(t, err)
-	assert.Len(t, images, 5)
+	require.Len(t, images, 1)
+	assert.Equal(t, inA.ID, images[0].ID)
 }
 
 // listAllPages walks every page of the cursor-paginated (non-folder) branch for the
@@ -843,7 +1002,7 @@ func listAllPages(t *testing.T, repo *imageRepository, userID string, sortField,
 	seen := map[uuid.UUID]bool{}
 
 	for {
-		page, err := repo.List(context.Background(), userID, nil, false, nil, nil, &sortField, &direction, cursor, pageLimit)
+		page, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, &sortField, &direction, cursor, pageLimit)
 		require.NoError(t, err)
 
 		take := page
@@ -952,7 +1111,7 @@ func TestImageRepository_List_Pagination_TitleTiebreaksByID(t *testing.T) {
 	assert.Equal(t, expectedIDs, collected)
 }
 
-func TestImageRepository_List_FolderView_ExplicitSortOverridesPosition(t *testing.T) {
+func TestImageRepository_ListByFolder_ExplicitSortOverridesPosition(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 
 	userRepo := NewUserRepository(tx)
@@ -980,10 +1139,42 @@ func TestImageRepository_List_FolderView_ExplicitSortOverridesPosition(t *testin
 
 	sortField := "title"
 	direction := "asc"
-	images, err := repo.List(context.Background(), user.ID, &folder.ID, false, nil, nil, &sortField, &direction, nil, 200)
+	images, err := repo.ListByFolder(context.Background(), user.ID, folder.ID, &sortField, &direction)
 
 	require.NoError(t, err)
 	require.Len(t, images, 2)
 	assert.Equal(t, imgA.ID, images[0].ID)
 	assert.Equal(t, imgB.ID, images[1].ID)
+}
+
+func TestImageRepository_ListByFolder_PreloadsTagsAndImageFolders(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_folderpreload")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "preload-folder"})
+	require.NoError(t, err)
+
+	tagRepo := NewTagRepository(tx)
+	repo := NewImageRepository(tx)
+
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SetImageFolder(context.Background(), img.ID, &folder.ID))
+
+	tag, err := tagRepo.Create(context.Background(), newTestTag(user.ID, "folderpreloadtag"))
+	require.NoError(t, err)
+	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), img.ID, []uuid.UUID{tag.ID}))
+
+	images, err := repo.ListByFolder(context.Background(), user.ID, folder.ID, nil, nil)
+
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	require.Len(t, images[0].Tags, 1)
+	assert.Equal(t, tag.ID, images[0].Tags[0].ID)
+	require.Len(t, images[0].ImageFolders, 1)
+	assert.Equal(t, folder.ID, images[0].ImageFolders[0].FolderID)
 }

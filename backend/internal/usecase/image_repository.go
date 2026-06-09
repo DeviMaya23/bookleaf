@@ -10,9 +10,14 @@ import (
 type ImageRepository interface {
 	Create(ctx context.Context, image *domain.Image) (*domain.Image, error)
 	// List returns non-deleted images ordered by (created_at DESC, id DESC), fetching limit+1 rows.
-	// folderID filters via JOIN on image_folders; unfiled filters images with no image_folders row via LEFT JOIN.
+	// unfiled filters images with no image_folders row via LEFT JOIN; folderIDs/tagIDs filter via
+	// correlated EXISTS subqueries (match-any, at most once per image); mimeTypes filters via IN.
 	// Results include Tags and ImageFolders preloaded.
-	List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	// ListByFolder returns all non-deleted images in folderID owned by userID, ordered by
+	// image_folders.position ASC (or by sortField/direction when provided). No cursor or limit.
+	// Results include Tags and ImageFolders preloaded.
+	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 	// GetByID returns a non-deleted image with Tags and ImageFolders preloaded.
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	// Update selectively updates scalar fields for the image. folder_id is not a valid key; use SyncImageFolders or SetImageFolder.

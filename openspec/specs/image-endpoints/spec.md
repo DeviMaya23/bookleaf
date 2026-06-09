@@ -4,7 +4,7 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/imag
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx context.Context, userID string, folderID *uuid.UUID, unfiled bool, tagID *uuid.UUID, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — when `folderID` is non-nil: returns all non-deleted images for that folder; `cursor`, `limit`, and `name` are ignored; images are returned with `Tags` and `ImageFolders` preloaded. When `folderID` is nil: returns non-deleted images; fetches `limit + 1` rows; `cursor` applies a keyset filter; `unfiled` true limits to images with no entry in `image_folders`; `tagID` non-nil filters by tag; `name` non-nil and non-empty filters to images whose `title` contains the value, case-insensitively. In both branches, `sortField`/`direction` select the ordering: when `sortField` is nil, the folder branch orders by `image_folders.position ASC` and the non-folder branch orders by `created_at DESC, id DESC` (today's defaults, unchanged); when `sortField` is non-nil, both branches order by the selected column (with `id` as tiebreaker) in the selected direction (the field's default direction applies when `direction` is nil), and the non-folder branch's keyset filter compares against that same column instead of `created_at` (see `image-list-pagination` for the keyset comparison rules)
+- `List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images for `userID`; fetches `limit + 1` rows; `cursor` applies a keyset filter on the active sort column; images are returned with `Tags` and `ImageFolders` preloaded. `unfiled` true limits to images with no entry in `image_folders` (LEFT JOIN + `IS NULL`, as before). `folderIDs` non-empty filters to images belonging to ANY of the given folders via a correlated `EXISTS` subquery against `image_folders`, so an image matching multiple supplied folder IDs is still returned at most once. `tagIDs` non-empty filters to images associated with ANY of the given tags via a correlated `EXISTS` subquery against `image_tags`, with the same at-most-once guarantee. `mimeTypes` non-empty filters to images whose `mime_type` matches any of the given values via `IN`. `name` non-nil and non-empty filters to images whose `title` contains the value, case-insensitively. All of `unfiled`/`folderIDs`/`tagIDs`/`mimeTypes`/`name` compose via `AND`; no validation rejects contradictory combinations (e.g. `unfiled=true` together with non-empty `folderIDs`) — such combinations simply yield an empty result, the same way an impossible `name`/`tagIDs` combination would (see `GET /images Multi-Value Filter Query Parameters`). `sortField`/`direction` select the ordering: when `sortField` is nil, results order by `created_at DESC, id DESC` (today's default, unchanged); when `sortField` is non-nil, results order by the selected column (with `id` as tiebreaker) in the selected direction (the field's default direction applies when `direction` is nil), and the keyset filter compares against that same column instead of `created_at` (see `image-list-pagination` for the keyset comparison rules). The single-folder, position-ordered, unpaginated "folder contents" query that this method previously served when `folderID` was non-nil is REMOVED from this method — it is now served by a dedicated method described in `folder-image-listing`.
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` and `ImageFolders` preloaded
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied scalar fields for the image owned by `userID`; `folder_id` is NOT a valid key in the map (folder assignment is handled by `SetImageFolder`); result has `Tags` and `ImageFolders` preloaded
 - `SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error` — see `image-folders` spec for full behaviour
@@ -25,27 +25,15 @@ Trash lifecycle methods (`GetDeletedByID`, `SoftDelete`, `Restore`, `ListTrashed
 - **WHEN** the Go package is compiled
 - **THEN** `imageRepository` in `internal/repository/` implements `usecase.ImageRepository` without compilation errors
 
-#### Scenario: List defaults to position ordering for folder views when sort is nil
+#### Scenario: List defaults to created_at-descending ordering when sort is nil
 
-- **WHEN** `List` is called with a non-nil `folderID` and a nil `sortField`
-- **THEN** results are ordered by `image_folders.position ASC`
-- **AND** cursor and limit parameters have no effect
-
-#### Scenario: List honors an explicit sort field in folder views
-
-- **WHEN** `List` is called with a non-nil `folderID` and a non-nil `sortField` (e.g. `title`)
-- **THEN** results are ordered by the selected column and direction instead of `image_folders.position`
-- **AND** cursor and limit parameters still have no effect (the branch remains unpaginated)
-
-#### Scenario: List defaults to created_at-descending ordering for non-folder views when sort is nil
-
-- **WHEN** `List` is called with `folderID = nil` and a nil `sortField`
+- **WHEN** `List` is called with a nil `sortField`
 - **THEN** results are ordered by `created_at DESC, id DESC`
 - **AND** the keyset filter, when a cursor is present, compares `(created_at, id)`
 
-#### Scenario: List honors an explicit sort field in non-folder views
+#### Scenario: List honors an explicit sort field
 
-- **WHEN** `List` is called with `folderID = nil` and `sortField = "title"`
+- **WHEN** `List` is called with `sortField = "title"`
 - **THEN** results are ordered by `title` (in the requested or field-default direction) with `id` as tiebreaker
 - **AND** the keyset filter, when a cursor is present, compares `(title, id)` using the operator matching the sort direction
 
@@ -65,21 +53,28 @@ Trash lifecycle methods (`GetDeletedByID`, `SoftDelete`, `Restore`, `ListTrashed
 - **WHEN** `GetByID` is called for an image that has tags and a folder membership
 - **THEN** the returned `domain.Image` has its `Tags` and `ImageFolders` slices populated
 
-#### Scenario: List filters by tagID when provided
+#### Scenario: List filters by folderIDs when provided (match-any)
 
-- **WHEN** `List` is called with a non-nil `tagID`
-- **THEN** only images associated with that tag are returned
+- **WHEN** `List` is called with a non-empty `folderIDs` slice containing two folder UUIDs
+- **THEN** only images belonging to at least one of those folders are returned
+- **AND** an image belonging to both supplied folders appears exactly once in the results
 
-#### Scenario: List filters by name in the cursor-paginated branch
+#### Scenario: List filters by tagIDs when provided (match-any)
 
-- **WHEN** `List` is called with `folderID = nil` and a non-nil, non-empty `name`
+- **WHEN** `List` is called with a non-empty `tagIDs` slice containing two tag UUIDs
+- **THEN** only images associated with at least one of those tags are returned
+- **AND** an image associated with both supplied tags appears exactly once in the results
+
+#### Scenario: List filters by mimeTypes when provided (match-any)
+
+- **WHEN** `List` is called with a non-empty `mimeTypes` slice, e.g. `["image/jpeg", "image/png"]`
+- **THEN** only images whose `mime_type` equals one of the supplied values are returned
+
+#### Scenario: List filters by name
+
+- **WHEN** `List` is called with a non-nil, non-empty `name`
 - **THEN** the query includes a case-insensitive substring match (`ILIKE '%<name>%'`) against `images.title`
-- **AND** this filter composes with any `unfiled`, `tagID`, sort, and cursor conditions already present
-
-#### Scenario: List ignores name in the folder-view branch
-
-- **WHEN** `List` is called with a non-nil `folderID` and a non-nil `name`
-- **THEN** the `name` value has no effect on the returned results
+- **AND** this filter composes with any `unfiled`, `folderIDs`, `tagIDs`, `mimeTypes`, sort, and cursor conditions already present
 
 ---
 
@@ -116,17 +111,25 @@ Routes:
 - `POST /images/:id/accept-suggestion`
 - `GET /images`
 - `GET /images/:id`
+- `GET /images/in-folder/:id`
 - `PATCH /images/:id/position`
 - `PATCH /images/:id`
 - `DELETE /images/:id`
 - `GET /images/trash`
 - `POST /images/:id/restore`
 
+`GET /images/in-folder/:id` SHALL be registered such that it does not collide with `GET /images/:id` — its three-segment path (`/images/in-folder/:id`) is distinguishable from the two-segment `/images/:id` by Echo's router regardless of registration order, but it SHALL be registered alongside the other `/images/*` routes for readability. See `folder-image-listing` for its handler behaviour.
+
 #### Scenario: Image routes are registered under auth middleware
 
 - **WHEN** the server starts
 - **THEN** all `/images` routes require a valid Kinde Bearer token
 - **AND** unauthenticated requests return `401 Unauthorized`
+
+#### Scenario: GET /images/in-folder/:id does not collide with GET /images/:id
+
+- **WHEN** a request is made to `GET /images/in-folder/<folder-uuid>`
+- **THEN** it is routed to the folder-image-listing handler, not to `GetImage` with `in-folder` interpreted as an image ID
 
 ---
 
@@ -178,13 +181,14 @@ type CompleteUploadResult struct {
 }
 ```
 
-`ListImagesParams` SHALL include `TagID`, `Name`, `Sort`, and `Direction` fields:
+`ListImagesParams` SHALL include `Unfiled`, `FolderIDs`, `TagIDs`, `MIMETypes`, `Name`, `Sort`, and `Direction` fields:
 
 ```go
 type ListImagesParams struct {
-    FolderID  *uuid.UUID
     Unfiled   bool
-    TagID     *uuid.UUID
+    FolderIDs []uuid.UUID
+    TagIDs    []uuid.UUID
+    MIMETypes []string
     Name      *string
     Sort      *string
     Direction *string
@@ -193,9 +197,13 @@ type ListImagesParams struct {
 }
 ```
 
-`Name`, when non-nil and non-empty, filters results to images whose title contains the value, case-insensitively. It is ignored when `FolderID` is non-nil (folder views are filtered client-side on the frontend; see `fe-gallery-search`).
+The single-value `FolderID *uuid.UUID` and `TagID *uuid.UUID` fields are REMOVED from `ListImagesParams`. There is no longer a folder-view mode reachable through `ListImages`/`ListImagesParams` — fetching a single folder's contents in custom order is handled by a dedicated method described in `folder-image-listing`.
 
-`Sort`, when non-nil, selects the ordering column (`created_at` or `title`); `Direction`, when non-nil, selects `asc` or `desc`. Both are validated against an allow-list by the handler before reaching the usecase (see `GET /images sort and direction query parameters`) — the usecase passes them through to the repository unchanged, performing no additional validation or defaulting of its own. When `Sort` is nil, ordering follows the per-branch defaults described in the `ImageRepository.List` requirement (`position ASC` for folder views, `created_at DESC` otherwise).
+`Name`, when non-nil and non-empty, filters results to images whose title contains the value, case-insensitively.
+
+`FolderIDs`, `TagIDs`, and `MIMETypes`, when non-empty, filter results to images matching ANY of the supplied values for that dimension (match-any); see `GET /images Multi-Value Filter Query Parameters` for the full contract.
+
+`Sort`, when non-nil, selects the ordering column (`created_at` or `title`); `Direction`, when non-nil, selects `asc` or `desc`. Both are validated against an allow-list by the handler before reaching the usecase (see `GET /images sort and direction query parameters`) — the usecase passes them through to the repository unchanged, performing no additional validation or defaulting of its own. When `Sort` is nil, ordering follows the default described in the `ImageRepository.List` requirement (`created_at DESC`).
 
 `ListImages` SHALL use the paginated signature:
 
@@ -261,10 +269,11 @@ Trash lifecycle methods (`SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTras
 - **WHEN** `UpdateImage` is called with `Tags` set to an empty slice
 - **THEN** all tag associations for the image are removed
 
-#### Scenario: ListImages passes TagID to repository
+#### Scenario: ListImages passes FolderIDs, TagIDs, and MIMETypes to repository
 
-- **WHEN** `ListImages` is called with a non-nil `TagID` param
-- **THEN** only images associated with that tag are returned
+- **WHEN** `ListImages` is called with non-empty `FolderIDs`, `TagIDs`, and `MIMETypes` params
+- **THEN** the repository's `List` is invoked with those exact slices as `folderIDs`/`tagIDs`/`mimeTypes`
+- **AND** only images matching the composed filter (AND across dimensions, match-any within each) are returned
 
 #### Scenario: ListImages passes Name to repository
 
@@ -285,7 +294,7 @@ Trash lifecycle methods (`SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTras
 #### Scenario: ListImages passes nil Sort and Direction through as nil
 
 - **WHEN** `ListImages` is called with `Sort` and `Direction` both nil
-- **THEN** the repository's `List` is invoked with nil `sortField`/`direction`, preserving the view's existing default ordering
+- **THEN** the repository's `List` is invoked with nil `sortField`/`direction`, preserving the default ordering
 
 ---
 
@@ -395,10 +404,10 @@ The `GET /images` endpoint SHALL return a paginated envelope (see `image-list-pa
 ```
 
 - `folder_ids` SHALL be a non-null array of UUIDs — empty (`[]`) when the image has no folder memberships, populated with all folder IDs the image belongs to otherwise
-- `position` SHALL be the fracdex key from `image_folders.position` for the queried folder when `GET /images` is called with a `folder_id` parameter; `null` in all other list contexts (unfiled, all, trash)
+- `position` SHALL always be `null` in `GET /images` and `GET /images/:id` results. `GET /images` no longer has a folder-scoped, position-ordered mode — that query is served exclusively by `GET /images/in-folder/:id` (see `folder-image-listing`), whose response populates `position` from `image_folders.position` for the queried folder
 - `GET /images/:id` (`imageDetailResponse`) follows the same shape and includes an additional `image_url` field; `position` is always `null` in the detail response (no folder context)
 
-The `ImageItem` struct in `internal/usecase/image_usecase.go` SHALL add a `FolderPosition *string` field. In `ListImages`, when `params.FolderID` is non-nil, the implementation SHALL iterate the image's `ImageFolders` slice to find the entry matching `params.FolderID` and set `FolderPosition` to that entry's `Position`. The `toImageResponse` function in `internal/handler/image.go` SHALL map `item.FolderPosition` to `Position` on the response struct.
+The `ImageItem` struct in `internal/usecase/image_usecase.go` retains its `FolderPosition *string` field, but `ListImages` SHALL always leave it `nil` — the gallery query has no single-folder context to derive a position from. The dedicated folder-listing usecase method described in `folder-image-listing` is the only populator of `FolderPosition`. The `toImageResponse` function in `internal/handler/image.go` SHALL continue to map `item.FolderPosition` to `Position` on the response struct (which will be `nil`/`null` for all `GET /images`/`GET /images/:id` results).
 
 #### Scenario: Image list response returns paginated envelope
 
@@ -406,15 +415,10 @@ The `ImageItem` struct in `internal/usecase/image_usecase.go` SHALL add a `Folde
 - **THEN** the response is an object with an `images` array and a `next_cursor` field
 - **AND** each item in `images` includes a `folder_ids` array (never null)
 
-#### Scenario: Folder-scoped list includes position
+#### Scenario: GET /images always returns null position
 
-- **WHEN** an authenticated `GET /images?folder_id=<uuid>` request is made
-- **THEN** each image in the response includes a non-null `position` string
-
-#### Scenario: Non-folder-scoped list returns null position
-
-- **WHEN** an authenticated `GET /images` request is made without `folder_id` (e.g. unfiled or all)
-- **THEN** each image in the response has `position: null`
+- **WHEN** an authenticated `GET /images` request is made, with or without `folder_ids`/`tag_ids`/`mime_types`/`unfiled`/`name` filters
+- **THEN** every image in the response has `position: null`
 
 #### Scenario: Image detail response includes folder_ids array
 
@@ -437,7 +441,7 @@ The `ImageItem` struct in `internal/usecase/image_usecase.go` SHALL add a `Folde
 
 The `folder_ids` field in `imageResponse` and `imageDetailResponse` SHALL be populated from the image's `ImageFolders` slice by iterating all entries and collecting their `FolderID` values. The field SHALL never be null — an image with no folder memberships returns an empty array `[]`.
 
-The `folder_id` (singular) field is removed from `imageResponse` and `imageDetailResponse`. The `position` field remains and is populated from `image_folders.position` for folder-scoped list requests (see the Response Shape requirement). The `ImageRepository` interface, `toImageResponse` helper, and all related handler structs SHALL reflect this change.
+The `folder_id` (singular) field is removed from `imageResponse` and `imageDetailResponse`. The `position` field remains in the response shape but is always `null` for `GET /images` and `GET /images/:id` — position is only populated by `GET /images/in-folder/:id` (see `folder-image-listing`). The `ImageRepository` interface, `toImageResponse` helper, and all related handler structs SHALL reflect this change.
 
 `toImageResponse` SHALL populate `FolderIDs []uuid.UUID` from `item.Image.ImageFolders` (all entries, not just index 0). The `firstFolderID` and `firstFolderPosition` helpers are removed.
 
@@ -613,7 +617,7 @@ type imageResponse struct {
     Description  *string       `json:"description"`
     MIMEType     string        `json:"mime_type"`
     SourceURL    *string       `json:"source_url"`
-    FolderID     *uuid.UUID    `json:"folder_id"`
+    FolderIDs    []uuid.UUID   `json:"folder_ids"`
     Position     *string       `json:"position"`
     ThumbnailURL *string       `json:"thumbnail_url"`
     Width        *int          `json:"width"`
@@ -693,24 +697,67 @@ The handler SHALL return `400 Bad Request` if a tag ID in the array is not a val
 
 ---
 
-### Requirement: ListImages Accepts tag_id Filter
+### Requirement: GET /images Multi-Value Filter Query Parameters
 
-The system SHALL accept an optional `tag_id` query parameter on `GET /images` to filter images by a single tag.
+The `GET /images` handler SHALL accept optional `folder_ids`, `tag_ids`, and `mime_types` query parameters, each a comma-separated list of values, providing independent match-any filters that compose with each other and with `name`/`unfiled`/sort/pagination via `AND`.
 
-#### Scenario: GET /images with tag_id returns only tagged images
+| Parameter | Value type | Matches images that... |
+|---|---|---|
+| `folder_ids` | comma-separated UUIDs | belong to ANY of the given folders |
+| `tag_ids` | comma-separated UUIDs | are associated with ANY of the given tags |
+| `mime_types` | comma-separated strings | have a `mime_type` equal to ANY of the given values |
 
-- **WHEN** `GET /images?tag_id=<uuid>` is called
-- **THEN** only images associated with that tag are returned
+Rules:
+- Each parameter is optional; absent or empty means "no filter on that dimension"
+- Values are split on `,`; empty segments (e.g. from a trailing comma) SHALL be ignored
+- For `folder_ids` and `tag_ids`, each non-empty segment SHALL be parsed as a UUID; if any segment fails to parse, the handler SHALL return `400 Bad Request` (mirroring the existing single-value validation style for `folder_id`/`tag_id`)
+- For `mime_types`, segments are passed through as plain strings with no format validation beyond non-emptiness
+- The parsed slices are passed to `imageUsecase.ListImages` via `ListImagesParams.FolderIDs`/`TagIDs`/`MIMETypes`; an empty or absent parameter results in a nil/empty slice, which the repository treats as "no filter on that dimension"
+- Multiple filters compose via `AND` (an image must satisfy every supplied filter dimension); multiple values within one filter compose via match-any/`OR` (an image must satisfy at least one value in that dimension)
+- No cross-filter validation is performed: contradictory combinations (e.g. `unfiled=true&folder_ids=...`) are not rejected and simply produce an empty result (see `GET /images unfiled query parameter`)
+- `folder_id` and `tag_id` (singular) are no longer accepted; supplying them has no effect (they are simply unrecognized query parameters)
 
-#### Scenario: GET /images with invalid tag_id returns 400
+#### Scenario: GET /images with folder_ids returns images in any of the given folders
 
-- **WHEN** `GET /images?tag_id=not-a-uuid` is called
+- **WHEN** `GET /images?folder_ids=<uuid-a>,<uuid-b>` is called
+- **THEN** only images belonging to folder A or folder B (or both) are returned
+- **AND** an image belonging to both folders appears exactly once in the results
+
+#### Scenario: GET /images with tag_ids returns images with any of the given tags
+
+- **WHEN** `GET /images?tag_ids=<uuid-a>,<uuid-b>` is called
+- **THEN** only images associated with tag A or tag B (or both) are returned
+- **AND** an image associated with both tags appears exactly once in the results
+
+#### Scenario: GET /images with mime_types returns images of any of the given types
+
+- **WHEN** `GET /images?mime_types=image/jpeg,image/png` is called
+- **THEN** only images whose `mime_type` is `image/jpeg` or `image/png` are returned
+
+#### Scenario: GET /images composes multiple filter dimensions with AND
+
+- **WHEN** `GET /images?folder_ids=<uuid-a>&tag_ids=<uuid-x>,<uuid-y>` is called
+- **THEN** only images that belong to folder A AND are associated with tag X or tag Y are returned
+
+#### Scenario: GET /images with invalid UUID in folder_ids or tag_ids returns 400
+
+- **WHEN** `GET /images?folder_ids=not-a-uuid` or `GET /images?tag_ids=<uuid>,not-a-uuid` is called
 - **THEN** the response is `400 Bad Request`
 
-#### Scenario: GET /images without tag_id returns all images
+#### Scenario: GET /images ignores empty segments in multi-value parameters
 
-- **WHEN** `GET /images` is called without a `tag_id` parameter
-- **THEN** images are returned regardless of their tag associations
+- **WHEN** `GET /images?tag_ids=<uuid>,` is called (trailing comma)
+- **THEN** the request is treated as if only the single valid UUID were supplied — no `400` is returned for the empty segment
+
+#### Scenario: GET /images without multi-value filter parameters returns unfiltered-by-those-dimensions results
+
+- **WHEN** `GET /images` is called without `folder_ids`, `tag_ids`, or `mime_types`
+- **THEN** results are not filtered by folder membership, tags, or MIME type (other active filters still apply)
+
+#### Scenario: GET /images ignores singular folder_id and tag_id parameters
+
+- **WHEN** `GET /images?folder_id=<uuid>` or `GET /images?tag_id=<uuid>` is called
+- **THEN** the parameter has no effect on the results (it is not recognized; use `folder_ids`/`tag_ids` instead)
 
 ---
 
@@ -786,26 +833,28 @@ The `GET /images` handler SHALL accept an optional `unfiled` boolean query param
 
 | `unfiled` value | Behaviour |
 |---|---|
-| Absent or `false` | Existing behaviour — no unfoldered filter applied |
-| `true` | Returns only images where `folder_id IS NULL`; `folder_id` param is ignored |
+| Absent or `false` | No unfiled filter applied; other filters behave as documented |
+| `true` | Returns only images with no row in `image_folders`; composes with `folder_ids` and other filters via `AND` exactly like any other filter (see below) |
 
-`ListImagesParams` SHALL include an `Unfiled bool` field. When `Unfiled = true`, the repository SHALL use a LEFT JOIN on `image_folders` and filter for images with no matching row, ignoring `FolderID`.
+`ListImagesParams` SHALL include an `Unfiled bool` field. When `Unfiled = true`, the repository SHALL use a LEFT JOIN on `image_folders` and filter for images with no matching row.
+
+`unfiled` and `folder_ids` are independent filters and are NOT mutually exclusive at the parameter level — both are simply passed through and ANDed together like any other filter pair. `unfiled=true` together with a non-empty `folder_ids` is a contradiction (an unfiled image cannot belong to a folder) and SHALL NOT be specially detected, rejected, or have one override the other; it SHALL simply produce an empty result set, the same way any other impossible filter combination would.
 
 #### Scenario: unfiled=true returns only unfoldered images
 
 - **WHEN** `GET /images?unfiled=true` is called
 - **THEN** only images with no row in `image_folders` are returned
 
-#### Scenario: unfiled=true ignores folder_id param
+#### Scenario: unfiled=true combined with folder_ids yields an empty result
 
-- **WHEN** `GET /images?unfiled=true&folder_id=<valid-uuid>` is called
-- **THEN** only images with no row in `image_folders` are returned
-- **AND** the `folder_id` param is not applied as a filter
+- **WHEN** `GET /images?unfiled=true&folder_ids=<valid-uuid>` is called
+- **THEN** the response is `200 OK` with an empty `images` array
+- **AND** no special validation error is returned — the contradictory filters simply compose to match nothing
 
 #### Scenario: unfiled absent or false preserves existing behaviour
 
 - **WHEN** `GET /images` is called without `unfiled` or with `unfiled=false`
-- **THEN** existing folder filtering behaviour applies unchanged
+- **THEN** existing filtering behaviour applies unchanged
 
 ---
 
@@ -815,14 +864,14 @@ The `GET /images` handler SHALL accept optional `sort` and `direction` query par
 
 | `sort` value  | Meaning                        | Default `direction` when omitted |
 |---------------|--------------------------------|-----------------------------------|
-| (absent)      | Use the view's existing default ordering (`image_folders.position ASC` for folder views, `created_at DESC` otherwise) | n/a — `direction` has no effect |
+| (absent)      | Use the default ordering (`created_at DESC`) | n/a — `direction` has no effect |
 | `created_at`  | Order by creation time         | `desc` (newest first)             |
 | `title`       | Order alphabetically by title  | `asc` (A → Z)                     |
 
 Rules:
 - `sort`, when present and non-empty, SHALL be validated against the allow-list above (`created_at`, `title`); any other value SHALL cause the handler to return `400 Bad Request`
 - `direction`, when present and non-empty, SHALL be validated against `{asc, desc}`; any other value SHALL cause the handler to return `400 Bad Request`
-- `direction` has no effect when `sort` is absent or empty: it is accepted without validation in that case, mirroring how the folder-view branch already silently ignores unrelated parameters such as `cursor`/`limit`/`name`
+- `direction` has no effect when `sort` is absent or empty: it is accepted without validation in that case
 - When `sort` is present and valid but `direction` is absent or empty, the field's default direction (per the table above) is used
 - The validated values SHALL be passed to `imageUsecase.ListImages` via `ListImagesParams.Sort`/`ListImagesParams.Direction` as `*string`, or `nil` when the corresponding query parameter was absent or empty
 
@@ -855,7 +904,7 @@ Rules:
 #### Scenario: Omitted sort and direction preserve existing behaviour
 
 - **WHEN** `GET /images` is called without `sort` or `direction`
-- **THEN** folder views are ordered by `image_folders.position ASC` and non-folder views by `created_at DESC, id DESC`, exactly as before this change
+- **THEN** results are ordered by `created_at DESC, id DESC`, exactly as before this change
 - **AND** the response cursor remains an opaque string requiring no client-side changes
 
 ---
