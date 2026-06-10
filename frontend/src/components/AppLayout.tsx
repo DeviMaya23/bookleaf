@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
-import { Plus, UploadCloud, ChevronDown, Images, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images, Search, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -19,8 +19,11 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -38,7 +41,9 @@ import type { Folder } from '@/lib/folders'
 import { useVisionSuggestion } from '@/hooks/useVisionSuggestion'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from '@/lib/dragHandlers'
+import { MIME_TYPE_FILTER_OPTIONS } from '@/lib/images'
 import type { Image } from '@/lib/images'
+import { getTags } from '@/lib/tags'
 import type { AppView } from '@/lib/view'
 import type { SortEndTrigger } from '@/components/ImageGrid'
 
@@ -63,6 +68,17 @@ const DIR_LABELS: Record<'created_at' | 'title', Record<SortDir, string>> = {
 
 function defaultSortForViewType(isFolder: boolean): { sortBy: SortBy; sortDir: SortDir | undefined } {
   return isFolder ? { sortBy: 'manual', sortDir: undefined } : { sortBy: 'created_at', sortDir: 'desc' }
+}
+
+type FilterSection = 'tags' | 'mimeTypes' | 'folders'
+
+function filterSectionsForViewType(viewType: AppView['type']): FilterSection[] {
+  switch (viewType) {
+    case 'all': return ['tags', 'mimeTypes', 'folders']
+    case 'unsorted': return ['tags', 'mimeTypes']
+    case 'folder': return ['tags', 'mimeTypes']
+    case 'trash': return []
+  }
 }
 
 function useAppView(): AppView {
@@ -109,6 +125,9 @@ export default function AppLayout() {
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
   const [sortBy, setSortBy] = useState<SortBy>(() => defaultSortForViewType(view.type === 'folder').sortBy)
   const [sortDir, setSortDir] = useState<SortDir | undefined>(() => defaultSortForViewType(view.type === 'folder').sortDir)
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  const [filterMimeTypes, setFilterMimeTypes] = useState<string[]>([])
+  const [filterFolderIds, setFilterFolderIds] = useState<string[]>([])
 
   const folderId = view.type === 'folder' ? view.id : null
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
@@ -116,6 +135,8 @@ export default function AppLayout() {
   const sortFieldOptions: SortBy[] = view.type === 'folder' ? ['manual', 'created_at', 'title'] : ['created_at', 'title']
   const sortActive = sortBy !== viewDefaultSort.sortBy
     || (sortBy !== 'manual' && sortDir !== FIELD_DEFAULT_DIRECTION[sortBy])
+  const filterSections = filterSectionsForViewType(view.type)
+  const filterCount = filterTagIds.length + filterMimeTypes.length + filterFolderIds.length
 
   useEffect(() => {
     setViewerImage(null)
@@ -125,6 +146,9 @@ export default function AppLayout() {
 
   useEffect(() => {
     setSearchTerm('')
+    setFilterTagIds([])
+    setFilterMimeTypes([])
+    setFilterFolderIds([])
   }, [viewKey])
 
   useEffect(() => {
@@ -147,6 +171,36 @@ export default function AppLayout() {
     queryFn: () => getFolders(getToken),
     staleTime: 60_000,
   })
+
+  const { data: tags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => getTags(getToken),
+    staleTime: 60_000,
+  })
+
+  const activeFilterChips: { key: string; label: string; onRemove: () => void }[] = [
+    ...filterTagIds.map((id) => ({
+      key: `tag:${id}`,
+      label: tags.find((t) => t.id === id)?.name ?? id,
+      onRemove: () => setFilterTagIds((prev) => prev.filter((v) => v !== id)),
+    })),
+    ...filterMimeTypes.map((value) => ({
+      key: `mime:${value}`,
+      label: MIME_TYPE_FILTER_OPTIONS.find((o) => o.value === value)?.label ?? value,
+      onRemove: () => setFilterMimeTypes((prev) => prev.filter((v) => v !== value)),
+    })),
+    ...filterFolderIds.map((id) => ({
+      key: `folder:${id}`,
+      label: folders.find((f) => f.id === id)?.name ?? id,
+      onRemove: () => setFilterFolderIds((prev) => prev.filter((v) => v !== id)),
+    })),
+  ]
+
+  const clearAllFilters = useCallback(() => {
+    setFilterTagIds([])
+    setFilterMimeTypes([])
+    setFilterFolderIds([])
+  }, [])
 
   const activeFolder: Folder | null = view.type === 'folder'
     ? folders.find((f) => f.id === view.id) ?? null
@@ -290,71 +344,169 @@ export default function AppLayout() {
           ) : (
             <ScrollArea className="h-full">
               <div className="p-6">
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2 w-full max-w-xs">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <input
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search images by name…"
-                        className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
-                      />
+                <div className="flex flex-col gap-2 mb-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 w-full max-w-xs">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                          <input
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Search images by name…"
+                            className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+                          />
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label="Sort"
+                            className={cn(buttonVariants({ variant: sortActive ? 'default' : 'outline', size: 'icon' }))}
+                          >
+                            <ArrowUpDown className="w-3.5 h-3.5" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-48">
+                            <DropdownMenuRadioGroup
+                              value={sortBy}
+                              onValueChange={(value) => handleSortFieldChange(value as SortBy)}
+                            >
+                              {sortFieldOptions.map((field) => (
+                                <DropdownMenuRadioItem key={field} value={field}>
+                                  {SORT_FIELD_LABELS[field]}
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                            {sortBy !== 'manual' && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem closeOnClick={false} onClick={handleSortDirToggle}>
+                                  {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                                  {DIR_LABELS[sortBy][sortDir ?? FIELD_DEFAULT_DIRECTION[sortBy]]}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      {view.type !== 'trash' && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            className={cn(buttonVariants({ variant: filterCount > 0 ? 'default' : 'outline' }))}
+                          >
+                            <Filter className="w-3.5 h-3.5" />
+                            Filters
+                            {filterCount > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary-foreground/20 text-[10px] font-semibold leading-none">
+                                {filterCount}
+                              </span>
+                            )}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56">
+                            {filterSections.includes('tags') && (
+                              <DropdownMenuGroup>
+                                <DropdownMenuLabel>Tags</DropdownMenuLabel>
+                                {tags.map((tag) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={tag.id}
+                                    checked={filterTagIds.includes(tag.id)}
+                                    onCheckedChange={(checked) =>
+                                      setFilterTagIds((prev) => checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id))
+                                    }
+                                  >
+                                    {tag.name}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              </DropdownMenuGroup>
+                            )}
+                            {filterSections.includes('mimeTypes') && (
+                              <DropdownMenuGroup>
+                                {filterSections.includes('tags') && <DropdownMenuSeparator />}
+                                <DropdownMenuLabel>File type</DropdownMenuLabel>
+                                {MIME_TYPE_FILTER_OPTIONS.map((opt) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={opt.value}
+                                    checked={filterMimeTypes.includes(opt.value)}
+                                    onCheckedChange={(checked) =>
+                                      setFilterMimeTypes((prev) => checked ? [...prev, opt.value] : prev.filter((v) => v !== opt.value))
+                                    }
+                                  >
+                                    {opt.label}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              </DropdownMenuGroup>
+                            )}
+                            {filterSections.includes('folders') && (
+                              <DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel>Folder</DropdownMenuLabel>
+                                {folders.map((folder) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={folder.id}
+                                    checked={filterFolderIds.includes(folder.id)}
+                                    onCheckedChange={(checked) =>
+                                      setFilterFolderIds((prev) => checked ? [...prev, folder.id] : prev.filter((id) => id !== folder.id))
+                                    }
+                                  >
+                                    {folder.name}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              </DropdownMenuGroup>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        aria-label="Sort"
-                        className={cn(buttonVariants({ variant: sortActive ? 'default' : 'outline', size: 'icon' }))}
+                    <div className="flex">
+                      <button
+                        className={cn(buttonVariants(), 'rounded-r-none')}
+                        onClick={() => setUploadOpen(true)}
                       >
-                        <ArrowUpDown className="w-3.5 h-3.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-48">
-                        <DropdownMenuRadioGroup
-                          value={sortBy}
-                          onValueChange={(value) => handleSortFieldChange(value as SortBy)}
+                        <Plus className="w-4 h-4 mr-1" />
+                        Image
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className={cn(buttonVariants(), 'rounded-l-none border-l border-l-white/20 px-2')}>
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                            <UploadCloud className="w-4 h-4" />
+                            Upload image
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
+                            <Images className="w-4 h-4" />
+                            Upload multiple images
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  {activeFilterChips.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {activeFilterChips.map((chip) => (
+                        <span
+                          key={chip.key}
+                          className="inline-flex items-center gap-1 bg-secondary text-secondary-foreground rounded px-2 py-0.5 text-xs"
                         >
-                          {sortFieldOptions.map((field) => (
-                            <DropdownMenuRadioItem key={field} value={field}>
-                              {SORT_FIELD_LABELS[field]}
-                            </DropdownMenuRadioItem>
-                          ))}
-                        </DropdownMenuRadioGroup>
-                        {sortBy !== 'manual' && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem closeOnClick={false} onClick={handleSortDirToggle}>
-                              {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                              {DIR_LABELS[sortBy][sortDir ?? FIELD_DEFAULT_DIRECTION[sortBy]]}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex">
-                    <button
-                      className={cn(buttonVariants(), 'rounded-r-none')}
-                      onClick={() => setUploadOpen(true)}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Image
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className={cn(buttonVariants(), 'rounded-l-none border-l border-l-white/20 px-2')}>
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                          <UploadCloud className="w-4 h-4" />
-                          Upload image
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => { setBatchInitialFiles([]); setBatchUploadOpen(true) }}>
-                          <Images className="w-4 h-4" />
-                          Upload multiple images
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                          {chip.label}
+                          <button
+                            type="button"
+                            onClick={chip.onRemove}
+                            className="text-muted-foreground hover:text-foreground transition-colors ml-0.5"
+                            aria-label={`Remove filter ${chip.label}`}
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={clearAllFilters}
+                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                      >
+                        Clear all
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <ImageGrid
                   view={view}
@@ -362,6 +514,9 @@ export default function AppLayout() {
                   debouncedSearchTerm={debouncedSearchTerm}
                   sortBy={sortBy}
                   sortDir={sortDir}
+                  filterTagIds={filterTagIds}
+                  filterMimeTypes={filterMimeTypes}
+                  filterFolderIds={filterFolderIds}
                   onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img); setFolderPanelOpen(false) }}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}

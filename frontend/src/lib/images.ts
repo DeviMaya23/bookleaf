@@ -23,6 +23,14 @@ export interface ImagesPage {
   next_cursor: string | null
 }
 
+export const MIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'image/jpeg', label: 'JPEG' },
+  { value: 'image/png', label: 'PNG' },
+  { value: 'image/gif', label: 'GIF' },
+  { value: 'image/webp', label: 'WEBP' },
+  { value: 'image/avif', label: 'AVIF' },
+]
+
 type GetToken = () => Promise<string | undefined>
 
 export async function getImages(
@@ -31,6 +39,9 @@ export async function getImages(
   name?: string,
   sort?: 'created_at' | 'title',
   direction?: 'asc' | 'desc',
+  tagIds?: string[],
+  mimeTypes?: string[],
+  folderIds?: string[],
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   params.set('unfiled', 'true')
@@ -38,6 +49,9 @@ export async function getImages(
   if (name) params.set('name', name)
   if (sort) params.set('sort', sort)
   if (direction) params.set('direction', direction)
+  if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
+  if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
+  if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
@@ -64,12 +78,18 @@ export async function getAllImages(
   name?: string,
   sort?: 'created_at' | 'title',
   direction?: 'asc' | 'desc',
+  tagIds?: string[],
+  mimeTypes?: string[],
+  folderIds?: string[],
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
   if (name) params.set('name', name)
   if (sort) params.set('sort', sort)
   if (direction) params.set('direction', direction)
+  if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
+  if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
+  if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
