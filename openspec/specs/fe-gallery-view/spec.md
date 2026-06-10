@@ -7,11 +7,11 @@ The system SHALL fetch images with `unfiled=true` when the user is on the root p
 - **AND** the returned images are displayed in the masonry gallery
 
 ### Requirement: Folder route displays folder images
-The system SHALL fetch images for a specific folder when the user is on `/folders/:folder_id` and render them in the masonry gallery. The response envelope `{ images, next_cursor }` SHALL be handled for pagination.
+The system SHALL fetch images for a specific folder when the user is on `/folders/:folder_id` and render them in the masonry gallery. The response is a plain JSON array (no pagination envelope) — the full ordered set of folder contents returned by `GET /images/in-folder/:id`.
 
 #### Scenario: Navigating to a folder route loads that folder's images
 - **WHEN** the authenticated user navigates to `/folders/:folder_id`
-- **THEN** the app calls `GET /images?folder_id=<folder_id>`
+- **THEN** the app calls `GET /images/in-folder/<folder_id>`
 - **AND** the returned images for that folder are displayed in the masonry gallery
 
 ### Requirement: Folder sidebar navigates via URL
@@ -66,6 +66,8 @@ The system SHALL call the `onImageSelect` callback prop with the clicked image w
 
 ### Requirement: Paginated image loading with "Load more"
 The system SHALL use `useInfiniteQuery` to fetch images in pages. A "Load more" button SHALL be shown when a `next_cursor` is present in the last page's response. Clicking it SHALL fetch the next page by passing `cursor=<next_cursor>` to `GET /images`. When switching folders (or navigating to root), the accumulated pages SHALL be reset.
+
+Folder view (`GET /images/in-folder/:id`) returns the full folder contents in a single response with no cursor — the "Load more" button is never shown for folder views.
 
 #### Scenario: Load more button shown when next page exists
 - **WHEN** the image list response contains a non-null `next_cursor`

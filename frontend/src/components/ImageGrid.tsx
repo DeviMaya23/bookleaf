@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { getImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
+import { getImages, getFolderImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
 import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
@@ -123,9 +123,9 @@ function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>, 
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
       case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort, direction)
-      case 'unsorted': return getImages(getToken, null, pageParam, debouncedSearch, sort, direction)
+      case 'unsorted': return getImages(getToken, pageParam, debouncedSearch, sort, direction)
       case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch)
-      case 'folder': return getImages(getToken, view.id, pageParam, undefined, sort, direction)
+      case 'folder': return getFolderImages(getToken, view.id, sort, direction)
     }
   }
 }

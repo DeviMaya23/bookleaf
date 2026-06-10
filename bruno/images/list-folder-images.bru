@@ -1,0 +1,20 @@
+meta {
+  name: List Folder Images
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/images/in-folder/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: {{folderId}}
+}
+
+params:query {
+  ~sort: title
+  ~direction: asc
+}

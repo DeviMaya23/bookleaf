@@ -5,7 +5,7 @@ When the gallery is in a folder view, `ImageGrid` SHALL maintain an `orderedImag
 #### Scenario: Images displayed in persisted order on load
 
 - **WHEN** the user navigates to a folder
-- **THEN** images are displayed in the order returned by `GET /images?folder_id=<id>` (sorted by position ascending)
+- **THEN** images are displayed in the order returned by `GET /images/in-folder/<id>` (sorted by position ascending)
 
 ### Requirement: Drag-to-reorder enabled only in folder views with Manual sort active
 

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // --- test doubles ---
@@ -42,17 +43,35 @@ type mockImageRepository struct {
 	lastListName         *string
 	lastListSort         *string
 	lastListDirection    *string
+	lastListUnfiled      bool
+	lastListFolderIDs    []uuid.UUID
+	lastListTagIDs       []uuid.UUID
+	lastListMIMETypes    []string
+	listByFolderCalls    int
+	lastListByFolderID   uuid.UUID
+	listByFolderImages   []*domain.Image
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
 	m.createdImage = img
 	return m.image, m.err
 }
-func (m *mockImageRepository) List(_ context.Context, _ string, _ *uuid.UUID, _ bool, _ *uuid.UUID, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+	m.lastListUnfiled = unfiled
+	m.lastListFolderIDs = folderIDs
+	m.lastListTagIDs = tagIDs
+	m.lastListMIMETypes = mimeTypes
 	m.lastListName = name
 	m.lastListSort = sortField
 	m.lastListDirection = direction
 	return m.images, m.err
+}
+func (m *mockImageRepository) ListByFolder(_ context.Context, _ string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
+	m.listByFolderCalls++
+	m.lastListByFolderID = folderID
+	m.lastListSort = sortField
+	m.lastListDirection = direction
+	return m.listByFolderImages, m.err
 }
 func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
@@ -203,21 +222,28 @@ func noopTel() *observability.Telemetry {
 }
 
 func newImageUsecase(imageRepo ImageRepository, tagRepo TagRepository, store StorageService) *imageUsecase {
-	return NewImageUsecase(imageRepo, tagRepo, store, noopTel())
+	return NewImageUsecase(imageRepo, tagRepo, &stubImageFolderRepo{folder: &domain.Folder{ID: uuid.New()}}, store, noopTel())
+}
+
+func newImageUsecaseWithFolderRepo(imageRepo ImageRepository, tagRepo TagRepository, store StorageService, folderRepo ImageFolderRepository) *imageUsecase {
+	return NewImageUsecase(imageRepo, tagRepo, folderRepo, store, noopTel())
 }
 
 // --- ListImages ---
 
-func TestImageUsecase_ListImages_FolderView(t *testing.T) {
-	folderID := uuid.New()
-	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
+func TestImageUsecase_ListImages_PassesFolderIDsTagIDsMIMETypesToRepository(t *testing.T) {
+	folderIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	tagIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	mimeTypes := []string{"image/jpeg", "image/png"}
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{FolderID: &folderID})
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{FolderIDs: folderIDs, TagIDs: tagIDs, MIMETypes: mimeTypes})
 
 	require.NoError(t, err)
-	assert.Len(t, result.Images, 2)
-	assert.Nil(t, result.NextCursor)
+	assert.Equal(t, folderIDs, repo.lastListFolderIDs)
+	assert.Equal(t, tagIDs, repo.lastListTagIDs)
+	assert.Equal(t, mimeTypes, repo.lastListMIMETypes)
 }
 
 func TestImageUsecase_ListImages_NextCursor(t *testing.T) {
@@ -295,6 +321,44 @@ func TestImageUsecase_ListImages_SkipsBlankName(t *testing.T) {
 			assert.Nil(t, repo.lastListName)
 		})
 	}
+}
+
+// --- ListFolderImages ---
+
+func TestImageUsecase_ListFolderImages_FolderFoundAndOwned(t *testing.T) {
+	folderID := uuid.New()
+	imageID := uuid.New()
+	thumbnailPath := "users/kp_abc123/thumbnails/img.jpg"
+	position := "abc"
+	repo := &mockImageRepository{
+		listByFolderImages: []*domain.Image{
+			{ID: imageID, ThumbnailPath: &thumbnailPath, ImageFolders: []domain.ImageFolder{{FolderID: folderID, Position: position}}},
+		},
+	}
+	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, store, folderRepo)
+
+	items, err := uc.ListFolderImages(context.Background(), "kp_abc123", folderID, nil, nil)
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.NotNil(t, items[0].FolderPosition)
+	assert.Equal(t, position, *items[0].FolderPosition)
+	require.NotNil(t, items[0].ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/thumb", *items[0].ThumbnailURL)
+}
+
+func TestImageUsecase_ListFolderImages_FolderNotFoundOrNotOwned(t *testing.T) {
+	folderID := uuid.New()
+	repo := &mockImageRepository{listByFolderImages: []*domain.Image{{ID: uuid.New()}}}
+	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
+
+	_, err := uc.ListFolderImages(context.Background(), "kp_abc123", folderID, nil, nil)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	assert.Equal(t, 0, repo.listByFolderCalls)
 }
 
 // --- GetImage ---
@@ -506,34 +570,34 @@ func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
 
 
 func TestImageUsecase_ListImages_PassesSortAndDirection(t *testing.T) {
-sortVal := "title"
-dirVal := "asc"
+	sortVal := "title"
+	dirVal := "asc"
 
-repo := &mockImageRepository{images: []*domain.Image{}}
-uc := newImageUsecase(repo, nil, &mockStorageService{})
+	repo := &mockImageRepository{images: []*domain.Image{}}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
-Sort:      &sortVal,
-Direction: &dirVal,
-})
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+		Sort:      &sortVal,
+		Direction: &dirVal,
+	})
 
-require.NoError(t, err)
-require.NotNil(t, repo.lastListSort)
-assert.Equal(t, "title", *repo.lastListSort)
-require.NotNil(t, repo.lastListDirection)
-assert.Equal(t, "asc", *repo.lastListDirection)
+	require.NoError(t, err)
+	require.NotNil(t, repo.lastListSort)
+	assert.Equal(t, "title", *repo.lastListSort)
+	require.NotNil(t, repo.lastListDirection)
+	assert.Equal(t, "asc", *repo.lastListDirection)
 }
 
 func TestImageUsecase_ListImages_PassesNilSortAndDirection(t *testing.T) {
-repo := &mockImageRepository{images: []*domain.Image{}}
-uc := newImageUsecase(repo, nil, &mockStorageService{})
+	repo := &mockImageRepository{images: []*domain.Image{}}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
-Sort:      nil,
-Direction: nil,
-})
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+		Sort:      nil,
+		Direction: nil,
+	})
 
-require.NoError(t, err)
-assert.Nil(t, repo.lastListSort)
-assert.Nil(t, repo.lastListDirection)
+	require.NoError(t, err)
+	assert.Nil(t, repo.lastListSort)
+	assert.Nil(t, repo.lastListDirection)
 }

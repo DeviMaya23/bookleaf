@@ -17,9 +17,10 @@ type ImageCursor struct {
 }
 
 type ListImagesParams struct {
-	FolderID  *uuid.UUID
 	Unfiled   bool
-	TagID     *uuid.UUID
+	FolderIDs []uuid.UUID
+	TagIDs    []uuid.UUID
+	MIMETypes []string
 	Name      *string
 	Sort      *string
 	Direction *string

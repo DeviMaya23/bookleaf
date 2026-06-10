@@ -16,6 +16,7 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/lib/images', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/images')>()),
   getImages: vi.fn(),
+  getFolderImages: vi.fn(),
   getAllImages: vi.fn(),
   getTrashedImages: vi.fn(),
   deleteImage: vi.fn(),
@@ -67,7 +68,7 @@ vi.mock('@/components/ui/dialog', async () => {
   }
 })
 
-import { getImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
+import { getImages, getFolderImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
 import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
@@ -332,23 +333,23 @@ describe('ImageGrid sort wiring', () => {
     vi.clearAllMocks()
   })
 
-  it('calls getImages with sort=title and the field default direction when Name is selected in a folder view', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+  it('calls getFolderImages with sort=title and direction when Name is selected in a folder view', async () => {
+    vi.mocked(getFolderImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
 
     renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'title', 'asc')
 
     await waitFor(() => {
-      expect(getImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined, 'title', 'asc')
+      expect(getFolderImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', 'title', 'asc')
     })
   })
 
-  it('calls getImages with no sort/direction params when Manual is selected in a folder view', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+  it('calls getFolderImages with no sort/direction params when Manual is selected in a folder view', async () => {
+    vi.mocked(getFolderImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
 
     renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'manual', undefined)
 
     await waitFor(() => {
-      expect(getImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined, undefined, undefined)
+      expect(getFolderImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined)
     })
   })
 
@@ -373,7 +374,7 @@ describe('ImageGrid drag gating with explicit sort', () => {
       makeImage({ id: '1', title: 'First', position: 'a0' }),
       makeImage({ id: '2', title: 'Second', position: 'a1' }),
     ]
-    vi.mocked(getImages).mockResolvedValue({ images, next_cursor: null })
+    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -415,7 +416,7 @@ describe('ImageGrid reorder rollback', () => {
       makeImage({ id: '1', title: 'First', position: 'a0' }),
       makeImage({ id: '2', title: 'Second', position: 'a1' }),
     ]
-    vi.mocked(getImages).mockResolvedValue({ images, next_cursor: null })
+    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
     vi.mocked(updateImagePosition).mockRejectedValue(new Error('API error'))
     const toastError = vi.spyOn(toast, 'error')
 

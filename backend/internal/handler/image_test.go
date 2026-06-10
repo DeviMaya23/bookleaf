@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -22,19 +24,34 @@ import (
 // --- mock ---
 
 type mockImageUsecase struct {
-	downloadURL          string
-	imageDetail          *usecase.ImageDetail
-	imageItem            *usecase.ImageItem
-	listImagesResult     *usecase.ListImagesResult
-	err                  error
-	moveImageFolderErr   error
-	lastUpdateParams     usecase.UpdateImageParams
-	lastListImagesParams usecase.ListImagesParams
-	lastMoveImageID      uuid.UUID
-	lastMoveUserID       string
-	lastMoveFromFolderID *uuid.UUID
-	lastMoveToFolderID   *uuid.UUID
-	moveImageFolderCalls int
+	downloadURL              string
+	imageDetail              *usecase.ImageDetail
+	imageItem                *usecase.ImageItem
+	listImagesResult         *usecase.ListImagesResult
+	listFolderImagesResult   []usecase.ImageItem
+	listFolderImagesErr      error
+	err                      error
+	moveImageFolderErr       error
+	lastUpdateParams         usecase.UpdateImageParams
+	lastListImagesParams     usecase.ListImagesParams
+	lastListFolderImagesID   uuid.UUID
+	lastListFolderSort       *string
+	lastListFolderDirection  *string
+	lastMoveImageID          uuid.UUID
+	lastMoveUserID           string
+	lastMoveFromFolderID     *uuid.UUID
+	lastMoveToFolderID       *uuid.UUID
+	moveImageFolderCalls     int
+}
+
+func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ string, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error) {
+	m.lastListFolderImagesID = folderID
+	m.lastListFolderSort = sort
+	m.lastListFolderDirection = direction
+	if m.listFolderImagesErr != nil {
+		return nil, m.listFolderImagesErr
+	}
+	return m.listFolderImagesResult, nil
 }
 
 func (m *mockImageUsecase) ListImages(_ context.Context, _ string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
@@ -207,26 +224,66 @@ func TestImageHandler_ListImages_UnfiledAbsent(t *testing.T) {
 	assert.False(t, uc.lastListImagesParams.Unfiled)
 }
 
-func TestImageHandler_ListImages_InvalidTagID(t *testing.T) {
-	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id=not-a-uuid", "")
+func TestImageHandler_ListImages_InvalidFolderIDsOrTagIDs(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "invalid folder_ids element", query: "/images?folder_ids=not-a-uuid"},
+		{name: "invalid tag_ids element among valid ones", query: "/images?tag_ids=" + uuid.New().String() + ",not-a-uuid"},
+	}
 
-	err := h.ListImages(c)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newEchoContext(t, http.MethodGet, tt.query, "")
 
-	assertHTTPError(t, err, http.StatusBadRequest)
+			err := h.ListImages(c)
+
+			assertHTTPError(t, err, http.StatusBadRequest)
+		})
+	}
 }
 
-func TestImageHandler_ListImages_ValidTagID(t *testing.T) {
-	tagID := uuid.New()
+func TestImageHandler_ListImages_ParsesAndForwardsMultiValueFilters(t *testing.T) {
+	folderA, folderB := uuid.New(), uuid.New()
+	tagA, tagB := uuid.New(), uuid.New()
 	uc := &mockImageUsecase{}
 	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodGet, "/images?tag_id="+tagID.String(), "")
+	query := fmt.Sprintf("/images?folder_ids=%s,%s&tag_ids=%s,%s&mime_types=image/jpeg,image/png",
+		folderA, folderB, tagA, tagB)
+	c, _ := newEchoContext(t, http.MethodGet, query, "")
 
 	err := h.ListImages(c)
 
 	require.NoError(t, err)
-	require.NotNil(t, uc.lastListImagesParams.TagID)
-	assert.Equal(t, tagID, *uc.lastListImagesParams.TagID)
+	assert.Equal(t, []uuid.UUID{folderA, folderB}, uc.lastListImagesParams.FolderIDs)
+	assert.Equal(t, []uuid.UUID{tagA, tagB}, uc.lastListImagesParams.TagIDs)
+	assert.Equal(t, []string{"image/jpeg", "image/png"}, uc.lastListImagesParams.MIMETypes)
+}
+
+func TestImageHandler_ListImages_IgnoresEmptySegmentsInMultiValueParams(t *testing.T) {
+	tagID := uuid.New()
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?tag_ids="+tagID.String()+",", "")
+
+	err := h.ListImages(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{tagID}, uc.lastListImagesParams.TagIDs)
+}
+
+func TestImageHandler_ListImages_IgnoresSingularFolderIDAndTagIDParams(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodGet, "/images?folder_id="+uuid.New().String()+"&tag_id="+uuid.New().String(), "")
+
+	err := h.ListImages(c)
+
+	require.NoError(t, err)
+	assert.Empty(t, uc.lastListImagesParams.FolderIDs)
+	assert.Empty(t, uc.lastListImagesParams.TagIDs)
 }
 
 func TestImageHandler_ListImages_ParsesAndForwardsName(t *testing.T) {
@@ -265,23 +322,96 @@ func TestImageHandler_ListImages_BlankNameTreatedAsAbsent(t *testing.T) {
 	}
 }
 
-func TestImageHandler_ListImages_FolderView_IgnoresCursor(t *testing.T) {
+
+// --- ListFolderImages ---
+
+func newFolderImagesContext(t *testing.T, query string, folderIDParam string) (echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	c, rec := newEchoContext(t, http.MethodGet, "/images/in-folder/"+folderIDParam+query, "")
+	c.SetPath("/images/in-folder/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderIDParam)
+	return c, rec
+}
+
+func TestImageHandler_ListFolderImages_SuccessOrderedByPosition(t *testing.T) {
 	folderID := uuid.New()
+	position := "abc"
 	uc := &mockImageUsecase{
-		listImagesResult: &usecase.ListImagesResult{
-			Images: []usecase.ImageItem{{Image: &domain.Image{ID: uuid.New(), Title: "img"}}},
+		listFolderImagesResult: []usecase.ImageItem{
+			{Image: &domain.Image{ID: uuid.New(), Title: "img"}, FolderPosition: &position},
 		},
 	}
 	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
-	c, rec := newEchoContext(t, http.MethodGet, "/images?folder_id="+folderID.String()+"&cursor=somevalue", "")
+	c, rec := newFolderImagesContext(t, "", folderID.String())
 
-	err := h.ListImages(c)
+	err := h.ListFolderImages(c)
 
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	var resp map[string]any
+	assert.Equal(t, folderID, uc.lastListFolderImagesID)
+
+	var resp []map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Nil(t, resp["next_cursor"])
+	require.Len(t, resp, 1)
+	assert.Equal(t, "abc", resp[0]["position"])
+}
+
+func TestImageHandler_ListFolderImages_ExplicitSortOverride(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockImageUsecase{listFolderImagesResult: []usecase.ImageItem{}}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newFolderImagesContext(t, "?sort=title&direction=asc", folderID.String())
+
+	err := h.ListFolderImages(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastListFolderSort)
+	assert.Equal(t, "title", *uc.lastListFolderSort)
+	require.NotNil(t, uc.lastListFolderDirection)
+	assert.Equal(t, "asc", *uc.lastListFolderDirection)
+}
+
+func TestImageHandler_ListFolderImages_InvalidFolderUUID(t *testing.T) {
+	h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newFolderImagesContext(t, "", "not-a-uuid")
+
+	err := h.ListFolderImages(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_ListFolderImages_NotFoundOrUnowned(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockImageUsecase{listFolderImagesErr: gorm.ErrRecordNotFound}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newFolderImagesContext(t, "", folderID.String())
+
+	err := h.ListFolderImages(c)
+
+	assertHTTPError(t, err, http.StatusNotFound)
+}
+
+func TestImageHandler_ListFolderImages_InvalidSortOrDirection(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "invalid sort", query: "?sort=file_size"},
+		{name: "invalid direction", query: "?sort=title&direction=descending"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			folderID := uuid.New()
+			h := NewImageHandler(&mockImageUsecase{}, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newFolderImagesContext(t, tt.query, folderID.String())
+
+			err := h.ListFolderImages(c)
+
+			assertHTTPError(t, err, http.StatusBadRequest)
+		})
+	}
 }
 
 // --- GetImage ---
