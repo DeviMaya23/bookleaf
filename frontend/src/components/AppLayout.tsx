@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import FolderSidebar from './FolderSidebar'
 import ImageGrid from './ImageGrid'
 import ImageViewer from './ImageViewer'
@@ -128,6 +129,8 @@ export default function AppLayout() {
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
   const [filterMimeTypes, setFilterMimeTypes] = useState<string[]>([])
   const [filterFolderIds, setFilterFolderIds] = useState<string[]>([])
+  const [filterTagSearch, setFilterTagSearch] = useState('')
+  const [filterFolderSearch, setFilterFolderSearch] = useState('')
 
   const folderId = view.type === 'folder' ? view.id : null
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
@@ -149,6 +152,8 @@ export default function AppLayout() {
     setFilterTagIds([])
     setFilterMimeTypes([])
     setFilterFolderIds([])
+    setFilterTagSearch('')
+    setFilterFolderSearch('')
   }, [viewKey])
 
   useEffect(() => {
@@ -177,6 +182,9 @@ export default function AppLayout() {
     queryFn: () => getTags(getToken),
     staleTime: 60_000,
   })
+
+  const filteredTags = tags.filter((tag) => tag.name.toLowerCase().includes(filterTagSearch.toLowerCase()))
+  const filteredFolders = folders.filter((folder) => folder.name.toLowerCase().includes(filterFolderSearch.toLowerCase()))
 
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] = [
     ...filterTagIds.map((id) => ({
@@ -400,55 +408,82 @@ export default function AppLayout() {
                               </span>
                             )}
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            {filterSections.includes('tags') && (
-                              <DropdownMenuGroup>
-                                <DropdownMenuLabel>Tags</DropdownMenuLabel>
-                                {tags.map((tag) => (
-                                  <DropdownMenuCheckboxItem
-                                    key={tag.id}
-                                    checked={filterTagIds.includes(tag.id)}
-                                    onCheckedChange={(checked) =>
-                                      setFilterTagIds((prev) => checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id))
-                                    }
-                                  >
-                                    {tag.name}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
-                              </DropdownMenuGroup>
-                            )}
+                          <DropdownMenuContent align="start" className="w-64">
                             {filterSections.includes('mimeTypes') && (
                               <DropdownMenuGroup>
-                                {filterSections.includes('tags') && <DropdownMenuSeparator />}
                                 <DropdownMenuLabel>File type</DropdownMenuLabel>
-                                {MIME_TYPE_FILTER_OPTIONS.map((opt) => (
-                                  <DropdownMenuCheckboxItem
-                                    key={opt.value}
-                                    checked={filterMimeTypes.includes(opt.value)}
-                                    onCheckedChange={(checked) =>
-                                      setFilterMimeTypes((prev) => checked ? [...prev, opt.value] : prev.filter((v) => v !== opt.value))
-                                    }
-                                  >
-                                    {opt.label}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
+                                <ToggleGroup
+                                  multiple
+                                  value={filterMimeTypes}
+                                  onValueChange={setFilterMimeTypes}
+                                  className="w-full flex-wrap gap-1.5 px-1.5 pb-1"
+                                >
+                                  {MIME_TYPE_FILTER_OPTIONS.map((opt) => (
+                                    <ToggleGroupItem
+                                      key={opt.value}
+                                      value={opt.value}
+                                      className="rounded-full border border-border px-3 text-xs aria-pressed:border-secondary aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+                                    >
+                                      {opt.label}
+                                    </ToggleGroupItem>
+                                  ))}
+                                </ToggleGroup>
+                              </DropdownMenuGroup>
+                            )}
+                            {filterSections.includes('tags') && (
+                              <DropdownMenuGroup>
+                                {filterSections.includes('mimeTypes') && <DropdownMenuSeparator />}
+                                <DropdownMenuLabel>Tags</DropdownMenuLabel>
+                                <div className="px-1.5 pb-1">
+                                  <input
+                                    value={filterTagSearch}
+                                    onChange={(e) => setFilterTagSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    placeholder="Search tags…"
+                                    className="w-full rounded-md border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                                  />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto">
+                                  {filteredTags.map((tag) => (
+                                    <DropdownMenuCheckboxItem
+                                      key={tag.id}
+                                      checked={filterTagIds.includes(tag.id)}
+                                      onCheckedChange={(checked) =>
+                                        setFilterTagIds((prev) => checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id))
+                                      }
+                                    >
+                                      {tag.name}
+                                    </DropdownMenuCheckboxItem>
+                                  ))}
+                                </div>
                               </DropdownMenuGroup>
                             )}
                             {filterSections.includes('folders') && (
                               <DropdownMenuGroup>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuLabel>Folder</DropdownMenuLabel>
-                                {folders.map((folder) => (
-                                  <DropdownMenuCheckboxItem
-                                    key={folder.id}
-                                    checked={filterFolderIds.includes(folder.id)}
-                                    onCheckedChange={(checked) =>
-                                      setFilterFolderIds((prev) => checked ? [...prev, folder.id] : prev.filter((id) => id !== folder.id))
-                                    }
-                                  >
-                                    {folder.name}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
+                                <div className="px-1.5 pb-1">
+                                  <input
+                                    value={filterFolderSearch}
+                                    onChange={(e) => setFilterFolderSearch(e.target.value)}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    placeholder="Search folders…"
+                                    className="w-full rounded-md border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                                  />
+                                </div>
+                                <div className="max-h-40 overflow-y-auto">
+                                  {filteredFolders.map((folder) => (
+                                    <DropdownMenuCheckboxItem
+                                      key={folder.id}
+                                      checked={filterFolderIds.includes(folder.id)}
+                                      onCheckedChange={(checked) =>
+                                        setFilterFolderIds((prev) => checked ? [...prev, folder.id] : prev.filter((id) => id !== folder.id))
+                                      }
+                                    >
+                                      {folder.name}
+                                    </DropdownMenuCheckboxItem>
+                                  ))}
+                                </div>
                               </DropdownMenuGroup>
                             )}
                           </DropdownMenuContent>

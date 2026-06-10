@@ -218,7 +218,7 @@ describe('AppLayout filter controls', () => {
     expect(screen.queryByRole('button', { name: /filters/i })).not.toBeInTheDocument()
   })
 
-  it('shows Tags, File type, and Folder sections in the All view', async () => {
+  it('shows File type, Tags, and Folder sections, in that order, in the All view', async () => {
     vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
     vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
 
@@ -228,7 +228,11 @@ describe('AppLayout filter controls', () => {
     expect(screen.getByText('Tags')).toBeInTheDocument()
     expect(screen.getByText('File type')).toBeInTheDocument()
     expect(screen.getByText('Folder')).toBeInTheDocument()
-    expect(screen.getByRole('menuitemcheckbox', { name: 'JPEG' })).toBeInTheDocument()
+    const filterPanel = screen.getAllByTestId('dropdown-content').find((el) => el.textContent?.includes('File type'))
+    const panelText = filterPanel?.textContent ?? ''
+    expect(panelText.indexOf('File type')).toBeLessThan(panelText.indexOf('Tags'))
+    expect(panelText.indexOf('Tags')).toBeLessThan(panelText.indexOf('Folder'))
+    expect(screen.getByRole('button', { name: 'JPEG' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument())
   })
 
@@ -272,7 +276,7 @@ describe('AppLayout filter controls', () => {
 
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Dogs' }))
-    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'JPEG' }))
+    await userEvent.click(screen.getByRole('button', { name: 'JPEG' }))
 
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
     expect(filtersButton.className).toMatch(/bg-primary/)
@@ -294,6 +298,78 @@ describe('AppLayout filter controls', () => {
     await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', ''))
     expect(screen.queryByRole('button', { name: 'Remove filter Cats' })).not.toBeInTheDocument()
     expect(screen.queryByText('Clear all')).not.toBeInTheDocument()
+  })
+
+  it('searching tags filters the tag list without affecting the folder list', async () => {
+    vi.mocked(getTags).mockResolvedValue([
+      { id: 'tag-1', name: 'Cats' },
+      { id: 'tag-2', name: 'Dogs' },
+    ])
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument())
+
+    await userEvent.type(screen.getByPlaceholderText('Search tags…'), 'Ca')
+
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Dogs' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument()
+  })
+
+  it('searching folders filters the folder list without affecting the tag list', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+    vi.mocked(getFolders).mockResolvedValue([
+      makeFolder('folder-1', 'Vacation'),
+      makeFolder('folder-2', 'Work'),
+    ])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument())
+
+    await userEvent.type(screen.getByPlaceholderText('Search folders…'), 'Vac')
+
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Work' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument()
+  })
+
+  it('hides all tags when the search matches none, even a checked tag, while keeping it active', async () => {
+    vi.mocked(getTags).mockResolvedValue([
+      { id: 'tag-1', name: 'Cats' },
+      { id: 'tag-2', name: 'Dogs' },
+    ])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', 'tag-1'))
+
+    await userEvent.type(screen.getByPlaceholderText('Search tags…'), 'zzz')
+
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Cats' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Dogs' })).not.toBeInTheDocument()
+    expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', 'tag-1')
+    expect(screen.getByRole('button', { name: 'Remove filter Cats' })).toBeInTheDocument()
+  })
+
+  it('typing in the tag search input does not close the filter panel', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+
+    const searchInput = screen.getByPlaceholderText('Search tags…')
+    await userEvent.type(searchInput, 'C')
+
+    expect(searchInput).toHaveValue('C')
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument()
   })
 
   it('removes a single filter via its chip and clears all via Clear all', async () => {
