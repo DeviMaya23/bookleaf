@@ -1,5 +1,5 @@
 ### Requirement: Two-panel application shell
-The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width.
+The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width, except while focus mode is active, in which case the left sidebar SHALL NOT be rendered and the main content area SHALL fill the full viewport width.
 
 #### Scenario: Layout renders on load
 - **WHEN** the application root is mounted
@@ -8,6 +8,11 @@ The system SHALL render a persistent two-panel layout consisting of a fixed left
 #### Scenario: Sidebar does not scroll with content
 - **WHEN** the main content area is scrolled
 - **THEN** the sidebar remains fixed in place and does not move
+
+#### Scenario: Sidebar is hidden while focus mode is active
+- **WHEN** focus mode is active
+- **THEN** the left sidebar is not rendered
+- **AND** the main content area fills the full viewport width
 
 ### Requirement: Folder list in sidebar
 The system SHALL fetch the folder list from `GET /folders` and display it in the sidebar as a nested tree below a "FOLDERS" section label. The sidebar SHALL show three pinned system entries above the section label: **All**, **Unsorted**, and **Trash** (de-emphasized). A horizontal divider and section label SHALL separate the system entries from the user folder tree. An icon button adjacent to the "FOLDERS" section label SHALL always be available to create a new folder. The full-width "+ New folder" affordance in the footer area SHALL be displayed only when the user's folder list is empty.
