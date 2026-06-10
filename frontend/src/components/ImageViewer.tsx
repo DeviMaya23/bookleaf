@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { ChevronLeft, FlipHorizontal, RotateCw } from 'lucide-react'
+import { ChevronLeft, FlipHorizontal, Focus, RotateCw } from 'lucide-react'
+import { Toggle } from '@/components/ui/toggle'
 import { getImage } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
 interface ImageViewerProps {
   image: Image
   onClose: () => void
+  focusMode: boolean
+  onToggleFocusMode: () => void
 }
 
-export default function ImageViewer({ image, onClose }: ImageViewerProps) {
+export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMode }: ImageViewerProps) {
   const { getToken } = useKindeAuth()
 
   const { data: imageDetail } = useQuery({
@@ -125,6 +128,15 @@ export default function ImageViewer({ image, onClose }: ImageViewerProps) {
   return (
     <div className="flex flex-col w-full h-full">
       <div className="flex items-center h-11 px-2 gap-2 flex-shrink-0 border-b">
+        <Toggle
+          aria-label="Focus mode"
+          aria-pressed={focusMode}
+          pressed={focusMode}
+          onPressedChange={() => onToggleFocusMode()}
+          className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+        >
+          <Focus className="w-3.5 h-3.5" />
+        </Toggle>
         <button onClick={onClose} aria-label="Back" className="p-1.5 rounded hover:bg-muted transition-colors">
           <ChevronLeft className="w-5 h-5" />
         </button>

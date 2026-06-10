@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, useLocation } from 'react-router-dom'
-import { Plus, UploadCloud, ChevronDown, Images, Search, ArrowUpDown, ArrowUp, ArrowDown, Filter, X } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images, Search, ArrowUpDown, ArrowUp, ArrowDown, Filter, Focus, X } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import FolderSidebar from './FolderSidebar'
 import ImageGrid from './ImageGrid'
@@ -115,6 +116,7 @@ export default function AppLayout() {
   const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([])
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
   const [folderPanelOpen, setFolderPanelOpen] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [isAutoUploading, setIsAutoUploading] = useState(false)
   const [activeDragImage, setActiveDragImage] = useState<{ id: string; thumbnailUrl: string | null } | null>(null)
@@ -329,12 +331,14 @@ export default function AppLayout() {
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex h-screen">
-        <FolderSidebar
-          view={view}
-          onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
-        />
+        {!focusMode && (
+          <FolderSidebar
+            view={view}
+            onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
+          />
+        )}
         <main
-          className="ml-[240px] flex-1 h-screen min-w-0 relative"
+          className={cn('flex-1 h-screen min-w-0 relative', focusMode ? 'ml-0' : 'ml-[240px]')}
           onDragOver={handleMainDragOver}
           onDragLeave={handleMainDragLeave}
           onDrop={handleMainDrop}
@@ -348,13 +352,27 @@ export default function AppLayout() {
             </div>
           )}
           {viewerImage !== null ? (
-            <ImageViewer image={viewerImage} onClose={() => setViewerImage(null)} />
+            <ImageViewer
+              image={viewerImage}
+              onClose={() => setViewerImage(null)}
+              focusMode={focusMode}
+              onToggleFocusMode={() => setFocusMode((v) => !v)}
+            />
           ) : (
             <ScrollArea className="h-full">
               <div className="p-6">
                 <div className="flex flex-col gap-2 mb-4">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
+                      <Toggle
+                        aria-label="Focus mode"
+                        aria-pressed={focusMode}
+                        pressed={focusMode}
+                        onPressedChange={setFocusMode}
+                        className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+                      >
+                        <Focus className="w-3.5 h-3.5" />
+                      </Toggle>
                       <div className="flex items-center gap-2 w-full max-w-xs">
                         <div className="relative flex-1">
                           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -561,14 +579,14 @@ export default function AppLayout() {
             </ScrollArea>
           )}
         </main>
-        {selectedImage ? (
+        {selectedImage && !focusMode ? (
           <RightPanel
             mode="image"
             image={selectedImage}
             onClose={() => { setSelectedImage(null); setAutoFocusTitle(false) }}
             autoFocusTitle={autoFocusTitle}
           />
-        ) : folderPanelOpen && activeFolder ? (
+        ) : folderPanelOpen && activeFolder && !focusMode ? (
           <RightPanel
             mode="folder"
             folder={activeFolder}

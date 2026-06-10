@@ -6,6 +6,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import AppLayout from './AppLayout'
 import { getFolders } from '@/lib/folders'
 import { getTags } from '@/lib/tags'
+import type { Image } from '@/lib/images'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -71,11 +72,17 @@ vi.mock('@/components/ui/scroll-area', async () => {
 })
 
 vi.mock('./FolderSidebar', () => ({
-  default: () => <div data-testid="folder-sidebar" />,
+  default: ({ onFolderSelect }: { onFolderSelect?: () => void }) => (
+    <div data-testid="folder-sidebar">
+      <button onClick={onFolderSelect}>Select folder</button>
+    </div>
+  ),
 }))
 
 vi.mock('./ImageViewer', () => ({
-  default: () => null,
+  default: ({ focusMode }: { focusMode: boolean }) => (
+    <div data-testid="image-viewer" data-focus-mode={String(focusMode)} />
+  ),
 }))
 
 vi.mock('./UploadModal', () => ({
@@ -87,11 +94,35 @@ vi.mock('./BatchUploadModal', () => ({
 }))
 
 vi.mock('./RightPanel', () => ({
-  default: () => null,
+  default: (props: { mode: 'image'; image: Image } | { mode: 'folder'; folder: { name: string } }) => (
+    <div data-testid="right-panel" data-mode={props.mode}>
+      {props.mode === 'image' ? props.image.title : props.folder.name}
+    </div>
+  ),
 }))
 
+function makeTestImage(overrides?: Partial<Image>): Image {
+  return {
+    id: 'img-1',
+    title: 'Sunset photo',
+    description: null,
+    mime_type: 'image/jpeg',
+    source_url: null,
+    folder_ids: [],
+    thumbnail_url: 'https://example.com/thumb.jpg',
+    width: 1920,
+    height: 1080,
+    file_size: null,
+    tags: [],
+    position: null,
+    created_at: '2026-05-01T00:00:00Z',
+    updated_at: '2026-05-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
 vi.mock('./ImageGrid', () => ({
-  default: ({ sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: { sortBy: string; sortDir: string | undefined; filterTagIds?: string[]; filterMimeTypes?: string[]; filterFolderIds?: string[] }) => (
+  default: ({ sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, onImageSelect, onImageDoubleClick }: { sortBy: string; sortDir: string | undefined; filterTagIds?: string[]; filterMimeTypes?: string[]; filterFolderIds?: string[]; onImageSelect: (img: Image) => void; onImageDoubleClick: (img: Image) => void }) => (
     <div
       data-testid="image-grid"
       data-sort-by={sortBy}
@@ -99,7 +130,10 @@ vi.mock('./ImageGrid', () => ({
       data-filter-tag-ids={(filterTagIds ?? []).join(',')}
       data-filter-mime-types={(filterMimeTypes ?? []).join(',')}
       data-filter-folder-ids={(filterFolderIds ?? []).join(',')}
-    />
+    >
+      <button onClick={() => onImageSelect(makeTestImage())}>Select image</button>
+      <button onDoubleClick={() => onImageDoubleClick(makeTestImage())}>Open image</button>
+    </div>
   ),
 }))
 
@@ -392,5 +426,81 @@ describe('AppLayout filter controls', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', ''))
     expect(screen.queryByText('Clear all')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppLayout focus mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+  })
+
+  function focusToggle() {
+    return screen.getByRole('button', { name: /focus mode/i })
+  }
+
+  it('enabling focus mode hides FolderSidebar and removes the ml-[240px] class from main', async () => {
+    renderApp('/')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    expect(screen.getByTestId('folder-sidebar')).toBeInTheDocument()
+    expect(document.querySelector('main')!.className).toMatch(/ml-\[240px\]/)
+
+    await userEvent.click(focusToggle())
+
+    expect(screen.queryByTestId('folder-sidebar')).not.toBeInTheDocument()
+    expect(document.querySelector('main')!.className).not.toMatch(/ml-\[240px\]/)
+  })
+
+  it('enabling focus mode hides an open RightPanel in image mode', async () => {
+    renderApp('/')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select image' }))
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
+
+    await userEvent.click(focusToggle())
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('enabling focus mode hides an open RightPanel in folder mode', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+    renderApp('/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+
+    await userEvent.click(focusToggle())
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('clicking an image card while focus mode is active updates selection without rendering RightPanel, revealed once focus mode is disabled', async () => {
+    renderApp('/')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(focusToggle())
+    expect(screen.queryByTestId('folder-sidebar')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select image' }))
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+
+    await userEvent.click(focusToggle())
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
+  })
+
+  it('double-clicking an image card while focus mode is active opens the viewer at full width with no RightPanel', async () => {
+    renderApp('/')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(focusToggle())
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Open image' }))
+
+    expect(screen.getByTestId('image-viewer')).toHaveAttribute('data-focus-mode', 'true')
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+    expect(document.querySelector('main')!.className).not.toMatch(/ml-\[240px\]/)
   })
 })

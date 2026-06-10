@@ -35,13 +35,13 @@ function makeImage(overrides?: Partial<Image>): Image {
   }
 }
 
-function renderViewer(image: Image, onClose = vi.fn()) {
+function renderViewer(image: Image, onClose = vi.fn(), focusMode = false, onToggleFocusMode = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <ImageViewer image={image} onClose={onClose} />
+      <ImageViewer image={image} onClose={onClose} focusMode={focusMode} onToggleFocusMode={onToggleFocusMode} />
     </QueryClientProvider>,
   )
 }
@@ -180,6 +180,34 @@ describe('ImageViewer — 1:1 button', () => {
     await userEvent.click(screen.getByRole('button', { name: /1:1/i }))
 
     expect(screen.getByText('100%')).toBeInTheDocument()
+  })
+})
+
+describe('ImageViewer — focus toggle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+  })
+
+  it('renders left of the Back button and reflects the focusMode prop', () => {
+    renderViewer(makeImage(), vi.fn(), true)
+
+    const buttons = screen.getAllByRole('button')
+    const focusIndex = buttons.findIndex((b) => b.getAttribute('aria-label') === 'Focus mode')
+    const backIndex = buttons.findIndex((b) => b.getAttribute('aria-label') === 'Back')
+
+    expect(focusIndex).toBeGreaterThanOrEqual(0)
+    expect(focusIndex).toBeLessThan(backIndex)
+    expect(buttons[focusIndex]).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('calls onToggleFocusMode when clicked', async () => {
+    const onToggleFocusMode = vi.fn()
+    renderViewer(makeImage(), vi.fn(), false, onToggleFocusMode)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Focus mode' }))
+
+    expect(onToggleFocusMode).toHaveBeenCalledOnce()
   })
 })
 
