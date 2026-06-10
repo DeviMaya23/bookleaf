@@ -359,8 +359,110 @@ describe('ImageGrid sort wiring', () => {
     renderImageGrid({ type: 'all' }, vi.fn(), 'created_at', 'asc')
 
     await waitFor(() => {
-      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', 'created_at', 'asc')
+      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', 'created_at', 'asc', [], [], [])
     })
+  })
+})
+
+function renderImageGridWithFilters(
+  view: AppView,
+  filters: { tagIds?: string[]; mimeTypes?: string[]; folderIds?: string[] },
+  searchTerm = '',
+) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <DndContext sensors={[]}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ImageGrid
+            view={view}
+            searchTerm={searchTerm}
+            debouncedSearchTerm=""
+            sortBy="manual"
+            sortDir={undefined}
+            filterTagIds={filters.tagIds ?? []}
+            filterMimeTypes={filters.mimeTypes ?? []}
+            filterFolderIds={filters.folderIds ?? []}
+            onImageSelect={vi.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </DndContext>,
+  )
+}
+
+describe('ImageGrid filter wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('passes selected tags and file types to getAllImages in the All view', async () => {
+    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGridWithFilters({ type: 'all' }, { tagIds: ['tag-1'], mimeTypes: ['image/jpeg'] })
+
+    await waitFor(() => {
+      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, ['tag-1'], ['image/jpeg'], [])
+    })
+  })
+
+  it('passes selected folders to getAllImages in the All view', async () => {
+    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGridWithFilters({ type: 'all' }, { folderIds: ['folder-1'] })
+
+    await waitFor(() => {
+      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, [], [], ['folder-1'])
+    })
+  })
+
+  it('never includes folder ids when calling getImages for the Unsorted view', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGridWithFilters({ type: 'unsorted' }, { tagIds: ['tag-1'], folderIds: ['folder-1'] })
+
+    await waitFor(() => {
+      expect(getImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, ['tag-1'], [])
+    })
+  })
+})
+
+describe('ImageGrid folder view client-side filtering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('filters images by tag client-side with no additional network request', async () => {
+    const images = [
+      makeImage({ id: '1', title: 'First', tags: [{ id: 'tag-1', name: 'Cats' }] }),
+      makeImage({ id: '2', title: 'Second', tags: [{ id: 'tag-2', name: 'Dogs' }] }),
+    ]
+    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
+
+    renderImageGridWithFilters({ type: 'folder', id: 'folder-1' }, { tagIds: ['tag-1'] })
+
+    await waitFor(() => {
+      expect(screen.getByText('First')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Second')).not.toBeInTheDocument()
+    expect(getFolderImages).toHaveBeenCalledTimes(1)
+  })
+
+  it('combines an active search term with a tag filter in folder view', async () => {
+    const images = [
+      makeImage({ id: '1', title: 'Cat photo', tags: [{ id: 'tag-1', name: 'Cats' }] }),
+      makeImage({ id: '2', title: 'Cat drawing', tags: [{ id: 'tag-2', name: 'Dogs' }] }),
+      makeImage({ id: '3', title: 'Dog photo', tags: [{ id: 'tag-1', name: 'Cats' }] }),
+    ]
+    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
+
+    renderImageGridWithFilters({ type: 'folder', id: 'folder-1' }, { tagIds: ['tag-1'] }, 'cat')
+
+    await waitFor(() => {
+      expect(screen.getByText('Cat photo')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Cat drawing')).not.toBeInTheDocument()
+    expect(screen.queryByText('Dog photo')).not.toBeInTheDocument()
   })
 })
 

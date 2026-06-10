@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import AppLayout from './AppLayout'
+import { getFolders } from '@/lib/folders'
+import { getTags } from '@/lib/tags'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -12,6 +14,11 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/lib/folders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/folders')>()),
   getFolders: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/lib/tags', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/tags')>()),
+  getTags: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/hooks/useVisionSuggestion', () => ({
@@ -29,6 +36,8 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
       React.createElement('button', { className, ...props }, children),
     DropdownMenuContent: ({ children }: { children: React.ReactNode }) =>
       React.createElement('div', { 'data-testid': 'dropdown-content' }, children),
+    DropdownMenuGroup: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
     DropdownMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) =>
       React.createElement('button', { role: 'menuitem', onClick }, children),
     DropdownMenuSeparator: () => React.createElement('hr'),
@@ -42,6 +51,14 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
         onClick: () => ctx.onValueChange?.(value),
       }, children)
     },
+    DropdownMenuLabel: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('div', null, children),
+    DropdownMenuCheckboxItem: ({ children, checked, onCheckedChange }: { children: React.ReactNode; checked?: boolean; onCheckedChange?: (checked: boolean) => void }) =>
+      React.createElement('button', {
+        role: 'menuitemcheckbox',
+        'aria-checked': !!checked,
+        onClick: () => onCheckedChange?.(!checked),
+      }, children),
   }
 })
 
@@ -74,8 +91,15 @@ vi.mock('./RightPanel', () => ({
 }))
 
 vi.mock('./ImageGrid', () => ({
-  default: ({ sortBy, sortDir }: { sortBy: string; sortDir: string | undefined }) => (
-    <div data-testid="image-grid" data-sort-by={sortBy} data-sort-dir={sortDir ?? ''} />
+  default: ({ sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: { sortBy: string; sortDir: string | undefined; filterTagIds?: string[]; filterMimeTypes?: string[]; filterFolderIds?: string[] }) => (
+    <div
+      data-testid="image-grid"
+      data-sort-by={sortBy}
+      data-sort-dir={sortDir ?? ''}
+      data-filter-tag-ids={(filterTagIds ?? []).join(',')}
+      data-filter-mime-types={(filterMimeTypes ?? []).join(',')}
+      data-filter-folder-ids={(filterFolderIds ?? []).join(',')}
+    />
   ),
 }))
 
@@ -173,5 +197,124 @@ describe('AppLayout sort control', () => {
     await waitFor(() => expect(imageGrid()).toHaveAttribute('data-sort-by', 'title'))
 
     expect(trigger.className).toMatch(/bg-primary/)
+  })
+})
+
+function makeFolder(id: string, name: string) {
+  return { id, name, description: null, parent_id: null, created_at: '', updated_at: '' }
+}
+
+describe('AppLayout filter controls', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+  })
+
+  it('hides the Filters button in Trash', async () => {
+    renderApp('/trash')
+
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /filters/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Tags, File type, and Folder sections in the All view', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    expect(screen.getByText('Tags')).toBeInTheDocument()
+    expect(screen.getByText('File type')).toBeInTheDocument()
+    expect(screen.getByText('Folder')).toBeInTheDocument()
+    expect(screen.getByRole('menuitemcheckbox', { name: 'JPEG' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Vacation' })).toBeInTheDocument())
+  })
+
+  it('shows only Tags and File type sections in the Unsorted view', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+
+    renderApp('/unsorted')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /filters/i })).toBeInTheDocument())
+    expect(screen.getByText('Tags')).toBeInTheDocument()
+    expect(screen.getByText('File type')).toBeInTheDocument()
+    expect(screen.queryByText('Folder')).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Vacation' })).not.toBeInTheDocument()
+  })
+
+  it('shows only Tags and File type sections in a folder view', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+
+    renderApp('/folders/folder-1')
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /filters/i })).toBeInTheDocument())
+    expect(screen.getByText('Tags')).toBeInTheDocument()
+    expect(screen.getByText('File type')).toBeInTheDocument()
+    expect(screen.queryByText('Folder')).not.toBeInTheDocument()
+  })
+
+  it('shows a badge with the total filter count and switches to the active variant', async () => {
+    vi.mocked(getTags).mockResolvedValue([
+      { id: 'tag-1', name: 'Cats' },
+      { id: 'tag-2', name: 'Dogs' },
+    ])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    const filtersButton = screen.getByRole('button', { name: /filters/i })
+    expect(filtersButton.className).not.toMatch(/bg-primary/)
+    expect(screen.queryByText('3')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Dogs' }))
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'JPEG' }))
+
+    await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
+    expect(filtersButton.className).toMatch(/bg-primary/)
+  })
+
+  it('clears active filters when switching views', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'Cats' }])
+
+    renderApp('/folders/folder-1')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
+
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', 'tag-1'))
+    expect(screen.getByRole('button', { name: 'Remove filter Cats' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('All'))
+
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', ''))
+    expect(screen.queryByRole('button', { name: 'Remove filter Cats' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Clear all')).not.toBeInTheDocument()
+  })
+
+  it('removes a single filter via its chip and clears all via Clear all', async () => {
+    vi.mocked(getTags).mockResolvedValue([
+      { id: 'tag-1', name: 'Cats' },
+      { id: 'tag-2', name: 'Dogs' },
+    ])
+
+    renderApp('/')
+
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'Cats' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Dogs' }))
+
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', 'tag-1,tag-2'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove filter Cats' }))
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', 'tag-2'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() => expect(imageGrid()).toHaveAttribute('data-filter-tag-ids', ''))
+    expect(screen.queryByText('Clear all')).not.toBeInTheDocument()
   })
 })
