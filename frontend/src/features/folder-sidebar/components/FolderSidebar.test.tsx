@@ -15,7 +15,7 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
   }),
 }))
 
-vi.mock('./ProfileMenu', () => ({
+vi.mock('@/features/auth/components/ProfileMenu', () => ({
   default: () => null,
 }))
 

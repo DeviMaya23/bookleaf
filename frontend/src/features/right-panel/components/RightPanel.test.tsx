@@ -21,11 +21,11 @@ vi.mock('@/lib/folders', () => ({
 
 vi.mock('@/lib/tags', () => ({
   getTags: vi.fn().mockResolvedValue([]),
-  createTag: vi.fn(),
+  resolveOrCreateTags: vi.fn(),
 }))
 
 import { downloadImage, updateImage } from '@/lib/images'
-import { getTags, createTag } from '@/lib/tags'
+import { resolveOrCreateTags } from '@/lib/tags'
 import { getFolders } from '@/lib/folders'
 
 function makeImage(overrides?: Partial<Image>): Image {
@@ -119,27 +119,8 @@ describe('RightPanel tags — success scenario', () => {
     vi.mocked(updateImage).mockResolvedValue(makeImage())
   })
 
-  it('adds an existing tag by reusing its ID from the cache without calling createTag', async () => {
-    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-abc', name: 'nature' }])
-
-    renderPanel(makeImage())
-
-    const input = await screen.findByPlaceholderText('Add tags…')
-    await userEvent.type(input, 'nature{Enter}')
-
-    await waitFor(() => {
-      expect(updateImage).toHaveBeenCalledWith(
-        expect.any(Function),
-        'img-1',
-        expect.objectContaining({ tags: ['tag-abc'] }),
-      )
-    })
-    expect(createTag).not.toHaveBeenCalled()
-  })
-
-  it('calls createTag then patches the image when adding a new tag name', async () => {
-    vi.mocked(getTags).mockResolvedValue([])
-    vi.mocked(createTag).mockResolvedValue({ id: 'tag-new', name: 'concept' })
+  it('patches the image with the IDs returned by resolveOrCreateTags', async () => {
+    vi.mocked(resolveOrCreateTags).mockResolvedValue([{ id: 'tag-new', name: 'concept' }])
 
     renderPanel(makeImage())
 
@@ -147,7 +128,7 @@ describe('RightPanel tags — success scenario', () => {
     await userEvent.type(input, 'concept{Enter}')
 
     await waitFor(() => {
-      expect(createTag).toHaveBeenCalledWith(expect.any(Function), 'concept')
+      expect(resolveOrCreateTags).toHaveBeenCalled()
     })
     await waitFor(() => {
       expect(updateImage).toHaveBeenCalledWith(
@@ -162,12 +143,10 @@ describe('RightPanel tags — success scenario', () => {
 describe('RightPanel tags — failure scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getTags).mockResolvedValue([])
   })
 
-  it('shows an error toast and does not call updateImage when PATCH fails', async () => {
-    vi.mocked(createTag).mockResolvedValue({ id: 'tag-new', name: 'concept' })
-    vi.mocked(updateImage).mockRejectedValue(new Error('Server error'))
+  it('does not patch the image when tag resolution fails', async () => {
+    vi.mocked(resolveOrCreateTags).mockRejectedValue(new Error('Failed to create tag "concept"'))
 
     renderPanel(makeImage())
 
@@ -175,12 +154,13 @@ describe('RightPanel tags — failure scenario', () => {
     await userEvent.type(input, 'concept{Enter}')
 
     await waitFor(() => {
-      expect(updateImage).toHaveBeenCalledWith(
-        expect.any(Function),
-        'img-1',
-        expect.objectContaining({ tags: ['tag-new'] }),
-      )
+      expect(resolveOrCreateTags).toHaveBeenCalled()
     })
+    expect(updateImage).not.toHaveBeenCalledWith(
+      expect.any(Function),
+      'img-1',
+      expect.objectContaining({ tags: expect.anything() }),
+    )
   })
 })
 

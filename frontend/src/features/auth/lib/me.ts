@@ -1,4 +1,4 @@
-import { apiFetch } from './api'
+import { apiFetch } from '@/lib/api'
 
 export interface Me {
   id: string

@@ -1,10 +1,10 @@
-import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
-import { generateThumbnail, convertHeicToJpeg } from './thumbnail'
-import { isSafari } from './browser'
-import { updateFolder } from './folders'
-import { getFolderSubtreeIds } from './folders'
-import type { Folder } from './folders'
-import type { Image } from './images'
+import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from '@/lib/images'
+import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
+import { isSafari } from '@/lib/browser'
+import { updateFolder } from '@/lib/folders'
+import { getFolderSubtreeIds } from '@/lib/folders'
+import type { Folder } from '@/lib/folders'
+import type { Image } from '@/lib/images'
 
 type GetToken = () => Promise<string | undefined>
 

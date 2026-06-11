@@ -1,18 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { Loader2, ImageIcon, Download, ExternalLink, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { getImage, updateImage, downloadImage } from '@/lib/images'
-import { getFolders } from '@/lib/folders'
-import { getTags, createTag } from '@/lib/tags'
-import FolderInput from '@/components/FolderInput'
-import TagInput from '@/components/TagInput'
-import FolderPanelContent from '@/components/FolderPanelContent'
+import { updateImage, downloadImage } from '@/lib/images'
+import { resolveOrCreateTags } from '@/lib/tags'
 import type { Image } from '@/lib/images'
 import type { Tag } from '@/lib/tags'
 import type { Folder } from '@/lib/folders'
+import FolderInput from './FolderInput'
+import TagInput from './TagInput'
+import FolderPanelContent from './FolderPanelContent'
+import { useFieldAutosave } from '../hooks/useFieldAutosave'
+import { useImageDetailsData } from '../hooks/useImageDetailsData'
 
 function formatFileSize(bytes: number | null): string {
   if (bytes === null) return '—'
@@ -55,49 +56,17 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
-  const [title, setTitle] = useState(image.title)
-  const [description, setDescription] = useState(image.description ?? '')
-  const [sourceUrl, setSourceUrl] = useState(image.source_url ?? '')
-  const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
-  const [selectedFolders, setSelectedFolders] = useState<Folder[]>([])
+  const { imageDetail, allFolders, allTags, selectedFolders, setSelectedFolders } =
+    useImageDetailsData(image)
 
-  // Reset local state when a different image is selected
+  const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  // Reset local tags when a different image is selected
   useEffect(() => {
-    setTitle(image.title)
-    setDescription(image.description ?? '')
-    setSourceUrl(image.source_url ?? '')
     setTags(image.tags ?? [])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id])
-
-  const { data: imageDetail } = useQuery({
-    queryKey: ['image', image.id],
-    queryFn: () => getImage(getToken, image.id),
-    staleTime: 0,
-    refetchInterval: (query) => !query.state.data?.thumbnail_url ? 1000 : false,
-  })
-
-  const { data: allFolders } = useQuery({
-    queryKey: ['folders'],
-    queryFn: () => getFolders(getToken),
-    staleTime: 60_000,
-  })
-
-  const { data: allTags = [] } = useQuery({
-    queryKey: ['tags'],
-    queryFn: () => getTags(getToken),
-    staleTime: 60_000,
-  })
-
-  // Sync selectedFolders when image or allFolders data changes
-  useEffect(() => {
-    if (!allFolders) return
-    const resolved = image.folder_ids
-      .map((id) => allFolders.find((f) => f.id === id))
-      .filter((f): f is Folder => f !== undefined)
-    setSelectedFolders(resolved)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image.id, allFolders])
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateImage>[2]) =>
@@ -135,49 +104,36 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
     },
   })
 
+  const titleField = useFieldAutosave(
+    image.title,
+    (value) => saveMutation.mutate({ title: value }),
+    { isEmpty: (value) => value.trim() === '' },
+  )
+  const descriptionField = useFieldAutosave(
+    image.description ?? '',
+    (value) => saveMutation.mutate({ description: value || null }),
+  )
+  const sourceUrlField = useFieldAutosave(
+    image.source_url ?? '',
+    (value) => saveMutation.mutate({ source_url: value || null }),
+  )
+
   const handleFoldersChange = (incoming: Folder[]) => {
     setSelectedFolders(incoming)
     folderSaveMutation.mutate(incoming.map((f) => f.id))
   }
 
   const handleTagsChange = async (incoming: Tag[]) => {
-    // Resolve any tag that has no ID (newly typed by user)
-    const resolved: Tag[] = []
-    for (const t of incoming) {
-      if (t.id) {
-        resolved.push(t)
-        continue
-      }
-      const existing = allTags.find(
-        (a) => a.name.toLowerCase() === t.name.toLowerCase(),
-      )
-      if (existing) {
-        resolved.push(existing)
-      } else {
-        try {
-          const created = await createTag(getToken, t.name)
-          if (created === null) {
-            // 409: race — another tab created the same tag; re-fetch to get real ID
-            const fresh = await getTags(getToken)
-            queryClient.setQueryData<Tag[]>(['tags'], fresh)
-            const found = fresh.find((a) => a.name.toLowerCase() === t.name.toLowerCase())
-            if (found) { resolved.push(found); continue }
-            toast.error(`Failed to resolve tag "${t.name}"`)
-            return
-          }
-          queryClient.setQueryData<Tag[]>(['tags'], (prev = []) => [...prev, created])
-          resolved.push(created)
-        } catch {
-          toast.error(`Failed to create tag "${t.name}"`)
-          return
-        }
-      }
+    let resolved: Tag[]
+    try {
+      resolved = await resolveOrCreateTags(getToken, incoming, allTags, queryClient)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resolve tags')
+      return
     }
     setTags(resolved)
     tagSaveMutation.mutate(resolved.map((t) => t.id))
   }
-
-  const [isDownloading, setIsDownloading] = useState(false)
 
   const handleDownload = async () => {
     setIsDownloading(true)
@@ -203,43 +159,6 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
       titleInputRef.current?.focus()
     }
   }, [image.id, autoFocusTitle])
-
-  // Refs to track original values for change detection on blur
-  const origTitle = useRef(image.title)
-  const origDescription = useRef(image.description ?? '')
-  const origSourceUrl = useRef(image.source_url ?? '')
-
-  useEffect(() => {
-    origTitle.current = image.title
-    origDescription.current = image.description ?? ''
-    origSourceUrl.current = image.source_url ?? ''
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image.id])
-
-  const handleTitleBlur = () => {
-    if (title.trim() === '') {
-      setTitle(origTitle.current)
-      return
-    }
-    if (title !== origTitle.current) {
-      origTitle.current = title
-      saveMutation.mutate({ title })
-    }
-  }
-
-  const handleDescriptionBlur = () => {
-    if (description !== origDescription.current) {
-      origDescription.current = description
-      saveMutation.mutate({ description: description || null })
-    }
-  }
-
-  const handleSourceUrlBlur = () => {
-    if (sourceUrl !== origSourceUrl.current) {
-      origSourceUrl.current = sourceUrl
-      saveMutation.mutate({ source_url: sourceUrl || null })
-    }
-  }
 
   const thumbnailUrl = imageDetail?.thumbnail_url ?? image.thumbnail_url
 
@@ -275,9 +194,9 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
         <div className="px-4 pt-4 pb-3 border-b">
           <input
             ref={titleInputRef}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={handleTitleBlur}
+            value={titleField.value}
+            onChange={(e) => titleField.onChange(e.target.value)}
+            onBlur={titleField.onBlur}
             className="w-full text-base font-semibold bg-transparent border-b border-transparent focus:border-border focus:bg-muted/40 outline-none px-0 py-0.5 transition-colors"
           />
         </div>
@@ -286,9 +205,9 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
         <div className="px-4 py-3 border-b">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Notes</p>
           <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={handleDescriptionBlur}
+            value={descriptionField.value}
+            onChange={(e) => descriptionField.onChange(e.target.value)}
+            onBlur={descriptionField.onBlur}
             placeholder="Add a note…"
             rows={3}
             className="w-full resize-none text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-2 outline-none focus:border-border transition-colors"
@@ -300,19 +219,19 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Source</p>
           <div className="flex gap-2 items-center">
             <input
-              value={sourceUrl}
-              onChange={(e) => setSourceUrl(e.target.value)}
-              onBlur={handleSourceUrlBlur}
+              value={sourceUrlField.value}
+              onChange={(e) => sourceUrlField.onChange(e.target.value)}
+              onBlur={sourceUrlField.onBlur}
               placeholder="https://…"
               className="flex-1 text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-1.5 outline-none focus:border-border transition-colors min-w-0"
             />
             <a
-              href={sourceUrl || undefined}
+              href={sourceUrlField.value || undefined}
               target="_blank"
               rel="noreferrer"
-              onClick={(e) => !sourceUrl && e.preventDefault()}
+              onClick={(e) => !sourceUrlField.value && e.preventDefault()}
               className={`flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                sourceUrl
+                sourceUrlField.value
                   ? 'bg-foreground text-background border-foreground hover:opacity-80'
                   : 'bg-muted text-muted-foreground border-border cursor-default'
               }`}
