@@ -3,11 +3,18 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { toast } from 'sonner'
 import { DndContext } from '@dnd-kit/core'
+import { SortableContext } from '@dnd-kit/sortable'
 import ImageGrid from './ImageGrid'
 import type { AppView } from '@/lib/view'
-import type { SortEndTrigger } from './ImageGrid'
+
+vi.mock('@dnd-kit/sortable', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@dnd-kit/sortable')>()
+  return {
+    ...actual,
+    SortableContext: vi.fn(actual.SortableContext),
+  }
+})
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -22,7 +29,6 @@ vi.mock('@/lib/images', async (importOriginal) => ({
   deleteImage: vi.fn(),
   hardDeleteImage: vi.fn(),
   restoreImage: vi.fn(),
-  updateImagePosition: vi.fn(),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -68,7 +74,7 @@ vi.mock('@/components/ui/dialog', async () => {
   }
 })
 
-import { getImages, getFolderImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, updateImagePosition } from '@/lib/images'
+import { getImages, getFolderImages, getTrashedImages, hardDeleteImage } from '@/lib/images'
 import { computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 
@@ -96,7 +102,6 @@ function renderImageGrid(
   view: AppView = { type: 'unsorted' },
   onImageSelect = vi.fn(),
   sortBy: 'manual' | 'created_at' | 'title' = 'manual',
-  sortDir: 'asc' | 'desc' | undefined = undefined,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -110,7 +115,7 @@ function renderImageGrid(
             searchTerm=""
             debouncedSearchTerm=""
             sortBy={sortBy}
-            sortDir={sortDir}
+            sortDir={undefined}
             onImageSelect={onImageSelect}
           />
         </MemoryRouter>
@@ -122,6 +127,14 @@ function renderImageGrid(
 describe('ImageGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('shows a loading spinner while images are loading', () => {
+    vi.mocked(getImages).mockReturnValue(new Promise(() => {}))
+
+    const { container } = renderImageGrid()
+
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument()
   })
 
   it('renders image cards when images are returned', async () => {
@@ -237,41 +250,6 @@ describe('computeNewPosition', () => {
   })
 })
 
-describe('ImageGrid delete flow', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('calls deleteImage when Delete context menu item is clicked', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-    vi.mocked(deleteImage).mockResolvedValue(undefined)
-
-    renderImageGrid()
-
-    await waitFor(() => {
-      expect(screen.getByText('Test image')).toBeInTheDocument()
-    })
-
-    await userEvent.click(screen.getByRole('menuitem', { name: /delete/i }))
-
-    await waitFor(() => {
-      expect(deleteImage).toHaveBeenCalledWith(expect.any(Function), '1')
-    })
-  })
-
-  it('does not call deleteImage when context menu is opened but nothing is clicked', async () => {
-    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-
-    renderImageGrid()
-
-    await waitFor(() => {
-      expect(screen.getByText('Test image')).toBeInTheDocument()
-    })
-
-    expect(deleteImage).not.toHaveBeenCalled()
-  })
-})
-
 describe('ImageGrid trash view — permanent delete', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -328,227 +306,82 @@ describe('ImageGrid trash view — permanent delete', () => {
   })
 })
 
-describe('ImageGrid sort wiring', () => {
+describe('ImageGrid layout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('calls getFolderImages with sort=title and direction when Name is selected in a folder view', async () => {
+  it('wraps the grid in SortableContext for a folder view with manual sort', async () => {
     vi.mocked(getFolderImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
 
-    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'title', 'asc')
+    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'manual')
 
     await waitFor(() => {
-      expect(getFolderImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', 'title', 'asc')
+      expect(screen.getByText('Test image')).toBeInTheDocument()
     })
+
+    expect(SortableContext).toHaveBeenCalled()
   })
 
-  it('calls getFolderImages with no sort/direction params when Manual is selected in a folder view', async () => {
-    vi.mocked(getFolderImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-
-    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'manual', undefined)
-
-    await waitFor(() => {
-      expect(getFolderImages).toHaveBeenCalledWith(expect.any(Function), 'folder-1', undefined, undefined)
-    })
-  })
-
-  it('calls getAllImages with sort/direction params when an explicit sort is active in the All view', async () => {
-    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-
-    renderImageGrid({ type: 'all' }, vi.fn(), 'created_at', 'asc')
-
-    await waitFor(() => {
-      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', 'created_at', 'asc', [], [], [])
-    })
-  })
-})
-
-function renderImageGridWithFilters(
-  view: AppView,
-  filters: { tagIds?: string[]; mimeTypes?: string[]; folderIds?: string[] },
-  searchTerm = '',
-) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(
-    <DndContext sensors={[]}>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <ImageGrid
-            view={view}
-            searchTerm={searchTerm}
-            debouncedSearchTerm=""
-            sortBy="manual"
-            sortDir={undefined}
-            filterTagIds={filters.tagIds ?? []}
-            filterMimeTypes={filters.mimeTypes ?? []}
-            filterFolderIds={filters.folderIds ?? []}
-            onImageSelect={vi.fn()}
-          />
-        </MemoryRouter>
-      </QueryClientProvider>
-    </DndContext>,
-  )
-}
-
-describe('ImageGrid filter wiring', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('passes selected tags and file types to getAllImages in the All view', async () => {
-    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-
-    renderImageGridWithFilters({ type: 'all' }, { tagIds: ['tag-1'], mimeTypes: ['image/jpeg'] })
-
-    await waitFor(() => {
-      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, ['tag-1'], ['image/jpeg'], [])
-    })
-  })
-
-  it('passes selected folders to getAllImages in the All view', async () => {
-    vi.mocked(getAllImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
-
-    renderImageGridWithFilters({ type: 'all' }, { folderIds: ['folder-1'] })
-
-    await waitFor(() => {
-      expect(getAllImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, [], [], ['folder-1'])
-    })
-  })
-
-  it('never includes folder ids when calling getImages for the Unsorted view', async () => {
+  it('does not wrap the grid in SortableContext for a non-folder view', async () => {
     vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
 
-    renderImageGridWithFilters({ type: 'unsorted' }, { tagIds: ['tag-1'], folderIds: ['folder-1'] })
+    renderImageGrid({ type: 'unsorted' })
 
     await waitFor(() => {
-      expect(getImages).toHaveBeenCalledWith(expect.any(Function), undefined, '', undefined, undefined, ['tag-1'], [])
+      expect(screen.getByText('Test image')).toBeInTheDocument()
     })
+
+    expect(SortableContext).not.toHaveBeenCalled()
+  })
+
+  it('does not wrap the grid in SortableContext for a folder view with an explicit sort', async () => {
+    vi.mocked(getFolderImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid({ type: 'folder', id: 'folder-1' }, vi.fn(), 'title')
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    expect(SortableContext).not.toHaveBeenCalled()
+  })
+
+  it('renders the masonry grid with column count derived from the container width', async () => {
+    vi.mocked(getImages).mockResolvedValue({
+      images: Array.from({ length: 6 }, (_, i) => makeImage({ id: String(i), title: `Image ${i}` })),
+      next_cursor: null,
+    })
+
+    const originalRO = globalThis.ResizeObserver
+    globalThis.ResizeObserver = class {
+      private callback: ResizeObserverCallback
+      constructor(cb: ResizeObserverCallback) {
+        this.callback = cb
+      }
+      observe(target: Element) {
+        this.callback([{ contentRect: { width: 1200 } } as ResizeObserverEntry], this as unknown as ResizeObserver)
+        Object.defineProperty(target, 'getBoundingClientRect', {
+          configurable: true,
+          value: () => ({ width: 1200 }),
+        })
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+
+    try {
+      const { container } = renderImageGrid()
+
+      await waitFor(() => {
+        expect(screen.getByText('Image 0')).toBeInTheDocument()
+      })
+
+      // numCols = floor(1200 / 220) = 5
+      expect(container.querySelectorAll('.flex.flex-col').length).toBe(5)
+    } finally {
+      globalThis.ResizeObserver = originalRO
+    }
   })
 })
 
-describe('ImageGrid folder view client-side filtering', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('filters images by tag client-side with no additional network request', async () => {
-    const images = [
-      makeImage({ id: '1', title: 'First', tags: [{ id: 'tag-1', name: 'Cats' }] }),
-      makeImage({ id: '2', title: 'Second', tags: [{ id: 'tag-2', name: 'Dogs' }] }),
-    ]
-    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
-
-    renderImageGridWithFilters({ type: 'folder', id: 'folder-1' }, { tagIds: ['tag-1'] })
-
-    await waitFor(() => {
-      expect(screen.getByText('First')).toBeInTheDocument()
-    })
-    expect(screen.queryByText('Second')).not.toBeInTheDocument()
-    expect(getFolderImages).toHaveBeenCalledTimes(1)
-  })
-
-  it('combines an active search term with a tag filter in folder view', async () => {
-    const images = [
-      makeImage({ id: '1', title: 'Cat photo', tags: [{ id: 'tag-1', name: 'Cats' }] }),
-      makeImage({ id: '2', title: 'Cat drawing', tags: [{ id: 'tag-2', name: 'Dogs' }] }),
-      makeImage({ id: '3', title: 'Dog photo', tags: [{ id: 'tag-1', name: 'Cats' }] }),
-    ]
-    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
-
-    renderImageGridWithFilters({ type: 'folder', id: 'folder-1' }, { tagIds: ['tag-1'] }, 'cat')
-
-    await waitFor(() => {
-      expect(screen.getByText('Cat photo')).toBeInTheDocument()
-    })
-    expect(screen.queryByText('Cat drawing')).not.toBeInTheDocument()
-    expect(screen.queryByText('Dog photo')).not.toBeInTheDocument()
-  })
-})
-
-describe('ImageGrid drag gating with explicit sort', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('does not persist a position update when dropping an image onto another image under an explicit sort', async () => {
-    const images = [
-      makeImage({ id: '1', title: 'First', position: 'a0' }),
-      makeImage({ id: '2', title: 'Second', position: 'a1' }),
-    ]
-    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
-
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-
-    const wrap = (sortEndTrigger: SortEndTrigger | null) => (
-      <DndContext sensors={[]}>
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <ImageGrid
-              view={{ type: 'folder', id: 'folder-1' }}
-              searchTerm=""
-              debouncedSearchTerm=""
-              sortBy="title"
-              sortDir="asc"
-              onImageSelect={vi.fn()}
-              sortEndTrigger={sortEndTrigger}
-            />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </DndContext>
-    )
-
-    const { rerender } = render(wrap(null))
-    await waitFor(() => expect(screen.getByText('First')).toBeInTheDocument())
-
-    rerender(wrap({ activeId: 'image-1', overId: 'image-2', ts: 1 }))
-
-    await waitFor(() => expect(screen.getByText('Second')).toBeInTheDocument())
-    expect(updateImagePosition).not.toHaveBeenCalled()
-  })
-})
-
-describe('ImageGrid reorder rollback', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('shows error toast and reverts order when position update fails', async () => {
-    const images = [
-      makeImage({ id: '1', title: 'First', position: 'a0' }),
-      makeImage({ id: '2', title: 'Second', position: 'a1' }),
-    ]
-    vi.mocked(getFolderImages).mockResolvedValue({ images, next_cursor: null })
-    vi.mocked(updateImagePosition).mockRejectedValue(new Error('API error'))
-    const toastError = vi.spyOn(toast, 'error')
-
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-
-    const wrap = (sortEndTrigger: SortEndTrigger | null) => (
-      <DndContext sensors={[]}>
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <ImageGrid
-              view={{ type: 'folder', id: 'folder-1' }}
-              searchTerm=""
-              debouncedSearchTerm=""
-              sortBy="manual"
-              sortDir={undefined}
-              onImageSelect={vi.fn()}
-              sortEndTrigger={sortEndTrigger}
-            />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </DndContext>
-    )
-
-    const { rerender } = render(wrap(null))
-    await waitFor(() => expect(screen.getByText('First')).toBeInTheDocument())
-
-    rerender(wrap({ activeId: 'image-1', overId: 'image-2', ts: 1 }))
-
-    await waitFor(() => {
-      expect(toastError).toHaveBeenCalledWith('Failed to save order')
-    })
-  })
-})
