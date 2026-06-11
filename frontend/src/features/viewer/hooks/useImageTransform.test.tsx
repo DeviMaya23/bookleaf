@@ -24,17 +24,17 @@ function makeImage(overrides?: Partial<Image>): Image {
 }
 
 function Harness({ image }: { image: Image }) {
-  const t = useImageTransform(image)
+  const { containerRef, transform, zoom, setZoom, dragging, dragHandlers, toggleFlip, rotate } = useImageTransform(image)
   return (
     <div>
-      <div ref={t.containerRef} data-testid="container" {...t.dragHandlers}>
-        <span data-testid="zoom">{t.zoom}</span>
-        <span data-testid="transform">{t.transform}</span>
-        <span data-testid="dragging">{String(t.dragging)}</span>
+      <div ref={containerRef} data-testid="container" {...dragHandlers}>
+        <span data-testid="zoom">{zoom}</span>
+        <span data-testid="transform">{transform}</span>
+        <span data-testid="dragging">{String(dragging)}</span>
       </div>
-      <button onClick={t.rotate}>rotate</button>
-      <button onClick={t.toggleFlip}>flip</button>
-      <button onClick={() => t.setZoom(2)}>setZoom</button>
+      <button onClick={rotate}>rotate</button>
+      <button onClick={toggleFlip}>flip</button>
+      <button onClick={() => setZoom(2)}>setZoom</button>
     </div>
   )
 }
