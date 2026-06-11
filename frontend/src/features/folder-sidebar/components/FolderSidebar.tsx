@@ -1,31 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useDndContext } from '@dnd-kit/core'
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { PlusIcon } from 'lucide-react'
 import { getFolders } from '@/lib/folders'
-import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 import FolderNameDialog from './FolderNameDialog'
+import DeleteFolderDialog from './DeleteFolderDialog'
 import FolderItem from './FolderItem'
 import UnsortedEntry from './UnsortedEntry'
+import TrashEntry from './TrashEntry'
 import RootDropZone from './RootDropZone'
 import ProfileMenu from '@/features/auth/components/ProfileMenu'
 import { buildFolderTree, filterFolderTree, type FolderNode } from '../lib/folderTree'
@@ -44,7 +31,6 @@ interface FolderSidebarProps {
 
 export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { active } = useDndContext()
 
@@ -63,16 +49,6 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
   const [folderFilter, setFolderFilter] = useState('')
   const [nameDialog, setNameDialog] = useState<NameDialogState>(null)
   const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
-  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false)
-
-  const emptyTrashMutation = useMutation({
-    mutationFn: () => emptyTrash(getToken),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
-      toast.success('Trash emptied')
-    },
-    onError: () => toast.error('Failed to empty trash'),
-  })
 
   function handleDelete() {
     if (!deleteTarget) return
@@ -131,30 +107,7 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
           activeDragType={activeDragType}
           onClick={() => navigate('/unsorted')}
         />
-        <div className="mt-[8px]">
-          <ContextMenu>
-            <ContextMenuTrigger>
-              <div
-                className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
-                  view.type === 'trash'
-                    ? 'bg-accent text-accent-foreground font-medium'
-                    : 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
-                }`}
-                onClick={() => navigate('/trash')}
-              >
-                Trash
-              </div>
-            </ContextMenuTrigger>
-            <ContextMenuContent>
-              <ContextMenuItem
-                onClick={() => setConfirmEmptyTrash(true)}
-                className="text-destructive focus:text-destructive"
-              >
-                Empty trash
-              </ContextMenuItem>
-            </ContextMenuContent>
-          </ContextMenu>
-        </div>
+        <TrashEntry active={view.type === 'trash'} onClick={() => navigate('/trash')} />
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />
@@ -218,53 +171,11 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
         onSubmit={handleNameDialogSubmit}
       />
 
-      {/* Delete confirmation */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete folder</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete{' '}
-            <span className="font-medium text-foreground">"{deleteTarget?.name}"</span>? This cannot
-            be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Empty trash confirmation */}
-      <Dialog open={confirmEmptyTrash} onOpenChange={setConfirmEmptyTrash}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Empty trash?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            All images in trash will be permanently deleted. This action cannot be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmEmptyTrash(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                emptyTrashMutation.mutate()
-                setConfirmEmptyTrash(false)
-              }}
-            >
-              Empty trash
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteFolderDialog
+        folder={deleteTarget}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
     </aside>
   )
 }
