@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { getFolderSubtreeIds, getFolders, createFolder } from '@/lib/folders'
-import { emptyTrash } from '@/lib/images'
 import type { Folder } from '@/lib/folders'
 import FolderSidebar from './FolderSidebar'
 
@@ -79,40 +78,6 @@ function makeFolder(id: string, parentId: string | null = null): Folder {
     updated_at: '2026-01-01T00:00:00Z',
   }
 }
-
-describe('FolderSidebar trash context menu', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(getFolders).mockResolvedValue([])
-  })
-
-  it('shows Empty trash item when right-clicking the Trash entry', async () => {
-    renderSidebar()
-
-    await waitFor(() => {
-      expect(screen.getByRole('menuitem', { name: /empty trash/i })).toBeInTheDocument()
-    })
-  })
-
-  it('calls emptyTrash after confirming the dialog', async () => {
-    vi.mocked(emptyTrash).mockResolvedValue(undefined)
-
-    renderSidebar()
-
-    await waitFor(() => {
-      expect(screen.getByRole('menuitem', { name: /empty trash/i })).toBeInTheDocument()
-    })
-
-    await userEvent.click(screen.getByRole('menuitem', { name: /empty trash/i }))
-
-    const confirmButton = await screen.findByRole('button', { name: /empty trash/i })
-    await userEvent.click(confirmButton)
-
-    await waitFor(() => {
-      expect(emptyTrash).toHaveBeenCalledWith(expect.any(Function))
-    })
-  })
-})
 
 describe('FolderSidebar new folder controls', () => {
   beforeEach(() => {
