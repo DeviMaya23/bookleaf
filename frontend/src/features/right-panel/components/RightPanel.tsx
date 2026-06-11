@@ -8,7 +8,6 @@ import { updateImage, downloadImage } from '@/lib/images'
 import { resolveOrCreateTags } from '@/lib/tags'
 import type { Image } from '@/lib/images'
 import type { Tag } from '@/lib/tags'
-import type { Folder } from '@/lib/folders'
 import FolderInput from './FolderInput'
 import TagInput from './TagInput'
 import FolderPanelContent from './FolderPanelContent'
@@ -56,7 +55,7 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
-  const { imageDetail, allFolders, allTags, selectedFolders, setSelectedFolders } =
+  const { imageDetail, allFolders, allTags, selectedFolders, setFolders, isFoldersSaving } =
     useImageDetailsData(image)
 
   const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
@@ -92,18 +91,6 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
     },
   })
 
-  const folderSaveMutation = useMutation({
-    mutationFn: (folderIds: string[]) =>
-      updateImage(getToken, image.id, { folder_ids: folderIds }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['images'] })
-      toast.success('Saved')
-    },
-    onError: () => {
-      toast.error('Failed to save folders')
-    },
-  })
-
   const titleField = useFieldAutosave(
     image.title,
     (value) => saveMutation.mutate({ title: value }),
@@ -117,11 +104,6 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
     image.source_url ?? '',
     (value) => saveMutation.mutate({ source_url: value || null }),
   )
-
-  const handleFoldersChange = (incoming: Folder[]) => {
-    setSelectedFolders(incoming)
-    folderSaveMutation.mutate(incoming.map((f) => f.id))
-  }
 
   const handleTagsChange = async (incoming: Tag[]) => {
     let resolved: Tag[]
@@ -246,8 +228,8 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Folders</p>
           <FolderInput
             folders={selectedFolders}
-            onChange={handleFoldersChange}
-            disabled={folderSaveMutation.isPending}
+            onChange={setFolders}
+            disabled={isFoldersSaving}
             suggestions={(allFolders ?? []).filter((f) => !selectedFolders.some((s) => s.id === f.id))}
           />
         </div>

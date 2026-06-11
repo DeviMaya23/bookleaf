@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { getImage } from '@/lib/images'
+import { toast } from 'sonner'
+import { getImage, updateImage } from '@/lib/images'
 import { getFolders } from '@/lib/folders'
 import { getTags } from '@/lib/tags'
 import type { Image } from '@/lib/images'
@@ -12,6 +13,7 @@ import type { Folder } from '@/lib/folders'
 // folder_ids as either the image or the folder list changes.
 export function useImageDetailsData(image: Image) {
   const { getToken } = useKindeAuth()
+  const queryClient = useQueryClient()
   const [selectedFolders, setSelectedFolders] = useState<Folder[]>([])
 
   const { data: imageDetail } = useQuery({
@@ -42,5 +44,29 @@ export function useImageDetailsData(image: Image) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id, allFolders])
 
-  return { imageDetail, allFolders, allTags, selectedFolders, setSelectedFolders }
+  const folderSaveMutation = useMutation({
+    mutationFn: (folderIds: string[]) =>
+      updateImage(getToken, image.id, { folder_ids: folderIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['images'] })
+      toast.success('Saved')
+    },
+    onError: () => {
+      toast.error('Failed to save folders')
+    },
+  })
+
+  const setFolders = (incoming: Folder[]) => {
+    setSelectedFolders(incoming)
+    folderSaveMutation.mutate(incoming.map((f) => f.id))
+  }
+
+  return {
+    imageDetail,
+    allFolders,
+    allTags,
+    selectedFolders,
+    setFolders,
+    isFoldersSaving: folderSaveMutation.isPending,
+  }
 }
