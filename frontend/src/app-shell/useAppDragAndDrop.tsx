@@ -16,20 +16,6 @@ import type { Folder } from '@/lib/folders'
 import type { SortEndTrigger } from '@/features/gallery/components/ImageGrid'
 import { handleImageDrop, handleFolderDrop } from './lib/dragHandlers'
 
-function ImageDragOverlayCard({ thumbnailUrl }: { thumbnailUrl: string | null }) {
-  return (
-    <div className="w-20 h-20 rounded-lg overflow-hidden bg-card shadow-xl ring-1 ring-black/10 opacity-95">
-      {thumbnailUrl ? (
-        <img src={thumbnailUrl} className="w-full h-full object-cover" alt="" />
-      ) : (
-        <div className="w-full h-full bg-muted flex items-center justify-center">
-          <UploadCloud className="w-6 h-6 text-muted-foreground" />
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Owns the cross-feature drag-and-drop orchestration: pointer sensors, the drag
 // overlay, and the start/end handlers that reorder images (via sortEndTrigger)
 // or move images/folders. File-drop-to-upload on the main area stays in the
@@ -97,7 +83,15 @@ export function useAppDragAndDrop(folders: Folder[]) {
   const dragOverlay = (
     <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
       {activeDragImage && (
-        <ImageDragOverlayCard thumbnailUrl={activeDragImage.thumbnailUrl} />
+        <div className="w-20 h-20 rounded-lg overflow-hidden bg-card shadow-xl ring-1 ring-black/10 opacity-95">
+          {activeDragImage.thumbnailUrl ? (
+            <img src={activeDragImage.thumbnailUrl} className="w-full h-full object-cover" alt="" />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <UploadCloud className="w-6 h-6 text-muted-foreground" />
+            </div>
+          )}
+        </div>
       )}
     </DragOverlay>
   )

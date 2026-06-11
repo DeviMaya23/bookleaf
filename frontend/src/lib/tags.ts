@@ -64,7 +64,7 @@ export async function resolveOrCreateTags(
       resolved.push(created)
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('Failed to resolve tag')) throw err
-      throw new Error(`Failed to create tag "${t.name}"`)
+      throw new Error(`Failed to create tag "${t.name}"`, { cause: err })
     }
   }
   return resolved
