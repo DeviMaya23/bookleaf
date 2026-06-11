@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateFolder } from '@/lib/folders'
+import { useFieldAutosave } from '../hooks/useFieldAutosave'
 
 interface FolderPanelContentProps {
   folder: { id: string; name: string; description: string | null }
@@ -13,19 +13,6 @@ interface FolderPanelContentProps {
 export default function FolderPanelContent({ folder, onClose }: FolderPanelContentProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
-
-  const [name, setName] = useState(folder.name)
-  const [description, setDescription] = useState(folder.description ?? '')
-
-  const origName = useRef(folder.name)
-  const origDescription = useRef(folder.description ?? '')
-
-  useEffect(() => {
-    setName(folder.name)
-    setDescription(folder.description ?? '')
-    origName.current = folder.name
-    origDescription.current = folder.description ?? ''
-  }, [folder.id, folder.name, folder.description])
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateFolder>[2]) =>
@@ -39,31 +26,23 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
     },
   })
 
-  const handleNameBlur = () => {
-    if (name.trim() === '') {
-      setName(origName.current)
-      return
-    }
-    if (name !== origName.current) {
-      origName.current = name
-      saveMutation.mutate({ name })
-    }
-  }
-
-  const handleDescriptionBlur = () => {
-    if (description !== origDescription.current) {
-      origDescription.current = description
-      saveMutation.mutate({ description: description || null })
-    }
-  }
+  const nameField = useFieldAutosave(
+    folder.name,
+    (value) => saveMutation.mutate({ name: value }),
+    { isEmpty: (value) => value.trim() === '' },
+  )
+  const descriptionField = useFieldAutosave(
+    folder.description ?? '',
+    (value) => saveMutation.mutate({ description: value || null }),
+  )
 
   return (
     <>
       <div className="relative flex-shrink-0 border-b px-4 pt-4 pb-3">
         <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={handleNameBlur}
+          value={nameField.value}
+          onChange={(e) => nameField.onChange(e.target.value)}
+          onBlur={nameField.onBlur}
           className="w-full text-base font-semibold bg-transparent border-b border-transparent focus:border-border focus:bg-muted/40 outline-none px-0 py-0.5 transition-colors"
         />
         <button
@@ -79,9 +58,9 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
         <div className="px-4 py-3 border-b">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Notes</p>
           <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onBlur={handleDescriptionBlur}
+            value={descriptionField.value}
+            onChange={(e) => descriptionField.onChange(e.target.value)}
+            onBlur={descriptionField.onBlur}
             placeholder="Add a note…"
             rows={3}
             className="w-full resize-none text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-2 outline-none focus:border-border transition-colors"

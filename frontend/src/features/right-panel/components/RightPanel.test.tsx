@@ -24,7 +24,7 @@ vi.mock('@/lib/tags', () => ({
   resolveOrCreateTags: vi.fn(),
 }))
 
-import { downloadImage, updateImage } from '@/lib/images'
+import { updateImage } from '@/lib/images'
 import { resolveOrCreateTags } from '@/lib/tags'
 import { getFolders } from '@/lib/folders'
 
@@ -65,51 +65,12 @@ describe('RightPanel — success scenario', () => {
     vi.mocked(updateImage).mockResolvedValue(makeImage())
   })
 
-  it('renders title, notes, source URL, details, and download button', () => {
+  it('renders title, notes, and source URL', () => {
     renderPanel(makeImage())
 
     expect(screen.getByDisplayValue('Sunset photo')).toBeInTheDocument()
     expect(screen.getByDisplayValue('A nice sunset')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://example.com')).toBeInTheDocument()
-    expect(screen.getByText('1920 × 1080')).toBeInTheDocument()
-    expect(screen.getByText('2.0 MB')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /download image/i })).toBeInTheDocument()
-  })
-
-  it('calls downloadImage when the download button is clicked', async () => {
-    vi.mocked(downloadImage).mockResolvedValue('https://r2.example.com/download?sig=abc')
-
-    renderPanel(makeImage())
-
-    await userEvent.click(screen.getByRole('button', { name: /download image/i }))
-
-    await waitFor(() => {
-      expect(downloadImage).toHaveBeenCalledWith(expect.any(Function), 'img-1')
-    })
-  })
-})
-
-describe('RightPanel — failure scenario', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('re-enables button and does not crash when downloadImage rejects', async () => {
-    vi.mocked(downloadImage).mockRejectedValue(new Error('Network error'))
-
-    renderPanel(makeImage())
-
-    const button = screen.getByRole('button', { name: /download image/i })
-    await userEvent.click(button)
-
-    await waitFor(() => {
-      expect(downloadImage).toHaveBeenCalledWith(expect.any(Function), 'img-1')
-    })
-
-    // Button returns to enabled state after error
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /download image/i })).not.toBeDisabled()
-    })
   })
 })
 
