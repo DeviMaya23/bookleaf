@@ -132,7 +132,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
   }, [])
 
   const { images, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useGalleryImages(view, searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds)
+    useGalleryImages({ view, searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds })
 
   const { orderedImages, dragOverId, removeImage, sortableItems } =
     useManualReorder(view, sortBy, isFolderView, images, sortEndTrigger)

@@ -12,7 +12,17 @@ export function sortParamsFor(sortBy: SortBy, sortDir: SortDir | undefined): { s
   return { sort: sortBy, direction: sortDir }
 }
 
-export function queryKeyFor(view: AppView, debouncedSearch: string, sortBy: SortBy, sortDir: SortDir | undefined, filterTagIds: string[], filterMimeTypes: string[], filterFolderIds: string[]): unknown[] {
+export interface GalleryQueryParams {
+  view: AppView
+  debouncedSearch: string
+  sortBy: SortBy
+  sortDir: SortDir | undefined
+  filterTagIds: string[]
+  filterMimeTypes: string[]
+  filterFolderIds: string[]
+}
+
+export function queryKeyFor({ view, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: GalleryQueryParams): unknown[] {
   const sortKey = sortBy === 'manual' ? undefined : [sortBy, sortDir]
   switch (view.type) {
     case 'all': return ['images', 'all', debouncedSearch, sortKey, filterTagIds, filterMimeTypes, filterFolderIds]
@@ -22,7 +32,7 @@ export function queryKeyFor(view: AppView, debouncedSearch: string, sortBy: Sort
   }
 }
 
-export function fetcherFor(view: AppView, getToken: () => Promise<string | undefined>, debouncedSearch: string, sortBy: SortBy, sortDir: SortDir | undefined, filterTagIds: string[], filterMimeTypes: string[], filterFolderIds: string[]) {
+export function fetcherFor({ view, getToken, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: GalleryQueryParams & { getToken: () => Promise<string | undefined> }) {
   const { sort, direction } = sortParamsFor(sortBy, sortDir)
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
@@ -34,22 +44,35 @@ export function fetcherFor(view: AppView, getToken: () => Promise<string | undef
   }
 }
 
-export function useGalleryImages(
-  view: AppView,
-  searchTerm: string,
-  debouncedSearchTerm: string,
-  sortBy: SortBy,
-  sortDir: SortDir | undefined,
-  filterTagIds: string[],
-  filterMimeTypes: string[],
-  filterFolderIds: string[],
-) {
+export interface UseGalleryImagesParams {
+  view: AppView
+  searchTerm: string
+  debouncedSearchTerm: string
+  sortBy: SortBy
+  sortDir: SortDir | undefined
+  filterTagIds: string[]
+  filterMimeTypes: string[]
+  filterFolderIds: string[]
+}
+
+export function useGalleryImages({
+  view,
+  searchTerm,
+  debouncedSearchTerm,
+  sortBy,
+  sortDir,
+  filterTagIds,
+  filterMimeTypes,
+  filterFolderIds,
+}: UseGalleryImagesParams) {
   const { getToken } = useKindeAuth()
   const isFolderView = view.type === 'folder'
 
+  const queryParams: GalleryQueryParams = { view, debouncedSearch: debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }
+
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: queryKeyFor(view, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds),
-    queryFn: fetcherFor(view, getToken, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds),
+    queryKey: queryKeyFor(queryParams),
+    queryFn: fetcherFor({ ...queryParams, getToken }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     placeholderData: keepPreviousData,

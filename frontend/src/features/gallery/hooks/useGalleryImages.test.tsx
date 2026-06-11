@@ -40,22 +40,22 @@ function makeImage(overrides?: Partial<Image>): Image {
 
 describe('queryKeyFor', () => {
   it('includes a sort key for an explicit sort in the All view', () => {
-    expect(queryKeyFor({ type: 'all' }, '', 'title', 'asc', EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER))
+    expect(queryKeyFor({ view: { type: 'all' }, debouncedSearch: '', sortBy: 'title', sortDir: 'asc', filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER }))
       .toEqual(['images', 'all', '', ['title', 'asc'], EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER])
   })
 
   it('omits the sort key when sortBy is manual', () => {
-    expect(queryKeyFor({ type: 'unsorted' }, '', 'manual', undefined, EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER))
+    expect(queryKeyFor({ view: { type: 'unsorted' }, debouncedSearch: '', sortBy: 'manual', sortDir: undefined, filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER }))
       .toEqual(['images', 'unsorted', '', undefined, EMPTY_FILTER, EMPTY_FILTER])
   })
 
   it('keys the trash view without filters', () => {
-    expect(queryKeyFor({ type: 'trash' }, 'foo', 'manual', undefined, EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER))
+    expect(queryKeyFor({ view: { type: 'trash' }, debouncedSearch: 'foo', sortBy: 'manual', sortDir: undefined, filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER }))
       .toEqual(['images', 'trash', 'foo', undefined])
   })
 
   it('keys the folder view by folder id and sort, without search/filters', () => {
-    expect(queryKeyFor({ type: 'folder', id: 'folder-1' }, 'foo', 'title', 'desc', ['tag-1'], EMPTY_FILTER, EMPTY_FILTER))
+    expect(queryKeyFor({ view: { type: 'folder', id: 'folder-1' }, debouncedSearch: 'foo', sortBy: 'title', sortDir: 'desc', filterTagIds: ['tag-1'], filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER }))
       .toEqual(['images', 'folder', 'folder-1', ['title', 'desc']])
   })
 })
@@ -70,7 +70,7 @@ describe('fetcherFor', () => {
   it('calls getAllImages with sort, direction, and filters for the All view', async () => {
     vi.mocked(getAllImages).mockResolvedValue({ images: [], next_cursor: null })
 
-    const fetcher = fetcherFor({ type: 'all' }, getToken, 'foo', 'created_at', 'asc', ['tag-1'], ['image/jpeg'], ['folder-1'])
+    const fetcher = fetcherFor({ view: { type: 'all' }, getToken, debouncedSearch: 'foo', sortBy: 'created_at', sortDir: 'asc', filterTagIds: ['tag-1'], filterMimeTypes: ['image/jpeg'], filterFolderIds: ['folder-1'] })
     await fetcher({ pageParam: undefined })
 
     expect(getAllImages).toHaveBeenCalledWith(getToken, undefined, 'foo', 'created_at', 'asc', ['tag-1'], ['image/jpeg'], ['folder-1'])
@@ -79,7 +79,7 @@ describe('fetcherFor', () => {
   it('calls getImages with no folder ids for the Unsorted view', async () => {
     vi.mocked(getImages).mockResolvedValue({ images: [], next_cursor: null })
 
-    const fetcher = fetcherFor({ type: 'unsorted' }, getToken, 'foo', 'manual', undefined, ['tag-1'], EMPTY_FILTER, ['folder-1'])
+    const fetcher = fetcherFor({ view: { type: 'unsorted' }, getToken, debouncedSearch: 'foo', sortBy: 'manual', sortDir: undefined, filterTagIds: ['tag-1'], filterMimeTypes: EMPTY_FILTER, filterFolderIds: ['folder-1'] })
     await fetcher({ pageParam: 'cursor-1' })
 
     expect(getImages).toHaveBeenCalledWith(getToken, 'cursor-1', 'foo', undefined, undefined, ['tag-1'], EMPTY_FILTER)
@@ -88,7 +88,7 @@ describe('fetcherFor', () => {
   it('calls getTrashedImages with only the search term for the Trash view', async () => {
     vi.mocked(getTrashedImages).mockResolvedValue({ images: [], next_cursor: null })
 
-    const fetcher = fetcherFor({ type: 'trash' }, getToken, 'foo', 'title', 'asc', EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER)
+    const fetcher = fetcherFor({ view: { type: 'trash' }, getToken, debouncedSearch: 'foo', sortBy: 'title', sortDir: 'asc', filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER })
     await fetcher({ pageParam: undefined })
 
     expect(getTrashedImages).toHaveBeenCalledWith(getToken, undefined, 'foo')
@@ -97,7 +97,7 @@ describe('fetcherFor', () => {
   it('calls getFolderImages with the folder id, sort, and direction for the Folder view', async () => {
     vi.mocked(getFolderImages).mockResolvedValue({ images: [], next_cursor: null })
 
-    const fetcher = fetcherFor({ type: 'folder', id: 'folder-1' }, getToken, '', 'title', 'desc', EMPTY_FILTER, EMPTY_FILTER, EMPTY_FILTER)
+    const fetcher = fetcherFor({ view: { type: 'folder', id: 'folder-1' }, getToken, debouncedSearch: '', sortBy: 'title', sortDir: 'desc', filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER })
     await fetcher({ pageParam: undefined })
 
     expect(getFolderImages).toHaveBeenCalledWith(getToken, 'folder-1', 'title', 'desc')
@@ -116,16 +116,16 @@ function renderUseGalleryImages(view: AppView, props?: Partial<{
   )
   return renderHook(
     ({ searchTerm }: { searchTerm: string }) =>
-      useGalleryImages(
+      useGalleryImages({
         view,
         searchTerm,
-        searchTerm,
-        'manual',
-        undefined,
-        props?.filterTagIds ?? EMPTY_FILTER,
-        props?.filterMimeTypes ?? EMPTY_FILTER,
-        props?.filterFolderIds ?? EMPTY_FILTER,
-      ),
+        debouncedSearchTerm: searchTerm,
+        sortBy: 'manual',
+        sortDir: undefined,
+        filterTagIds: props?.filterTagIds ?? EMPTY_FILTER,
+        filterMimeTypes: props?.filterMimeTypes ?? EMPTY_FILTER,
+        filterFolderIds: props?.filterFolderIds ?? EMPTY_FILTER,
+      }),
     { wrapper, initialProps: { searchTerm: props?.searchTerm ?? '' } },
   )
 }
