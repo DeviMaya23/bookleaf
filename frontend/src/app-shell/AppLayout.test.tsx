@@ -22,7 +22,7 @@ vi.mock('@/lib/tags', async (importOriginal) => ({
   getTags: vi.fn().mockResolvedValue([]),
 }))
 
-vi.mock('@/features/right-panel/hooks/useVisionSuggestion', () => ({
+vi.mock('./useVisionSuggestion', () => ({
   useVisionSuggestion: () => ({ checkVision: vi.fn() }),
 }))
 
