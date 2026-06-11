@@ -66,6 +66,64 @@ or introduces a new architectural pattern (see Decision Boundaries in CLAUDE.md)
 
 ---
 
+## Frontend Architecture
+
+### Directory Structure
+
+```
+frontend/src/
+  features/          ← feature-scoped code, one folder per UI area
+    <feature>/
+      components/    ← components owned by this feature
+      hooks/         ← hooks owned by this feature
+      lib/           ← pure/feature-local helpers (no other feature imports them)
+  app-shell/         ← the top-level layout (AppLayout) and cross-cutting
+                       orchestration (drag-and-drop, view routing)
+    lib/             ← shell-local helpers (e.g. dragHandlers)
+  lib/               ← shared domain layer: types + API wrappers used across
+                       multiple features (images, folders, tags, thumbnail,
+                       view, api, utils, browser, fracdex)
+  components/ui/     ← shared design-system primitives (shadcn/Base UI)
+  hooks/             ← generic hooks with no feature-specific dependencies
+  pages/             ← thin route entry points
+  assets/            ← static assets
+```
+
+Current features: `gallery`, `viewer`, `folder-sidebar`, `right-panel`,
+`upload`, `auth`.
+
+### Where new code goes
+
+**`features/<feature>/`** — default for anything specific to one UI area. New
+components, hooks, and helpers for that feature live here, not in top-level
+`components/`/`hooks/`/`lib/`.
+
+**`app-shell/`** — only the shell layout and logic that genuinely coordinates
+across features (drag-and-drop orchestration, view routing). Do not put
+feature work here.
+
+**`lib/`** — shared domain modules consumed by 4+ features. Keep these
+feature-agnostic; do not relocate a shared module into a single feature. A
+helper used by only one feature belongs in that feature's `lib/`, not here.
+
+**`components/ui/`, `hooks/`, `pages/`** — stay top-level: design-system
+primitives, dependency-free generic hooks, and thin route entry points
+respectively.
+
+### Naming
+
+Feature directories whose UI concern maps to a shared domain module use a
+distinct name (`folder-sidebar`/`right-panel`, **not** `folders`/`images`), so
+the feature directory and the `lib/` domain module stay separately greppable.
+
+### Promotion (YAGNI)
+
+A feature-local component/hook/helper is promoted to the shared layer
+(`components/`, `hooks/`, `lib/`) only once a second feature actually needs it.
+Do not pre-promote speculatively.
+
+---
+
 ## Backend Architecture
 
 ### Directory Structure

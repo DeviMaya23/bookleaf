@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import MasonryLayout from './MasonryLayout'
-import { computeMasonryLayout } from '@/lib/masonry'
+import { computeMasonryLayout } from '../lib/masonry'
 import type { Image } from '@/lib/images'
 
 function makeImage(id: string, width: number, height: number): Image {

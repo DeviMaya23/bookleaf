@@ -1,6 +1,6 @@
 import { ImageIcon } from 'lucide-react'
 import type { Image } from '@/lib/images'
-import { computeMasonryLayout, GAP } from '@/lib/masonry'
+import { computeMasonryLayout, GAP } from '../lib/masonry'
 
 interface MasonryLayoutProps {
   images: Image[]

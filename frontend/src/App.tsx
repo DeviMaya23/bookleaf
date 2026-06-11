@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import AuthGuard from './components/AuthGuard'
-import AppLayout from './components/AppLayout'
+import AuthGuard from '@/features/auth/components/AuthGuard'
+import AppLayout from '@/app-shell/AppLayout'
 import LoginPage from './pages/LoginPage'
 import CallbackPage from './pages/CallbackPage'
 

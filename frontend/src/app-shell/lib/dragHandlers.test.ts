@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
-vi.mock('./images', () => ({
+vi.mock('@/lib/images', () => ({
   moveImageFolder: vi.fn(),
   initiateUpload: vi.fn(),
   putToR2: vi.fn(),
@@ -8,12 +8,12 @@ vi.mock('./images', () => ({
   getImage: vi.fn(),
 }))
 
-vi.mock('./folders', () => ({
+vi.mock('@/lib/folders', () => ({
   getFolderSubtreeIds: vi.fn(),
   updateFolder: vi.fn(),
 }))
 
-vi.mock('./thumbnail', () => ({
+vi.mock('@/lib/thumbnail', () => ({
   generateThumbnail: vi.fn().mockResolvedValue({
     blob: new Blob(['thumb'], { type: 'image/jpeg' }),
     width: 1920,
@@ -22,16 +22,16 @@ vi.mock('./thumbnail', () => ({
   convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
 }))
 
-vi.mock('./browser', () => ({
+vi.mock('@/lib/browser', () => ({
   isSafari: vi.fn(),
 }))
 
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
-import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from './images'
-import { updateFolder, getFolderSubtreeIds } from './folders'
-import { generateThumbnail, convertHeicToJpeg } from './thumbnail'
-import { isSafari } from './browser'
-import type { Folder } from './folders'
+import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from '@/lib/images'
+import { updateFolder, getFolderSubtreeIds } from '@/lib/folders'
+import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
+import { isSafari } from '@/lib/browser'
+import type { Folder } from '@/lib/folders'
 
 const getToken = vi.fn().mockResolvedValue('token')
 

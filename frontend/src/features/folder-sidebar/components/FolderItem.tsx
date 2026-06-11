@@ -1,0 +1,126 @@
+import { useState } from 'react'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import { getFolderSubtreeIds } from '@/lib/folders'
+import type { Folder } from '@/lib/folders'
+import type { AppView } from '@/lib/view'
+import type { FolderNode } from '../lib/folderTree'
+
+interface FolderItemProps {
+  folder: FolderNode
+  depth: number
+  view: AppView
+  folders: Folder[]
+  activeDragType: string | null
+  activeDragFolderId: string | null
+  onSelect: (folder: FolderNode) => void
+  onRename: (folder: Folder) => void
+  onDelete: (folder: Folder) => void
+  onNewSubfolder: (folder: Folder) => void
+}
+
+export default function FolderItem({
+  folder, depth, view, folders,
+  activeDragType, activeDragFolderId,
+  onSelect, onRename, onDelete, onNewSubfolder,
+}: FolderItemProps) {
+  const [open, setOpen] = useState(depth === 0)
+  const hasChildren = folder.children.length > 0
+  const isActive = view.type === 'folder' && view.id === folder.id
+
+  const subtreeIds = activeDragFolderId
+    ? getFolderSubtreeIds(folders, activeDragFolderId)
+    : new Set<string>()
+  const isInvalidFolderTarget = activeDragType === 'folder' && subtreeIds.has(folder.id)
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `folder-drop-${folder.id}`,
+    disabled: isInvalidFolderTarget,
+    data: { type: 'folder', folderId: folder.id },
+  })
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `folder-drag-${folder.id}`,
+    data: { type: 'folder', folderId: folder.id, name: folder.name, parentId: folder.parent_id },
+  })
+
+  const isImageDropTarget = activeDragType === 'image' && isOver
+  const isFolderDropTarget = activeDragType === 'folder' && isOver && !isInvalidFolderTarget
+
+  const setRef = (el: HTMLDivElement | null) => {
+    setDropRef(el)
+    setDragRef(el)
+  }
+
+  return (
+    <div style={{ opacity: isDragging ? 0.4 : 1 }}>
+      <ContextMenu>
+        <ContextMenuTrigger>
+          <div
+            ref={setRef}
+            {...listeners}
+            {...attributes}
+            style={{ paddingLeft: 8 + depth * 14 }}
+            className={`flex items-center gap-1 pr-2 py-1 rounded-md cursor-pointer mb-0.5 text-sm select-none ${
+              isActive
+                ? 'bg-accent text-accent-foreground font-medium'
+                : isImageDropTarget || isFolderDropTarget
+                ? 'bg-accent text-accent-foreground ring-1 ring-primary/40'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            }`}
+            onClick={() => onSelect(folder)}
+          >
+            <span
+              onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}
+              className={`w-3.5 h-3.5 shrink-0 flex items-center justify-center text-muted-foreground/50 text-[9px] transition-transform ${
+                hasChildren ? '' : 'invisible'
+              } ${open ? 'rotate-90' : ''}`}
+            >
+              ▶
+            </span>
+            <span className="flex-1 truncate">{folder.name}</span>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onNewSubfolder(folder)}>
+            New subfolder
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onRename(folder)}>
+            Rename
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => onDelete(folder)}
+            className="text-destructive focus:text-destructive"
+          >
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+
+      {hasChildren && open && (
+        <div>
+          {folder.children.map((child) => (
+            <FolderItem
+              key={child.id}
+              folder={child}
+              depth={depth + 1}
+              view={view}
+              folders={folders}
+              activeDragType={activeDragType}
+              activeDragFolderId={activeDragFolderId}
+              onSelect={onSelect}
+              onRename={onRename}
+              onDelete={onDelete}
+              onNewSubfolder={onNewSubfolder}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { toast } from 'sonner'
-import { getMe } from '@/lib/me'
+import { getMe } from '@/features/auth/lib/me'
 import { getImage, acceptSuggestion } from '@/lib/images'
 
 export function useVisionSuggestion(): { checkVision: (imageId: string) => void } {

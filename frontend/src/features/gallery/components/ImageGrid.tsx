@@ -24,7 +24,7 @@ import { toast } from 'sonner'
 import { getImages, getFolderImages, getAllImages, getTrashedImages, deleteImage, hardDeleteImage, restoreImage, updateImagePosition, computeNewPosition } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import type { AppView } from '@/lib/view'
-import MasonryLayout, { MasonryCardContent } from '@/components/MasonryLayout'
+import MasonryLayout, { MasonryCardContent } from './MasonryLayout'
 
 
 export type LayoutMode = 'masonry'
