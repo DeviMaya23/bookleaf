@@ -34,11 +34,11 @@ function generateState(): string {
 }
 
 function buildAuthUrl(codeChallenge: string): string {
-  const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL as string;
-  const clientId = import.meta.env.VITE_KINDE_CLIENT_ID as string;
+  const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL;
+  const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
   const redirectUri = getRedirectUri();
 
-  const audience = import.meta.env.VITE_KINDE_AUDIENCE as string;
+  const audience = import.meta.env.VITE_KINDE_AUDIENCE;
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -69,8 +69,8 @@ async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
 ): Promise<{ auth: BookleafAuth; idToken: string | null }> {
-  const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL as string;
-  const clientId = import.meta.env.VITE_KINDE_CLIENT_ID as string;
+  const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL;
+  const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
   const redirectUri = getRedirectUri();
 
   const response = await fetch(`${issuerUrl}/oauth2/token`, {
