@@ -15,16 +15,20 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock('./lib/dragHandlers', () => ({
-  handleImageDrop: vi.fn(),
-  handleFolderDrop: vi.fn(),
-}))
+vi.mock('./lib/dragHandlers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lib/dragHandlers')>()
+  return {
+    ...actual,
+    handleImageDrop: vi.fn(),
+    handleFolderDrop: vi.fn(),
+  }
+})
 
 const folders: Folder[] = [
   { id: 'folder-1', name: 'Nature', description: null, parent_id: null, created_at: '', updated_at: '' },
 ]
 
-function dragEnd(active: { id: string; type: string; [k: string]: unknown }, over: { id: string; type: string } | null): DragEndEvent {
+function dragEnd(active: { id: string; type: string; [k: string]: unknown }, over: { id: string; type: string; [k: string]: unknown } | null): DragEndEvent {
   return {
     active: { id: active.id, data: { current: active } },
     over: over ? { id: over.id, data: { current: over } } : null,
@@ -50,7 +54,10 @@ describe('useAppDragAndDrop', () => {
     const { result } = renderDnd()
 
     await act(async () => {
-      await result.current.handleDragEnd(dragEnd({ id: 'a', type: 'image', imageId: 'a' }, { id: 'b', type: 'image' }))
+      await result.current.handleDragEnd(dragEnd(
+        { id: 'a', type: 'image', imageId: 'a', currentFolderId: null, thumbnailUrl: null },
+        { id: 'b', type: 'image', imageId: 'b', currentFolderId: null, thumbnailUrl: null },
+      ))
     })
 
     expect(result.current.sortEndTrigger).toEqual(
@@ -64,7 +71,10 @@ describe('useAppDragAndDrop', () => {
     const { result, invalidateSpy } = renderDnd()
 
     await act(async () => {
-      await result.current.handleDragEnd(dragEnd({ id: 'a', type: 'image', imageId: 'a' }, { id: 'folder-1', type: 'folder' }))
+      await result.current.handleDragEnd(dragEnd(
+        { id: 'a', type: 'image', imageId: 'a', currentFolderId: null, thumbnailUrl: null },
+        { id: 'folder-1', type: 'folder', folderId: 'folder-1' },
+      ))
     })
 
     expect(handleImageDrop).toHaveBeenCalled()
@@ -77,7 +87,10 @@ describe('useAppDragAndDrop', () => {
     const { result, invalidateSpy } = renderDnd()
 
     await act(async () => {
-      await result.current.handleDragEnd(dragEnd({ id: 'a', type: 'image', imageId: 'a' }, { id: 'folder-1', type: 'folder' }))
+      await result.current.handleDragEnd(dragEnd(
+        { id: 'a', type: 'image', imageId: 'a', currentFolderId: null, thumbnailUrl: null },
+        { id: 'folder-1', type: 'folder', folderId: 'folder-1' },
+      ))
     })
 
     expect(toast.error).toHaveBeenCalledWith('Failed to move image')
@@ -89,7 +102,10 @@ describe('useAppDragAndDrop', () => {
     const { result, invalidateSpy } = renderDnd()
 
     await act(async () => {
-      await result.current.handleDragEnd(dragEnd({ id: 'folder-2', type: 'folder' }, { id: 'folder-1', type: 'folder' }))
+      await result.current.handleDragEnd(dragEnd(
+        { id: 'folder-2', type: 'folder', folderId: 'folder-2', name: 'Folder 2', parentId: null },
+        { id: 'folder-1', type: 'folder', folderId: 'folder-1' },
+      ))
     })
 
     expect(handleFolderDrop).toHaveBeenCalledWith(expect.any(Function), expect.anything(), expect.anything(), folders)

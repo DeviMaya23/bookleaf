@@ -17,6 +17,7 @@ import RootDropZone from './RootDropZone'
 import ProfileMenu from '@/features/auth/components/ProfileMenu'
 import { buildFolderTree, filterFolderTree, type FolderNode } from '../lib/folderTree'
 import { useFolderMutations } from '../hooks/useFolderMutations'
+import { isImageDragData, isFolderDragData } from '@/app-shell/lib/dragHandlers'
 
 type NameDialogState =
   | { mode: 'create-root' }
@@ -34,10 +35,9 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
   const navigate = useNavigate()
   const { active } = useDndContext()
 
-  const activeDragType = (active?.data.current?.type as string) ?? null
-  const activeDragFolderId = activeDragType === 'folder'
-    ? (active?.data.current?.folderId as string)
-    : null
+  const dragData = active?.data.current
+  const activeDragType = isImageDragData(dragData) ? 'image' : isFolderDragData(dragData) ? 'folder' : null
+  const activeDragFolderId = isFolderDragData(dragData) ? dragData.folderId : null
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],

@@ -14,7 +14,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Folder } from '@/lib/folders'
 import type { SortEndTrigger } from '@/features/gallery/components/ImageGrid'
-import { handleImageDrop, handleFolderDrop } from './lib/dragHandlers'
+import { handleImageDrop, handleFolderDrop, isImageDragData, isFolderDragData, isDropData } from './lib/dragHandlers'
 
 // Owns the cross-feature drag-and-drop orchestration: pointer sensors, the drag
 // overlay, and the start/end handlers that reorder images (via sortEndTrigger)
@@ -34,8 +34,8 @@ export function useAppDragAndDrop(folders: Folder[]) {
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current
-    if (data?.type === 'image') {
-      setActiveDragImage({ id: data.imageId, thumbnailUrl: data.thumbnailUrl ?? null })
+    if (isImageDragData(data)) {
+      setActiveDragImage({ id: data.imageId, thumbnailUrl: data.thumbnailUrl })
     }
   }, [])
 
@@ -49,16 +49,16 @@ export function useAppDragAndDrop(folders: Folder[]) {
     if (!dragData) return
 
     // Image dropped on another image → reorder (handled inside ImageGrid via sortEndTrigger)
-    if (dragData.type === 'image' && dropData?.type === 'image') {
+    if (isImageDragData(dragData) && isImageDragData(dropData)) {
       setSortEndTrigger({ activeId: String(active.id), overId: String(over.id), ts: ++sortEndTriggerRef.current })
       return
     }
 
-    if (!dropData) return
+    if (!isDropData(dropData)) return
 
-    if (dragData.type === 'image') {
+    if (isImageDragData(dragData)) {
       try {
-        const result = await handleImageDrop(getToken, dragData as Parameters<typeof handleImageDrop>[1], dropData as Parameters<typeof handleImageDrop>[2])
+        const result = await handleImageDrop(getToken, dragData, dropData)
         if (result === 'moved') {
           queryClient.invalidateQueries({ queryKey: ['images'] })
           toast.success('Image moved')
@@ -67,9 +67,9 @@ export function useAppDragAndDrop(folders: Folder[]) {
         toast.error('Failed to move image')
         queryClient.invalidateQueries({ queryKey: ['images'] })
       }
-    } else if (dragData.type === 'folder') {
+    } else if (isFolderDragData(dragData)) {
       try {
-        const result = await handleFolderDrop(getToken, dragData as Parameters<typeof handleFolderDrop>[1], dropData as Parameters<typeof handleFolderDrop>[2], folders)
+        const result = await handleFolderDrop(getToken, dragData, dropData, folders)
         if (result === 'moved') {
           queryClient.invalidateQueries({ queryKey: ['folders'] })
           toast.success('Folder moved')
