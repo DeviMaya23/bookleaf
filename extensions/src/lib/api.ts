@@ -5,7 +5,7 @@ export async function apiFetch(
   options: RequestInit = {},
 ): Promise<Response> {
   const auth = await getAuth();
-  const baseUrl = import.meta.env.VITE_API_BASE_URL as string;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL;
 
   const headers = new Headers(options.headers);
   if (auth) {

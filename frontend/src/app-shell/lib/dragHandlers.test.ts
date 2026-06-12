@@ -42,7 +42,7 @@ describe('handleImageDrop', () => {
 
     const result = await handleImageDrop(
       getToken,
-      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a' },
+      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a', thumbnailUrl: null },
       { type: 'folder', folderId: 'folder-b' },
     )
 
@@ -53,7 +53,7 @@ describe('handleImageDrop', () => {
   it('returns noop when image is already in the target folder', async () => {
     const result = await handleImageDrop(
       getToken,
-      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a' },
+      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a', thumbnailUrl: null },
       { type: 'folder', folderId: 'folder-a' },
     )
 
@@ -66,7 +66,7 @@ describe('handleImageDrop', () => {
 
     const result = await handleImageDrop(
       getToken,
-      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a' },
+      { type: 'image', imageId: 'img-1', currentFolderId: 'folder-a', thumbnailUrl: null },
       { type: 'unsorted' },
     )
 
@@ -80,7 +80,7 @@ describe('handleImageDrop', () => {
     await expect(
       handleImageDrop(
         getToken,
-        { type: 'image', imageId: 'img-1', currentFolderId: null },
+        { type: 'image', imageId: 'img-1', currentFolderId: null, thumbnailUrl: null },
         { type: 'folder', folderId: 'folder-b' },
       ),
     ).rejects.toThrow('network error')

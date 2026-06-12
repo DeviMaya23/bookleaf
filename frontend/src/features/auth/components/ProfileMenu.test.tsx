@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import ProfileMenu from './ProfileMenu'
 
@@ -46,6 +47,17 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
   }
 })
 
+function renderProfileMenu() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ProfileMenu />
+    </QueryClientProvider>,
+  )
+}
+
 describe('ProfileMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -60,7 +72,7 @@ describe('ProfileMenu', () => {
       picture: 'https://example.com/avatar.jpg',
     })
 
-    render(<ProfileMenu />)
+    renderProfileMenu()
 
     await waitFor(() => {
       expect(screen.getByTestId('avatar-image')).toHaveAttribute('src', 'https://example.com/avatar.jpg')
@@ -77,7 +89,7 @@ describe('ProfileMenu', () => {
       picture: null,
     })
 
-    render(<ProfileMenu />)
+    renderProfileMenu()
 
     await waitFor(() => {
       expect(screen.getByText('JD')).toBeInTheDocument()
@@ -94,7 +106,7 @@ describe('ProfileMenu', () => {
       picture: null,
     })
 
-    render(<ProfileMenu />)
+    renderProfileMenu()
 
     await waitFor(() => screen.getByText('JD'))
 

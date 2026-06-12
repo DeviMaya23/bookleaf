@@ -7,13 +7,14 @@ import type { Image } from '@/lib/images'
 
 type GetToken = () => Promise<string | undefined>
 
-interface ImageDragData {
+export interface ImageDragData {
   type: 'image'
   imageId: string
   currentFolderId: string | null
+  thumbnailUrl: string | null
 }
 
-interface FolderDragData {
+export interface FolderDragData {
   type: 'folder'
   folderId: string
   name: string
@@ -33,7 +34,34 @@ interface RootDropData {
   type: 'root'
 }
 
-type DropData = FolderDropData | UnsortedDropData | RootDropData
+export type DropData = FolderDropData | UnsortedDropData | RootDropData
+
+export function isImageDragData(data: unknown): data is ImageDragData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>).type === 'image' &&
+    typeof (data as Record<string, unknown>).imageId === 'string'
+  )
+}
+
+export function isFolderDragData(data: unknown): data is FolderDragData {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>).type === 'folder' &&
+    typeof (data as Record<string, unknown>).folderId === 'string' &&
+    typeof (data as Record<string, unknown>).name === 'string'
+  )
+}
+
+export function isDropData(data: unknown): data is DropData {
+  if (typeof data !== 'object' || data === null) return false
+  const type = (data as Record<string, unknown>).type
+  if (type === 'unsorted' || type === 'root') return true
+  if (type === 'folder') return typeof (data as Record<string, unknown>).folderId === 'string'
+  return false
+}
 
 export async function handleImageDrop(
   getToken: GetToken,

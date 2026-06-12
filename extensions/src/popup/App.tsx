@@ -124,12 +124,12 @@ export default function App() {
   }
 
   function handleOpen() {
-    const appUrl = import.meta.env.VITE_APP_URL as string;
+    const appUrl = import.meta.env.VITE_APP_URL;
     browser.tabs.create({ url: appUrl });
   }
 
   function handleViewAll() {
-    const appUrl = import.meta.env.VITE_APP_URL as string;
+    const appUrl = import.meta.env.VITE_APP_URL;
     browser.tabs.create({ url: `${appUrl}/all` });
   }
 
