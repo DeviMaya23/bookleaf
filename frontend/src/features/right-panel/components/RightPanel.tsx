@@ -25,7 +25,7 @@ export default function RightPanel(props: RightPanelProps) {
       {props.mode === 'folder' ? (
         <FolderPanelContent key={props.folder.id} folder={props.folder} onClose={props.onClose} />
       ) : (
-        <ImagePanelBody image={props.image} onClose={props.onClose} autoFocusTitle={props.autoFocusTitle} />
+        <ImagePanelBody key={props.image.id} image={props.image} onClose={props.onClose} autoFocusTitle={props.autoFocusTitle} />
       )}
     </aside>
   )
@@ -45,12 +45,6 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
     useImageDetailsData(image)
 
   const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
-
-  // Reset local tags when a different image is selected
-  useEffect(() => {
-    setTags(image.tags ?? [])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image.id])
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateImage>[2]) =>

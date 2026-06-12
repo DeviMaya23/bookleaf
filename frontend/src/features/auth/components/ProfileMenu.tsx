@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import type { UserProfile } from '@kinde/js-utils'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -22,11 +22,12 @@ function getFullName(profile: UserProfile): string {
 
 export default function ProfileMenu() {
   const { getUserProfile, logout } = useKindeAuth()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
 
-  useEffect(() => {
-    getUserProfile().then(setProfile)
-  }, [getUserProfile])
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: () => getUserProfile(),
+    staleTime: Infinity,
+  })
 
   return (
     <DropdownMenu>
