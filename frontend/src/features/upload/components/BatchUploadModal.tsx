@@ -10,14 +10,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
-import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
-import { isSafari } from '@/lib/browser'
+import { validateImageFile, fileBaseName, uploadImageFile } from '@/lib/upload'
 
 const MAX_CONCURRENT = 3
 const MAX_FILES = 20
 const MAX_SIZE_BYTES = 50 * 1024 * 1024
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
 
 type FileStatus = 'PENDING' | 'UPLOADING' | 'SUCCESS' | 'FAILED_FINAL' | 'OVERSIZED' | 'UNSUPPORTED'
 
@@ -35,16 +32,12 @@ interface BatchUploadModalProps {
   initialFiles?: File[]
 }
 
-function fileBaseName(name: string): string {
-  return name.replace(/\.[^.]+$/, '')
-}
-
 function makeId(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`
 }
 
 function makeBatchFile(file: File): BatchFile {
-  const unsupported = !ACCEPTED_TYPES.includes(file.type) || (file.type === 'image/heic' && !isSafari())
+  const unsupported = validateImageFile(file) !== null
   const status: FileStatus = unsupported
     ? 'UNSUPPORTED'
     : file.size > MAX_SIZE_BYTES
@@ -134,25 +127,11 @@ export default function BatchUploadModal({
     inFlightRef.current++
     updateFile(batchFile.id, { status: 'UPLOADING' })
     try {
-      let uploadBlob: Blob | File = batchFile.file
-      let mimeType = batchFile.file.type
-      if (batchFile.file.type === 'image/heic') {
-        uploadBlob = await convertHeicToJpeg(batchFile.file)
-        mimeType = 'image/jpeg'
-      }
-
-      const initiated = await initiateUpload(getToken, {
+      await uploadImageFile(getToken, {
+        file: batchFile.file,
+        folderId,
         title: fileBaseName(batchFile.file.name),
-        mimeType,
-        folderId: folderId ?? undefined,
       })
-
-      const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
-      await Promise.all([
-        putToR2(initiated.upload_url, uploadBlob),
-        putToR2(initiated.thumbnail_upload_url, thumbnail),
-      ])
-      await completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
       if (!closedRef.current) {
         updateFile(batchFile.id, { status: 'SUCCESS' })
         queryClient.invalidateQueries({ queryKey: ['images'] })

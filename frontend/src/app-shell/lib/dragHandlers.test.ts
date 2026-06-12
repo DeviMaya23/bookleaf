@@ -2,9 +2,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 vi.mock('@/lib/images', () => ({
   moveImageFolder: vi.fn(),
-  initiateUpload: vi.fn(),
-  putToR2: vi.fn(),
-  completeUpload: vi.fn(),
   getImage: vi.fn(),
 }))
 
@@ -13,24 +10,15 @@ vi.mock('@/lib/folders', () => ({
   updateFolder: vi.fn(),
 }))
 
-vi.mock('@/lib/thumbnail', () => ({
-  generateThumbnail: vi.fn().mockResolvedValue({
-    blob: new Blob(['thumb'], { type: 'image/jpeg' }),
-    width: 1920,
-    height: 1080,
-  }),
-  convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
-}))
-
-vi.mock('@/lib/browser', () => ({
-  isSafari: vi.fn(),
+vi.mock('@/lib/upload', () => ({
+  validateImageFile: vi.fn(),
+  uploadImageFile: vi.fn(),
 }))
 
 import { handleImageDrop, handleFolderDrop, handleFileAutoUpload } from './dragHandlers'
-import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from '@/lib/images'
+import { moveImageFolder, getImage } from '@/lib/images'
 import { updateFolder, getFolderSubtreeIds } from '@/lib/folders'
-import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
-import { isSafari } from '@/lib/browser'
+import { validateImageFile, uploadImageFile } from '@/lib/upload'
 import type { Folder } from '@/lib/folders'
 
 const getToken = vi.fn().mockResolvedValue('token')
@@ -181,120 +169,31 @@ describe('handleFolderDrop', () => {
 })
 
 describe('handleFileAutoUpload', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(isSafari).mockReturnValue(false)
-  })
+  beforeEach(() => vi.clearAllMocks())
 
   function makeFile(name: string, type: string): File {
     return new File(['bytes'], name, { type })
   }
 
-  const defaultInitiateResult = {
-    id: 'upload-1',
-    upload_url: 'https://r2.example.com/upload',
-    thumbnail_upload_url: 'https://r2.example.com/thumb',
-    r2_path: 'path',
-  }
-
-  it('completes 4-step upload and returns full Image on success', async () => {
+  it('returns full ImageDetail via getImage on success', async () => {
     const imageData = { id: 'img-new', title: 'sunset', folder_ids: ['folder-1'] }
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null })
+    vi.mocked(validateImageFile).mockReturnValueOnce(null)
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null })
     vi.mocked(getImage).mockResolvedValueOnce(imageData as never)
 
     const file = makeFile('sunset.jpg', 'image/jpeg')
     const result = await handleFileAutoUpload(getToken, file, 'folder-1')
 
-    expect(initiateUpload).toHaveBeenCalledWith(getToken, { title: 'sunset', mimeType: 'image/jpeg', folderId: 'folder-1' })
-    expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', file)
-    expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
-    expect(completeUpload).toHaveBeenCalledWith(getToken, 'upload-1', { width: 1920, height: 1080, fileSize: file.size })
+    expect(uploadImageFile).toHaveBeenCalledWith(getToken, { file, folderId: 'folder-1' })
     expect(getImage).toHaveBeenCalledWith(getToken, 'img-new')
     expect(result).toBe(imageData)
   })
 
-  it('accepts webp files', async () => {
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
-    vi.mocked(getImage).mockResolvedValueOnce({} as never)
-
-    const file = makeFile('image.webp', 'image/webp')
-    await handleFileAutoUpload(getToken, file, null)
-
-    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/webp' }))
-  })
-
-  it('accepts avif files', async () => {
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
-    vi.mocked(getImage).mockResolvedValueOnce({} as never)
-
-    const file = makeFile('image.avif', 'image/avif')
-    await handleFileAutoUpload(getToken, file, null)
-
-    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/avif' }))
-  })
-
-  it('rejects heic on non-Safari', async () => {
-    vi.mocked(isSafari).mockReturnValue(false)
-    const file = makeFile('photo.heic', 'image/heic')
-
-    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('heic_safari_only')
-    expect(initiateUpload).not.toHaveBeenCalled()
-  })
-
-  it('accepts heic on Safari and converts to jpeg', async () => {
-    vi.mocked(isSafari).mockReturnValue(true)
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
-    vi.mocked(getImage).mockResolvedValueOnce({} as never)
-
-    const file = makeFile('photo.heic', 'image/heic')
-    await handleFileAutoUpload(getToken, file, null)
-
-    expect(convertHeicToJpeg).toHaveBeenCalledWith(file)
-    expect(initiateUpload).toHaveBeenCalledWith(getToken, expect.objectContaining({ mimeType: 'image/jpeg' }))
-  })
-
-  it('throws unsupported_type error for invalid file type', async () => {
+  it('rejects unsupported type without calling uploadImageFile', async () => {
+    vi.mocked(validateImageFile).mockReturnValueOnce('unsupported_type')
     const file = makeFile('doc.pdf', 'application/pdf')
 
     await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('unsupported_type')
-    expect(initiateUpload).not.toHaveBeenCalled()
-  })
-
-  it('throws when initiateUpload fails', async () => {
-    vi.mocked(initiateUpload).mockRejectedValueOnce(new Error('server error'))
-
-    const file = makeFile('photo.png', 'image/png')
-    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('server error')
-  })
-
-  it('generates thumbnail from upload blob', async () => {
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
-    vi.mocked(getImage).mockResolvedValueOnce({} as never)
-
-    const file = makeFile('photo.png', 'image/png')
-    await handleFileAutoUpload(getToken, file, null)
-
-    expect(generateThumbnail).toHaveBeenCalledWith(file)
-  })
-
-  it('aborts upload when thumbnail PUT fails — completeUpload is not called', async () => {
-    vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
-    vi.mocked(putToR2)
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error('thumbnail upload failed'))
-
-    const file = makeFile('photo.png', 'image/png')
-    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('thumbnail upload failed')
-    expect(completeUpload).not.toHaveBeenCalled()
+    expect(uploadImageFile).not.toHaveBeenCalled()
   })
 })

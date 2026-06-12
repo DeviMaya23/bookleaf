@@ -8,26 +8,16 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
 }))
 
-vi.mock('@/lib/images', () => ({
-  initiateUpload: vi.fn(),
-  putToR2: vi.fn(),
-  completeUpload: vi.fn(),
-}))
-
-vi.mock('@/lib/thumbnail', () => ({
-  generateThumbnail: vi.fn().mockResolvedValue({
-    blob: new Blob(['thumb'], { type: 'image/jpeg' }),
-    width: 1920,
-    height: 1080,
+vi.mock('@/lib/upload', () => ({
+  validateImageFile: vi.fn((file: File) => {
+    const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
+    return ACCEPTED_TYPES.includes(file.type) ? null : 'unsupported_type'
   }),
-  convertHeicToJpeg: vi.fn().mockResolvedValue(new Blob(['jpeg'], { type: 'image/jpeg' })),
+  fileBaseName: vi.fn((name: string) => name.replace(/\.[^.]+$/, '')),
+  uploadImageFile: vi.fn(),
 }))
 
-vi.mock('@/lib/browser', () => ({
-  isSafari: vi.fn().mockReturnValue(false),
-}))
-
-import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
+import { uploadImageFile } from '@/lib/upload'
 
 function renderModal(props: Partial<{ folderId: string | null; initialFiles: File[] }> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -56,11 +46,7 @@ describe('BatchUploadModal', () => {
   describe('upload flow', () => {
     it('uploads all files successfully and invalidates the image query per file', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload)
-        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
-        .mockResolvedValueOnce({ id: 'u2', upload_url: 'https://r2.example.com/2', thumbnail_upload_url: 'https://r2.example.com/thumb-2', r2_path: 'p2' })
-      vi.mocked(putToR2).mockResolvedValue(undefined)
-      vi.mocked(completeUpload)
+      vi.mocked(uploadImageFile)
         .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
         .mockResolvedValueOnce({ image_id: 'img-2', suggested_folder_name: 'Nature' })
 
@@ -71,32 +57,24 @@ describe('BatchUploadModal', () => {
       await user.click(screen.getByRole('button', { name: /upload 2 images/i }))
 
       await waitFor(() => {
-        expect(completeUpload).toHaveBeenCalledTimes(2)
+        expect(uploadImageFile).toHaveBeenCalledTimes(2)
       })
 
-      expect(initiateUpload).toHaveBeenCalledWith(
+      expect(uploadImageFile).toHaveBeenCalledWith(
         expect.any(Function),
-        expect.objectContaining({ title: 'a', mimeType: 'image/jpeg' }),
+        { file: file1, folderId: null, title: 'a' },
       )
-      // 2 files × 2 PUTs each (original + thumbnail)
-      expect(putToR2).toHaveBeenCalledTimes(4)
-      expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'u1', {
-        width: 1920,
-        height: 1080,
-        fileSize: file1.size,
-      })
-      expect(completeUpload).toHaveBeenCalledWith(expect.any(Function), 'u2', {
-        width: 1920,
-        height: 1080,
-        fileSize: file2.size,
-      })
+      expect(uploadImageFile).toHaveBeenCalledWith(
+        expect.any(Function),
+        { file: file2, folderId: null, title: 'b' },
+      )
       // folder suggestion from complete is ignored — modal stays open, no suggestion UI
       expect(screen.queryByText(/add to this folder/i)).not.toBeInTheDocument()
     })
 
     it('shows Retry button after a file fails twice', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload).mockRejectedValue(new Error('network error'))
+      vi.mocked(uploadImageFile).mockRejectedValue(new Error('network error'))
 
       renderModal({ initialFiles: [makeFile('c.jpg')] })
 
@@ -107,17 +85,15 @@ describe('BatchUploadModal', () => {
       })
 
       // Two attempts: initial + auto-retry
-      expect(initiateUpload).toHaveBeenCalledTimes(2)
+      expect(uploadImageFile).toHaveBeenCalledTimes(2)
     })
 
     it('re-queues and uploads after clicking manual Retry', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload)
+      vi.mocked(uploadImageFile)
         .mockRejectedValueOnce(new Error('fail'))
         .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValueOnce({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
-      vi.mocked(putToR2).mockResolvedValue(undefined)
-      vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
+        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
 
       renderModal({ initialFiles: [makeFile('d.jpg')] })
 
@@ -134,21 +110,19 @@ describe('BatchUploadModal', () => {
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
       })
-      expect(initiateUpload).toHaveBeenCalledTimes(3)
+      expect(uploadImageFile).toHaveBeenCalledTimes(3)
     })
 
     it('sends folder_id when a folder is active and omits it on non-folder routes', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
-      vi.mocked(putToR2).mockResolvedValue(undefined)
-      vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
 
       // With folder active
       renderModal({ folderId: 'folder-42', initialFiles: [makeFile('e.jpg')] })
       await user.click(screen.getByRole('button', { name: /upload 1 image/i }))
 
       await waitFor(() => {
-        expect(initiateUpload).toHaveBeenCalledWith(
+        expect(uploadImageFile).toHaveBeenCalledWith(
           expect.any(Function),
           expect.objectContaining({ folderId: 'folder-42' }),
         )
@@ -167,9 +141,7 @@ describe('BatchUploadModal', () => {
 
     it('marks oversized files as Too large and unsupported types as Unsupported type, uploading valid files', async () => {
       const user = userEvent.setup()
-      vi.mocked(initiateUpload).mockResolvedValue({ id: 'u1', upload_url: 'https://r2.example.com/1', thumbnail_upload_url: 'https://r2.example.com/thumb-1', r2_path: 'p1' })
-      vi.mocked(putToR2).mockResolvedValue(undefined)
-      vi.mocked(completeUpload).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
 
       const oversized = makeFile('big.jpg', 'image/jpeg', 51 * 1024 * 1024)
       const unsupported = makeFile('doc.pdf', 'application/pdf', 100)
@@ -185,10 +157,10 @@ describe('BatchUploadModal', () => {
       await user.click(uploadBtn)
 
       await waitFor(() => {
-        expect(initiateUpload).toHaveBeenCalledTimes(1)
-        expect(initiateUpload).toHaveBeenCalledWith(
+        expect(uploadImageFile).toHaveBeenCalledTimes(1)
+        expect(uploadImageFile).toHaveBeenCalledWith(
           expect.any(Function),
-          expect.objectContaining({ title: 'ok', mimeType: 'image/png' }),
+          expect.objectContaining({ file: valid, title: 'ok' }),
         )
       })
     })
