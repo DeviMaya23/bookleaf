@@ -11,23 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import {
-  initiateUpload,
-  putToR2,
-  completeUpload,
-} from '@/lib/images'
-import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
-import { isSafari } from '@/lib/browser'
-
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
-
-function fileBaseName(name: string): string {
-  return name.replace(/\.[^.]+$/, '')
-}
-
-function isValidType(file: File): boolean {
-  return ACCEPTED_TYPES.includes(file.type)
-}
+import { validateImageFile, fileBaseName, uploadImageFile } from '@/lib/upload'
 
 interface UploadModalProps {
   open: boolean
@@ -59,13 +43,14 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
   }
 
   function handleFile(selected: File) {
-    if (!isValidType(selected)) {
+    const err = validateImageFile(selected)
+    if (err === 'unsupported_type') {
       setTypeError('Unsupported file type.')
       setFile(null)
       revokePreview()
       return
     }
-    if (selected.type === 'image/heic' && !isSafari()) {
+    if (err === 'heic_safari_only') {
       setTypeError('HEIC uploads are only supported in Safari.')
       setFile(null)
       revokePreview()
@@ -114,29 +99,14 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
     mutationFn: async () => {
       if (!file) throw new Error('No file selected')
 
-      let uploadBlob: Blob | File = file
-      let mimeType = file.type
-      if (file.type === 'image/heic') {
-        uploadBlob = await convertHeicToJpeg(file)
-        mimeType = 'image/jpeg'
-      }
-
       const resolvedTitle = title.trim() !== '' ? title.trim() : fileBaseName(file.name)
-      const initiated = await initiateUpload(getToken, {
+      return uploadImageFile(getToken, {
+        file,
+        folderId,
         title: resolvedTitle,
-        mimeType,
-        folderId: folderId ?? undefined,
         description: notes.trim() || undefined,
         sourceUrl: sourceUrl.trim() || undefined,
       })
-
-      const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
-      await Promise.all([
-        putToR2(initiated.upload_url, uploadBlob),
-        putToR2(initiated.thumbnail_upload_url, thumbnail),
-      ])
-
-      return completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['images'] })

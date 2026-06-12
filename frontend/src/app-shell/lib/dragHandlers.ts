@@ -1,6 +1,5 @@
-import { moveImageFolder, initiateUpload, putToR2, completeUpload, getImage } from '@/lib/images'
-import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
-import { isSafari } from '@/lib/browser'
+import { moveImageFolder, getImage } from '@/lib/images'
+import { validateImageFile, uploadImageFile } from '@/lib/upload'
 import { updateFolder } from '@/lib/folders'
 import { getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
@@ -76,44 +75,16 @@ export async function handleFolderDrop(
   return 'noop'
 }
 
-const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
-
-function fileBaseName(name: string): string {
-  return name.replace(/\.[^.]+$/, '')
-}
-
 export async function handleFileAutoUpload(
   getToken: GetToken,
   file: File,
   folderId: string | null,
 ): Promise<Image> {
-  if (!ACCEPTED_TYPES.includes(file.type)) {
-    throw new Error('unsupported_type')
-  }
-  if (file.type === 'image/heic' && !isSafari()) {
-    throw new Error('heic_safari_only')
+  const err = validateImageFile(file)
+  if (err) {
+    throw new Error(err)
   }
 
-  let uploadBlob: Blob | File = file
-  let mimeType = file.type
-  if (file.type === 'image/heic') {
-    uploadBlob = await convertHeicToJpeg(file)
-    mimeType = 'image/jpeg'
-  }
-
-  const title = fileBaseName(file.name)
-  const initiated = await initiateUpload(getToken, {
-    title,
-    mimeType,
-    folderId: folderId ?? undefined,
-  })
-
-  const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
-  await Promise.all([
-    putToR2(initiated.upload_url, uploadBlob),
-    putToR2(initiated.thumbnail_upload_url, thumbnail),
-  ])
-
-  const result = await completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
+  const result = await uploadImageFile(getToken, { file, folderId })
   return getImage(getToken, result.image_id)
 }
