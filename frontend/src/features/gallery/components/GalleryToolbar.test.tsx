@@ -95,11 +95,11 @@ describe('GalleryToolbar sort control', () => {
     renderToolbar({ type: 'folder', id: 'folder-1' })
 
     const trigger = screen.getByRole('button', { name: /sort/i })
-    expect(trigger.className).not.toMatch(/bg-primary/)
+    expect(trigger.className).not.toMatch(/bg-secondary/)
 
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Name' }))
 
-    expect(trigger.className).toMatch(/bg-primary/)
+    expect(trigger.className).toMatch(/bg-secondary/)
   })
 })
 
@@ -135,7 +135,7 @@ describe('GalleryToolbar filter control', () => {
     renderToolbar({ type: 'all' }, { tags: [{ id: 'tag-1', name: 'Cats' }, { id: 'tag-2', name: 'Dogs' }] })
 
     const filtersButton = screen.getByRole('button', { name: /filters/i })
-    expect(filtersButton.className).not.toMatch(/bg-primary/)
+    expect(filtersButton.className).not.toMatch(/bg-secondary/)
     expect(screen.queryByText('3')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Cats' }))
@@ -143,7 +143,7 @@ describe('GalleryToolbar filter control', () => {
     await userEvent.click(screen.getByRole('button', { name: 'JPEG' }))
 
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
-    expect(filtersButton.className).toMatch(/bg-primary/)
+    expect(filtersButton.className).toMatch(/bg-secondary/)
   })
 
   it('searching tags filters the tag list without affecting the folder list', async () => {
