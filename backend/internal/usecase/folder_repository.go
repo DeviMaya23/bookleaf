@@ -15,4 +15,8 @@ type FolderRepository interface {
 	Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Folder, error)
 	CountImagesByFolder(ctx context.Context, id uuid.UUID, userID string) (int, error)
 	DeleteWithCascade(ctx context.Context, id uuid.UUID, userID string) error
+	// ClearAllParents sets parent_id to NULL on all of a user's folders.
+	ClearAllParents(ctx context.Context, userID string) error
+	// DeleteAllByUserID permanently deletes all of a user's folders.
+	DeleteAllByUserID(ctx context.Context, userID string) error
 }

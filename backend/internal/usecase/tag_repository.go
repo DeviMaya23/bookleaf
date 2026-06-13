@@ -14,4 +14,6 @@ type TagRepository interface {
 	Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error)
 	Delete(ctx context.Context, id uuid.UUID, userID string) error
 	ReplaceImageTags(ctx context.Context, imageID uuid.UUID, tagIDs []uuid.UUID) error
+	// DeleteAllByUserID permanently deletes all of a user's tags.
+	DeleteAllByUserID(ctx context.Context, userID string) error
 }

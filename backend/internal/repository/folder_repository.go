@@ -114,4 +114,23 @@ func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, 
 	})
 }
 
+func (r *folderRepository) ClearAllParents(ctx context.Context, userID string) error {
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Folder{}).
+		Where("user_id = ?", userID).
+		Update("parent_id", nil).Error; err != nil {
+		return fmt.Errorf("clear folder parents: %w", err)
+	}
+	return nil
+}
+
+func (r *folderRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&domain.Folder{}).Error; err != nil {
+		return fmt.Errorf("delete all folders by user: %w", err)
+	}
+	return nil
+}
+
 var _ usecase.FolderRepository = (*folderRepository)(nil)

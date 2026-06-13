@@ -112,6 +112,12 @@ func (m *mockImageRepository) MoveImageFolder(_ context.Context, imageID uuid.UU
 func (m *mockImageRepository) UpdateImageFolderPosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
 	return m.err
 }
+func (m *mockImageRepository) ListAllByUserID(_ context.Context, _ string) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+func (m *mockImageRepository) HardDeleteAllByUserID(_ context.Context, _ string) error {
+	return m.err
+}
 
 type mockStorageService struct {
 	putURL          string
@@ -201,6 +207,9 @@ func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUI
 	} else {
 		m.lastReplaceTagIDs = nil
 	}
+	return m.err
+}
+func (m *mockTagRepository) DeleteAllByUserID(_ context.Context, _ string) error {
 	return m.err
 }
 

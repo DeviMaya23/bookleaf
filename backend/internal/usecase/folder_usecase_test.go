@@ -43,6 +43,12 @@ func (s *stubFolderRepo) CountImagesByFolder(_ context.Context, _ uuid.UUID, _ s
 func (s *stubFolderRepo) DeleteWithCascade(_ context.Context, _ uuid.UUID, _ string) error {
 	return s.err
 }
+func (s *stubFolderRepo) ClearAllParents(_ context.Context, _ string) error {
+	return s.err
+}
+func (s *stubFolderRepo) DeleteAllByUserID(_ context.Context, _ string) error {
+	return s.err
+}
 
 type stubImageCounter struct {
 	count int64

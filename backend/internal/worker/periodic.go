@@ -52,3 +52,26 @@ func NewTrashPurgeWorker(uc trashUsecase) *TrashPurgeWorker {
 func (w *TrashPurgeWorker) Work(ctx context.Context, job *river.Job[TrashPurgeArgs]) error {
 	return w.usecase.PurgeExpiredTrash(ctx, 30*24*time.Hour)
 }
+
+// AccountKindeDeletionReconcile periodic job
+
+type accountKindeDeletionReconcileUsecase interface {
+	ReconcilePendingKindeDeletions(ctx context.Context) error
+}
+
+type AccountKindeDeletionReconcileArgs struct{}
+
+func (AccountKindeDeletionReconcileArgs) Kind() string { return "account_kinde_deletion_reconcile" }
+
+type AccountKindeDeletionReconcileWorker struct {
+	river.WorkerDefaults[AccountKindeDeletionReconcileArgs]
+	usecase accountKindeDeletionReconcileUsecase
+}
+
+func NewAccountKindeDeletionReconcileWorker(uc accountKindeDeletionReconcileUsecase) *AccountKindeDeletionReconcileWorker {
+	return &AccountKindeDeletionReconcileWorker{usecase: uc}
+}
+
+func (w *AccountKindeDeletionReconcileWorker) Work(ctx context.Context, _ *river.Job[AccountKindeDeletionReconcileArgs]) error {
+	return w.usecase.ReconcilePendingKindeDeletions(ctx)
+}

@@ -39,6 +39,33 @@ func (f *fakeUserRepo) GetOrCreate(_ context.Context, id string) (*domain.User, 
 	return user, nil
 }
 
+func (f *fakeUserRepo) MarkPendingKindeDeletion(_ context.Context, id string) error {
+	user, ok := f.users[id]
+	if !ok {
+		return errors.New("record not found")
+	}
+	user.PendingKindeDeletion = true
+	return nil
+}
+
+func (f *fakeUserRepo) HardDelete(_ context.Context, id string) error {
+	if _, ok := f.users[id]; !ok {
+		return errors.New("record not found")
+	}
+	delete(f.users, id)
+	return nil
+}
+
+func (f *fakeUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
+	var users []*domain.User
+	for _, u := range f.users {
+		if u.PendingKindeDeletion {
+			users = append(users, u)
+		}
+	}
+	return users, nil
+}
+
 func newTestUserUsecase(repo UserRepository) *userUsecase {
 	return NewUserUsecase(repo, observability.NewTelemetry(nil, nil, nil))
 }

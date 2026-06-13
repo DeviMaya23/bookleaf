@@ -113,9 +113,18 @@ func (m *authMiddleware) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 
-		_, err = m.userUsecase.GetOrProvision(c.Request().Context(), claims.Subject)
+		user, err := m.userUsecase.GetOrProvision(c.Request().Context(), claims.Subject)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to provision user")
+		}
+
+		if user.PendingKindeDeletion {
+			observability.LoggerFromContext(c.Request().Context(), m.logger).Warn(
+				"auth token rejected",
+				zap.String("event", "auth.token_rejected"),
+				zap.String("reason", "pending_kinde_deletion"),
+			)
+			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}
 
 		c.Set(string(AuthenticatedUserIDContextKey), claims.Subject)

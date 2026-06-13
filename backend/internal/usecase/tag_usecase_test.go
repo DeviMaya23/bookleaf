@@ -37,6 +37,9 @@ func (s *stubTagRepo) Delete(_ context.Context, _ uuid.UUID, _ string) error {
 func (s *stubTagRepo) ReplaceImageTags(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return s.err
 }
+func (s *stubTagRepo) DeleteAllByUserID(_ context.Context, _ string) error {
+	return s.err
+}
 
 func newTestTagUsecase(repo TagRepository) *tagUsecase {
 	return NewTagUsecase(repo, observability.NewTelemetry(nil, nil, nil))

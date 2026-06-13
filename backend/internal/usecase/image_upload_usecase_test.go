@@ -66,6 +66,12 @@ func (m *mockPendingUploadRepository) Transaction(_ context.Context, fn func(Pen
 	}
 	return fn(m, imageRepo)
 }
+func (m *mockPendingUploadRepository) ListAllByUserID(_ context.Context, _ string) ([]*domain.PendingUpload, error) {
+	return m.pendings, m.err
+}
+func (m *mockPendingUploadRepository) DeleteAllByUserID(_ context.Context, _ string) error {
+	return m.err
+}
 
 type stubUserRepo struct{ user *domain.User }
 
@@ -74,6 +80,15 @@ func (s *stubUserRepo) GetOrCreate(_ context.Context, _ string) (*domain.User, e
 }
 func (s *stubUserRepo) GetByID(_ context.Context, _ string) (*domain.User, error) {
 	return s.user, nil
+}
+func (s *stubUserRepo) MarkPendingKindeDeletion(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubUserRepo) HardDelete(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
+	return nil, nil
 }
 
 type stubImageFolderRepo struct {

@@ -61,4 +61,23 @@ func (r *pendingUploadRepository) Transaction(ctx context.Context, fn func(pendi
 	})
 }
 
+func (r *pendingUploadRepository) ListAllByUserID(ctx context.Context, userID string) ([]*domain.PendingUpload, error) {
+	var pending []*domain.PendingUpload
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Find(&pending).Error; err != nil {
+		return nil, fmt.Errorf("list all pending uploads by user: %w", err)
+	}
+	return pending, nil
+}
+
+func (r *pendingUploadRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&domain.PendingUpload{}).Error; err != nil {
+		return fmt.Errorf("delete all pending uploads by user: %w", err)
+	}
+	return nil
+}
+
 var _ usecase.PendingUploadRepository = (*pendingUploadRepository)(nil)

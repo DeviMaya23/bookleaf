@@ -426,4 +426,25 @@ func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID s
 	return nil
 }
 
+func (r *imageRepository) ListAllByUserID(ctx context.Context, userID string) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("user_id = ?", userID).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list all images by user: %w", err)
+	}
+	return images, nil
+}
+
+func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID string) error {
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("user_id = ?", userID).
+		Delete(&domain.Image{}).Error; err != nil {
+		return fmt.Errorf("hard delete all images by user: %w", err)
+	}
+	return nil
+}
+
 var _ usecase.ImageRepository = (*imageRepository)(nil)
