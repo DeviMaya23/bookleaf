@@ -14,15 +14,15 @@ function renderCallback(search = '') {
     <MemoryRouter initialEntries={[`/callback${search}`]}>
       <Routes>
         <Route path="/callback" element={<CallbackPage />} />
-        <Route path="/" element={<div>Home</div>} />
-        <Route path="/login" element={<div>Login page</div>} />
+        <Route path="/app" element={<div>App</div>} />
+        <Route path="/" element={<div>Landing page</div>} />
       </Routes>
     </MemoryRouter>,
   )
 }
 
 describe('CallbackPage', () => {
-  it('navigates to / after successful authentication', () => {
+  it('navigates to /app after successful authentication', () => {
     vi.mocked(useKindeAuth).mockReturnValue({
       isAuthenticated: true,
       isLoading: false,
@@ -30,10 +30,10 @@ describe('CallbackPage', () => {
 
     renderCallback()
 
-    expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.getByText('App')).toBeInTheDocument()
   })
 
-  it('redirects to /login with error message when Kinde returns an error', () => {
+  it('redirects to / with error message when Kinde returns an error', () => {
     vi.mocked(useKindeAuth).mockReturnValue({
       isAuthenticated: false,
       isLoading: false,
@@ -41,6 +41,6 @@ describe('CallbackPage', () => {
 
     renderCallback('?error=access_denied&error_description=User+denied+access')
 
-    expect(screen.getByText('Login page')).toBeInTheDocument()
+    expect(screen.getByText('Landing page')).toBeInTheDocument()
   })
 })

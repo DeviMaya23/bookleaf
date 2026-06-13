@@ -59,7 +59,7 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
   function handleFolderSelect(folder: FolderNode) {
     const isActive = view.type === 'folder' && view.id === folder.id
     if (!isActive) onFolderSelect?.()
-    navigate(`/folders/${folder.id}`)
+    navigate(`/app/folders/${folder.id}`)
   }
 
   function handleNameDialogSubmit(name: string) {
@@ -98,16 +98,16 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
               ? 'bg-accent text-accent-foreground font-medium'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           }`}
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app')}
         >
           All
         </div>
         <UnsortedEntry
           active={view.type === 'unsorted'}
           activeDragType={activeDragType}
-          onClick={() => navigate('/unsorted')}
+          onClick={() => navigate('/app/unsorted')}
         />
-        <TrashEntry active={view.type === 'trash'} onClick={() => navigate('/trash')} />
+        <TrashEntry active={view.type === 'trash'} onClick={() => navigate('/app/trash')} />
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />

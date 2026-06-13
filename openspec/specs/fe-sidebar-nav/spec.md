@@ -1,5 +1,5 @@
 ### Requirement: System folder navigation entries
-The sidebar SHALL display three pinned system entries at the top of the navigation: **All**, **Unsorted**, and **Trash**. All and Unsorted SHALL use the default text color. Trash SHALL use a muted/de-emphasized color. Selecting a system entry SHALL navigate to the corresponding route (`/`, `/unsorted`, `/trash`).
+The sidebar SHALL display three pinned system entries at the top of the navigation: **All**, **Unsorted**, and **Trash**. All and Unsorted SHALL use the default text color. Trash SHALL use a muted/de-emphasized color. Selecting a system entry SHALL navigate to the corresponding route (`/app`, `/app/unsorted`, `/app/trash`).
 
 #### Scenario: All three system entries are visible
 - **WHEN** the sidebar is rendered

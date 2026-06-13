@@ -9,7 +9,7 @@ export function useAppView(): AppView {
   const { pathname } = useLocation()
 
   if (folderId) return { type: 'folder', id: folderId }
-  if (pathname === '/unsorted') return { type: 'unsorted' }
-  if (pathname === '/trash') return { type: 'trash' }
+  if (pathname === '/app/unsorted') return { type: 'unsorted' }
+  if (pathname === '/app/trash') return { type: 'trash' }
   return { type: 'all' }
 }
