@@ -1,5 +1,5 @@
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import landingHero from '@/assets/landing-hero.png'
 
@@ -78,8 +78,10 @@ export default function LandingPage() {
         ))}
       </section>
 
-      <footer className="flex items-center justify-center border-t border-border px-8 py-4">
-        <span className="font-serif text-sm font-semibold">Bookleaf</span>
+      <footer className="flex items-center justify-center gap-4 border-t border-border px-8 py-4 text-sm text-muted-foreground">
+        <Link to="/about">About</Link>
+        <Link to="/privacy">Privacy</Link>
+        <Link to="/ai-notes">AI Notes</Link>
       </footer>
     </div>
   )

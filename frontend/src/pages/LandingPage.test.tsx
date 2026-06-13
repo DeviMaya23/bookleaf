@@ -33,10 +33,13 @@ describe('LandingPage', () => {
 
     renderLanding()
 
-    expect(screen.getAllByText('Bookleaf')).toHaveLength(2)
+    expect(screen.getByText('Bookleaf')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /get started/i })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /bookleaf app screenshot/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'About' })).toHaveAttribute('href', '/about')
+    expect(screen.getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
+    expect(screen.getByRole('link', { name: 'AI Notes' })).toHaveAttribute('href', '/ai-notes')
   })
 
   it('calls login() when "Sign in" is clicked', async () => {

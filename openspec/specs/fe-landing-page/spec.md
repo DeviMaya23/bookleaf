@@ -77,3 +77,12 @@ The landing page SHALL display an error message when one is passed via React Rou
 
 - **WHEN** the user is redirected to `/` with an error message in React Router location state
 - **THEN** the error message is displayed on the landing page
+
+### Requirement: Footer navigation links
+
+The landing page footer SHALL display links to the "About" (`/about`), "Privacy" (`/privacy`), and "AI Notes" (`/ai-notes`) pages, replacing the previously centered "Bookleaf" wordmark.
+
+#### Scenario: Footer shows links to informational pages
+
+- **WHEN** the landing page is rendered
+- **THEN** the footer displays links labelled "About", "Privacy", and "AI Notes", pointing to `/about`, `/privacy`, and `/ai-notes` respectively
