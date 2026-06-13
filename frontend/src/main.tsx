@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import './index.css'
 import App from './App.tsx'
+import { ThemeProvider } from './hooks/useTheme'
 
 const queryClient = new QueryClient()
 
@@ -23,19 +24,21 @@ Object.entries(kindeVars).forEach(([key, value]) => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <KindeProvider
-      clientId={kindeVars.VITE_KINDE_CLIENT_ID}
-      domain={kindeVars.VITE_KINDE_ISSUER_URL}
-      redirectUri={kindeVars.VITE_KINDE_REDIRECT_URL}
-      logoutUri={kindeVars.VITE_KINDE_LOGOUT_REDIRECT_URL}
-      audience={kindeVars.VITE_KINDE_AUDIENCE}
-    >
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-          <Toaster richColors />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </KindeProvider>
+    <ThemeProvider>
+      <KindeProvider
+        clientId={kindeVars.VITE_KINDE_CLIENT_ID}
+        domain={kindeVars.VITE_KINDE_ISSUER_URL}
+        redirectUri={kindeVars.VITE_KINDE_REDIRECT_URL}
+        logoutUri={kindeVars.VITE_KINDE_LOGOUT_REDIRECT_URL}
+        audience={kindeVars.VITE_KINDE_AUDIENCE}
+      >
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <App />
+            <Toaster richColors />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </KindeProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

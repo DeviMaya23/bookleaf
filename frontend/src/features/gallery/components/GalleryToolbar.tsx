@@ -90,7 +90,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
             <DropdownMenu>
               <DropdownMenuTrigger
                 aria-label="Sort"
-                className={cn(buttonVariants({ variant: sortActive ? 'default' : 'outline', size: 'icon' }))}
+                className={cn(buttonVariants({ variant: sortActive ? 'secondary' : 'outline', size: 'icon' }))}
               >
                 <ArrowUpDown className="w-3.5 h-3.5" />
               </DropdownMenuTrigger>
@@ -120,12 +120,12 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
           {view.type !== 'trash' && (
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={cn(buttonVariants({ variant: filterCount > 0 ? 'default' : 'outline' }))}
+                className={cn(buttonVariants({ variant: filterCount > 0 ? 'secondary' : 'outline' }))}
               >
                 <Filter className="w-3.5 h-3.5" />
                 Filters
                 {filterCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary-foreground/20 text-[10px] font-semibold leading-none">
+                  <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-secondary-foreground/20 text-[10px] font-semibold leading-none">
                     {filterCount}
                   </span>
                 )}
