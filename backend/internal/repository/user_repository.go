@@ -42,3 +42,41 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 
 	return &user, nil
 }
+
+func (r *userRepository) MarkPendingKindeDeletion(ctx context.Context, id string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Where("id = ?", id).
+		Update("pending_kinde_deletion", true)
+	if result.Error != nil {
+		return fmt.Errorf("mark pending kinde deletion: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("mark pending kinde deletion: %w", gorm.ErrRecordNotFound)
+	}
+	return nil
+}
+
+func (r *userRepository) HardDelete(ctx context.Context, id string) error {
+	result := r.db.WithContext(ctx).
+		Unscoped().
+		Where("id = ?", id).
+		Delete(&domain.User{})
+	if result.Error != nil {
+		return fmt.Errorf("hard delete user: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("hard delete user: %w", gorm.ErrRecordNotFound)
+	}
+	return nil
+}
+
+func (r *userRepository) ListPendingKindeDeletion(ctx context.Context) ([]*domain.User, error) {
+	var users []*domain.User
+	if err := r.db.WithContext(ctx).
+		Where("pending_kinde_deletion = ?", true).
+		Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("list pending kinde deletion users: %w", err)
+	}
+	return users, nil
+}

@@ -17,3 +17,10 @@ type R2DeleteArgs struct {
 
 func (R2DeleteArgs) Kind() string     { return "r2_delete" }
 func (R2DeleteArgs) MaxAttempts() int { return 5 }
+
+type AccountKindeDeletionArgs struct {
+	UserID string `json:"user_id"`
+}
+
+func (AccountKindeDeletionArgs) Kind() string     { return "account_kinde_deletion" }
+func (AccountKindeDeletionArgs) MaxAttempts() int { return 5 }

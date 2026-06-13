@@ -1,7 +1,5 @@
-## Purpose
-Define the persistent user model keyed by Kinde user ID and the database migrations required for user state.
+## MODIFIED Requirements
 
-## Requirements
 ### Requirement: User GORM Struct
 
 The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user managed by Kinde.
@@ -31,37 +29,7 @@ No UUID field. Kinde owns the identity layer; the DB stores only the Kinde user 
 - **WHEN** the Go package is compiled
 - **THEN** `User` has a `bool` `PendingKindeDeletion` field tagged with `gorm:"column:pending_kinde_deletion;default:false"`
 
-### Requirement: Users DB Migration
-
-The system SHALL include a `golang-migrate` SQL migration that creates the `users` table before `folders` and `images` (both depend on it).
-
-#### Scenario: Migration creates users table
-
-- **WHEN** migrations are applied to a fresh database
-- **THEN** the `users` table exists with `id TEXT PRIMARY KEY`, `created_at`, `updated_at`, and `deleted_at` columns
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `users` table is dropped without error
-
-### Requirement: vision_enabled DB Migration
-
-The system SHALL include a `golang-migrate` SQL migration (`000004_add_vision_enabled_to_users`) that adds the `vision_enabled` column to the existing `users` table.
-
-- Up: `ALTER TABLE users ADD COLUMN vision_enabled BOOLEAN NOT NULL DEFAULT false`
-- Down: `ALTER TABLE users DROP COLUMN vision_enabled`
-
-#### Scenario: Migration adds column with safe default
-
-- **WHEN** the up migration is applied to a database with existing users
-- **THEN** the `users` table has a `vision_enabled` column of type `BOOLEAN NOT NULL`
-- **AND** all existing rows have `vision_enabled = false`
-
-#### Scenario: Migration is reversible
-
-- **WHEN** the down migration is applied
-- **THEN** the `vision_enabled` column is dropped without error
+## ADDED Requirements
 
 ### Requirement: pending_kinde_deletion DB Migration
 

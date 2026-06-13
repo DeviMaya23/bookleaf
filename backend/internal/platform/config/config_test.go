@@ -12,6 +12,10 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Helper()
 	t.Setenv("KINDE_ISSUER_URL", "https://example.kinde.com")
 	t.Setenv("KINDE_AUDIENCE", "bookleaf-api")
+	t.Setenv("KINDE_M2M_CLIENT_ID", "m2m-client-id")
+	t.Setenv("KINDE_M2M_CLIENT_SECRET", "m2m-client-secret")
+	t.Setenv("KINDE_M2M_TOKEN_URL", "https://example.kinde.com/oauth2/token")
+	t.Setenv("KINDE_MANAGEMENT_AUDIENCE", "https://example.kinde.com/api")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,https://app.example.com")
 	t.Setenv("DATABASE_HOST", "localhost")
 	t.Setenv("DATABASE_NAME", "bookleaf")
@@ -40,6 +44,10 @@ func TestLoad_AllRequiredVarsSet(t *testing.T) {
 	require.NotNil(t, cfg)
 	assert.Equal(t, "https://example.kinde.com", cfg.Kinde.IssuerURL)
 	assert.Equal(t, "bookleaf-api", cfg.Kinde.Audience)
+	assert.Equal(t, "m2m-client-id", cfg.Kinde.M2MClientID)
+	assert.Equal(t, "m2m-client-secret", cfg.Kinde.M2MClientSecret)
+	assert.Equal(t, "https://example.kinde.com/oauth2/token", cfg.Kinde.M2MTokenURL)
+	assert.Equal(t, "https://example.kinde.com/api", cfg.Kinde.ManagementAudience)
 	assert.Equal(t, []string{"http://localhost:5173", "https://app.example.com"}, cfg.CORSAllowedOrigins)
 	assert.Equal(t, "postgres://user:pass@localhost:5432/bookleaf?sslmode=disable", cfg.DB.URL)
 	assert.Equal(t, "localhost", cfg.DB.Host)
@@ -78,6 +86,10 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 	}{
 		{"missing KINDE_ISSUER_URL", "KINDE_ISSUER_URL"},
 		{"missing KINDE_AUDIENCE", "KINDE_AUDIENCE"},
+		{"missing KINDE_M2M_CLIENT_ID", "KINDE_M2M_CLIENT_ID"},
+		{"missing KINDE_M2M_CLIENT_SECRET", "KINDE_M2M_CLIENT_SECRET"},
+		{"missing KINDE_M2M_TOKEN_URL", "KINDE_M2M_TOKEN_URL"},
+		{"missing KINDE_MANAGEMENT_AUDIENCE", "KINDE_MANAGEMENT_AUDIENCE"},
 		{"missing CORS_ALLOWED_ORIGINS", "CORS_ALLOWED_ORIGINS"},
 		{"missing DATABASE_HOST", "DATABASE_HOST"},
 		{"missing DATABASE_NAME", "DATABASE_NAME"},

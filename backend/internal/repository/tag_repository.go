@@ -96,4 +96,13 @@ func (r *tagRepository) ReplaceImageTags(ctx context.Context, imageID uuid.UUID,
 	})
 }
 
+func (r *tagRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Delete(&domain.Tag{}).Error; err != nil {
+		return fmt.Errorf("delete all tags by user: %w", err)
+	}
+	return nil
+}
+
 var _ usecase.TagRepository = (*tagRepository)(nil)

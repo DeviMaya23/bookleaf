@@ -14,8 +14,12 @@ import (
 )
 
 type KindeConfig struct {
-	IssuerURL string
-	Audience  string
+	IssuerURL          string
+	Audience           string
+	M2MClientID        string
+	M2MClientSecret    string
+	M2MTokenURL        string
+	ManagementAudience string
 }
 
 type DBConfig struct {
@@ -76,6 +80,26 @@ func loadFromEnv() (*Config, error) {
 	}
 
 	kindeAudience, err := requireEnv("KINDE_AUDIENCE")
+	if err != nil {
+		return nil, err
+	}
+
+	kindeM2MClientID, err := requireEnv("KINDE_M2M_CLIENT_ID")
+	if err != nil {
+		return nil, err
+	}
+
+	kindeM2MClientSecret, err := requireEnv("KINDE_M2M_CLIENT_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
+	kindeM2MTokenURL, err := requireEnv("KINDE_M2M_TOKEN_URL")
+	if err != nil {
+		return nil, err
+	}
+
+	kindeManagementAudience, err := requireEnv("KINDE_MANAGEMENT_AUDIENCE")
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +194,12 @@ func loadFromEnv() (*Config, error) {
 
 	return &Config{
 		Kinde: KindeConfig{
-			IssuerURL: kindeIssuerURL,
-			Audience:  kindeAudience,
+			IssuerURL:          kindeIssuerURL,
+			Audience:           kindeAudience,
+			M2MClientID:        kindeM2MClientID,
+			M2MClientSecret:    kindeM2MClientSecret,
+			M2MTokenURL:        kindeM2MTokenURL,
+			ManagementAudience: kindeManagementAudience,
 		},
 		DB: DBConfig{
 			Host:     databaseHost,

@@ -15,15 +15,21 @@ type UserUsecase interface {
 	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
 }
 
-type MeHandler struct {
-	userUsecase UserUsecase
-	tel         *observability.Telemetry
+type AccountUsecase interface {
+	DeleteAccount(ctx context.Context, userID string) error
 }
 
-func NewMeHandler(userUsecase UserUsecase, tel *observability.Telemetry) *MeHandler {
+type MeHandler struct {
+	userUsecase    UserUsecase
+	accountUsecase AccountUsecase
+	tel            *observability.Telemetry
+}
+
+func NewMeHandler(userUsecase UserUsecase, accountUsecase AccountUsecase, tel *observability.Telemetry) *MeHandler {
 	return &MeHandler{
-		userUsecase: userUsecase,
-		tel:         tel,
+		userUsecase:    userUsecase,
+		accountUsecase: accountUsecase,
+		tel:            tel,
 	}
 }
 
@@ -47,4 +53,22 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 		"id":             user.ID,
 		"vision_enabled": user.VisionEnabled,
 	})
+}
+
+func (h *MeHandler) DeleteMe(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteMe")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	if err := h.accountUsecase.DeleteAccount(ctx, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete account")
+	}
+
+	return c.NoContent(http.StatusNoContent)
 }

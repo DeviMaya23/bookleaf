@@ -121,6 +121,30 @@ func TestAuthMiddleware_InvalidOrMissingToken_Returns401(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_PendingKindeDeletion_Returns401(t *testing.T) {
+	storage, privateKey := makeTestStorage(t)
+	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", PendingKindeDeletion: true}}
+	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
+	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/me", nil)
+	req.Header.Set(echo.HeaderAuthorization, "Bearer "+tokenString)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	nextCalled := false
+	err := mw(func(c echo.Context) error {
+		nextCalled = true
+		return c.NoContent(http.StatusNoContent)
+	})(c)
+
+	httpErr, ok := err.(*echo.HTTPError)
+	require.True(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, httpErr.Code)
+	assert.False(t, nextCalled)
+}
+
 func TestAuthMiddleware_ProvisioningFailure_Returns500(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
 	mockUC := &mockUserUsecase{err: assert.AnError}

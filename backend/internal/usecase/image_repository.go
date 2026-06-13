@@ -31,4 +31,8 @@ type ImageRepository interface {
 	// UpdateImageFolderPosition updates the position of an image within a specific folder.
 	// Returns ErrRecordNotFound if no row exists for (imageID, folderID).
 	UpdateImageFolderPosition(ctx context.Context, imageID uuid.UUID, folderID uuid.UUID, position string) error
+	// ListAllByUserID returns all of a user's images, unscoped (including soft-deleted/trashed).
+	ListAllByUserID(ctx context.Context, userID string) ([]*domain.Image, error)
+	// HardDeleteAllByUserID permanently deletes all of a user's images, including soft-deleted ones.
+	HardDeleteAllByUserID(ctx context.Context, userID string) error
 }
