@@ -1,0 +1,57 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { Switch } from '@/components/ui/switch'
+import { getMe } from '@/features/auth/lib/me'
+
+export default function AdvancedSection() {
+  const { getToken } = useKindeAuth()
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(getToken),
+    staleTime: Infinity,
+  })
+
+  const visionEnabled = me?.vision_enabled ?? false
+
+  return (
+    <div>
+      <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        AI
+      </p>
+      <div className="flex items-start justify-between gap-4 border-b border-border py-3">
+        <div>
+          <div className="mb-1 flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">AI features</span>
+            <div className="relative inline-flex">
+              <button
+                type="button"
+                onMouseEnter={() => setTooltipOpen(true)}
+                onMouseLeave={() => setTooltipOpen(false)}
+                className="flex size-[15px] items-center justify-center rounded-full border border-foreground/20 bg-muted text-[9px] font-bold leading-none text-muted-foreground"
+                aria-label="What does this do?"
+              >
+                ?
+              </button>
+              {tooltipOpen && (
+                <div
+                  role="tooltip"
+                  className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-[230px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
+                >
+                  Currently enables folder suggestions on upload — Bookleaf analyses image content
+                  to recommend where it should go.
+                </div>
+              )}
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {visionEnabled ? 'Active — folder suggestions on upload' : 'Disabled — all AI features are off'}
+          </p>
+        </div>
+        <Switch checked={visionEnabled} disabled />
+      </div>
+    </div>
+  )
+}
