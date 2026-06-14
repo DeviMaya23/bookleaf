@@ -2,7 +2,7 @@ import { useTheme, type Theme } from '@/hooks/useTheme'
 
 const THEME_OPTIONS: Record<Theme, { label: string; sub: string; swatches: string[] }> = {
   warm: {
-    label: 'Default',
+    label: 'Parchment',
     sub: 'Warm parchment',
     swatches: ['#FAF8F4', '#E5DED6', '#2D2A26'],
   },
