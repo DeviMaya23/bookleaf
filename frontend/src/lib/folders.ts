@@ -9,11 +9,21 @@ export interface Folder {
   updated_at: string
 }
 
+export interface FolderDetail extends Folder {
+  image_count: number
+}
+
 type GetToken = () => Promise<string | undefined>
 
 export async function getFolders(getToken: GetToken): Promise<Folder[]> {
   const res = await apiFetch('/folders', getToken)
   if (!res.ok) throw new Error('Failed to fetch folders')
+  return res.json()
+}
+
+export async function getFolder(getToken: GetToken, id: string): Promise<FolderDetail> {
+  const res = await apiFetch(`/folders/${id}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch folder')
   return res.json()
 }
 
@@ -48,6 +58,12 @@ export async function updateFolder(getToken: GetToken, id: string, params: Updat
 export async function deleteFolder(getToken: GetToken, id: string): Promise<void> {
   const res = await apiFetch(`/folders/${id}`, getToken, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete folder')
+}
+
+export async function exportFolder(getToken: GetToken, id: string): Promise<Blob> {
+  const res = await apiFetch(`/folders/${id}/export`, getToken)
+  if (!res.ok) throw new Error('Failed to export folder')
+  return res.blob()
 }
 
 export function getFolderSubtreeIds(folders: Folder[], folderId: string): Set<string> {

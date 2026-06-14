@@ -1,8 +1,11 @@
 package usecase
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -20,8 +23,9 @@ type UpdateFolderParams struct {
 	Description **string
 }
 
-type ImageCounter interface {
+type FolderImageRepository interface {
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
+	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 }
 
 type FolderDetail struct {
@@ -31,14 +35,16 @@ type FolderDetail struct {
 
 type folderUsecase struct {
 	folderRepo FolderRepository
-	imageRepo  ImageCounter
+	imageRepo  FolderImageRepository
+	store      StorageService
 	tel        *observability.Telemetry
 }
 
-func NewFolderUsecase(folderRepo FolderRepository, imageRepo ImageCounter, tel *observability.Telemetry) *folderUsecase {
+func NewFolderUsecase(folderRepo FolderRepository, imageRepo FolderImageRepository, store StorageService, tel *observability.Telemetry) *folderUsecase {
 	return &folderUsecase{
 		folderRepo: folderRepo,
 		imageRepo:  imageRepo,
+		store:      store,
 		tel:        tel,
 	}
 }
@@ -134,6 +140,79 @@ func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string,
 	}
 
 	return folder, nil
+}
+
+func (u *folderUsecase) ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ExportFolder")
+	defer span.End()
+
+	images, err := u.imageRepo.ListByFolder(ctx, userID, folderID, nil, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("list images by folder: %w", err)
+	}
+
+	zw := zip.NewWriter(w)
+
+	nameCounts := make(map[string]int)
+	for _, image := range images {
+		name := exportEntryName(image, nameCounts)
+
+		reader, err := u.store.GetObject(ctx, image.R2Path)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("get object: %w", err)
+		}
+
+		entry, err := zw.Create(name)
+		if err != nil {
+			reader.Close()
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("create zip entry: %w", err)
+		}
+
+		if _, err := io.Copy(entry, reader); err != nil {
+			reader.Close()
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("copy object to zip entry: %w", err)
+		}
+		reader.Close()
+	}
+
+	if err := zw.Close(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("close zip writer: %w", err)
+	}
+
+	return nil
+}
+
+// exportEntryName derives a zip entry name for an image, sanitizing its title
+// to remove path separators and disambiguating collisions with nameCounts.
+func exportEntryName(image *domain.Image, nameCounts map[string]int) string {
+	title := sanitizePathSegment(image.Title)
+	ext := downloadFileExtension(image.MIMEType)
+	base := title + "." + ext
+
+	count := nameCounts[base]
+	nameCounts[base] = count + 1
+	if count == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s (%d).%s", title, count, ext)
+}
+
+// sanitizePathSegment replaces path-separator characters so a title cannot
+// introduce nested paths inside a zip archive.
+func sanitizePathSegment(s string) string {
+	s = strings.ReplaceAll(s, "/", "-")
+	s = strings.ReplaceAll(s, "\\", "-")
+	return s
 }
 
 func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string) error {

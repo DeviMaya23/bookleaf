@@ -1,8 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { X } from 'lucide-react'
+import { Loader2, Download, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { updateFolder } from '@/lib/folders'
+import { Button } from '@/components/ui/button'
+import { getFolder, exportFolder, updateFolder } from '@/lib/folders'
 import { useFieldAutosave } from '../hooks/useFieldAutosave'
 
 interface FolderPanelContentProps {
@@ -13,6 +15,12 @@ interface FolderPanelContentProps {
 export default function FolderPanelContent({ folder, onClose }: FolderPanelContentProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
+  const [isExporting, setIsExporting] = useState(false)
+
+  const { data: folderDetail, isLoading: isFolderDetailLoading } = useQuery({
+    queryKey: ['folder', folder.id],
+    queryFn: () => getFolder(getToken, folder.id),
+  })
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateFolder>[2]) =>
@@ -25,6 +33,25 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
       toast.error('Failed to save')
     },
   })
+
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const blob = await exportFolder(getToken, folder.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${folder.name}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Failed to export folder')
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   const nameField = useFieldAutosave(
     folder.name,
@@ -66,6 +93,26 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
             className="w-full resize-none text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-2 outline-none focus:border-border transition-colors"
           />
         </div>
+      </div>
+
+      <div className="flex-shrink-0 border-t px-4 py-3 bg-background">
+        <Button
+          className="w-full"
+          onClick={handleExport}
+          disabled={isExporting || isFolderDetailLoading || folderDetail?.image_count === 0}
+        >
+          {isExporting ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Preparing export...
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4 mr-2" />
+              Export folder
+            </>
+          )}
+        </Button>
       </div>
     </>
   )

@@ -204,7 +204,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	imageRepository := repository.NewImageRepository(db)
 	pendingUploadRepository := repository.NewPendingUploadRepository(db)
 	tagRepository := repository.NewTagRepository(db)
-	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, tel)
+	folderUsecase := usecase.NewFolderUsecase(folderRepository, imageRepository, storageService, tel)
 	tagUsecase := usecase.NewTagUsecase(tagRepository, tel)
 
 	var visionService usecase.VisionService
@@ -301,6 +301,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)
 	protected.GET("/folders/:id", folderHandler.GetFolder)
+	protected.GET("/folders/:id/export", folderHandler.ExportFolder)
 	protected.PATCH("/folders/:id", folderHandler.UpdateFolder)
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
 	protected.POST("/tags", tagHandler.CreateTag)

@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,8 +18,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+var invalidFilenameChars = regexp.MustCompile(`[/\\:*?"<>|\x00-\x1f]`)
+
+// sanitizeFilename strips characters invalid in filenames, falling back to
+// "export" if nothing usable remains.
+func sanitizeFilename(name string) string {
+	sanitized := strings.TrimSpace(invalidFilenameChars.ReplaceAllString(name, ""))
+	if sanitized == "" {
+		return "export"
+	}
+	return sanitized
+}
 
 type FolderUsecase interface {
 	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
@@ -24,6 +40,7 @@ type FolderUsecase interface {
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*usecase.FolderDetail, error)
 	Update(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateFolderParams) (*domain.Folder, error)
 	Delete(ctx context.Context, id uuid.UUID, userID string) error
+	ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error
 }
 
 type FolderHandler struct {
@@ -247,6 +264,47 @@ func (h *FolderHandler) DeleteFolder(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *FolderHandler) ExportFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ExportFolder")
+	defer span.End()
+
+	folderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
+	}
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	folderDetail, err := h.folderUsecase.GetByID(ctx, folderID, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get folder")
+	}
+
+	filename := sanitizeFilename(folderDetail.Folder.Name) + ".zip"
+	c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+	c.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("attachment; filename=%q", filename))
+	c.Response().WriteHeader(http.StatusOK)
+
+	if err := h.folderUsecase.ExportFolder(ctx, folderID, userID, c.Response()); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		observability.LoggerFromContext(ctx, h.tel.Logger).Error("export folder failed",
+			zap.Error(err),
+			zap.String("folder_id", folderID.String()),
+		)
+	}
+
+	return nil
 }
 
 func toFolderResponse(folder *domain.Folder) folderResponse {
