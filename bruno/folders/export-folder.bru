@@ -1,0 +1,11 @@
+meta {
+  name: Export Folder
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/folders/{{folderId}}/export
+  body: none
+  auth: inherit
+}

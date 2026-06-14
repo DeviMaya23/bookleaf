@@ -10,9 +10,11 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 
 vi.mock('@/lib/folders', () => ({
   updateFolder: vi.fn(),
+  getFolder: vi.fn(),
+  exportFolder: vi.fn(),
 }))
 
-import { updateFolder } from '@/lib/folders'
+import { updateFolder, getFolder, exportFolder } from '@/lib/folders'
 
 const folder = { id: 'folder-1', name: 'Nature', description: 'Outdoor shots' }
 
@@ -31,6 +33,8 @@ describe('FolderPanelContent — success scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(updateFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '' })
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 1 })
+    vi.mocked(exportFolder).mockResolvedValue(new Blob())
   })
 
   it('saves the name on blur when changed', async () => {
@@ -76,5 +80,75 @@ describe('FolderPanelContent — empty name scenario', () => {
       expect(screen.getByDisplayValue('Nature')).toBeInTheDocument()
     })
     expect(updateFolder).not.toHaveBeenCalled()
+  })
+})
+
+describe('FolderPanelContent — export folder button', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(updateFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '' })
+  })
+
+  it('disables the button while the folder has zero images', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 0 })
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /export folder/i })).toBeDisabled()
+    })
+  })
+
+  it('enables the button when the folder has images', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 2 })
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /export folder/i })).not.toBeDisabled()
+    })
+  })
+
+  it('shows a preparing state and triggers a download on success', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 2 })
+    let resolveExport: (blob: Blob) => void = () => {}
+    vi.mocked(exportFolder).mockReturnValue(
+      new Promise((resolve) => {
+        resolveExport = resolve
+      }),
+    )
+    const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    renderPanel()
+
+    const button = await screen.findByRole('button', { name: /export folder/i })
+    await waitFor(() => expect(button).not.toBeDisabled())
+    await userEvent.click(button)
+
+    expect(screen.getByRole('button', { name: /preparing export/i })).toBeDisabled()
+
+    resolveExport(new Blob())
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /export folder/i })).not.toBeDisabled()
+    })
+    expect(exportFolder).toHaveBeenCalledWith(expect.any(Function), 'folder-1')
+    expect(createObjectURLSpy).toHaveBeenCalled()
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:mock-url')
+  })
+
+  it('shows an error toast and resets the button when export fails', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 2 })
+    vi.mocked(exportFolder).mockRejectedValue(new Error('Network error'))
+
+    renderPanel()
+
+    const button = await screen.findByRole('button', { name: /export folder/i })
+    await waitFor(() => expect(button).not.toBeDisabled())
+    await userEvent.click(button)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /export folder/i })).not.toBeDisabled()
+    })
+    expect(exportFolder).toHaveBeenCalledWith(expect.any(Function), 'folder-1')
   })
 })
