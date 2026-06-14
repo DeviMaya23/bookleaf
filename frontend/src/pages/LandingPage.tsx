@@ -6,18 +6,18 @@ import landingHero from '@/assets/landing-hero.png'
 const FEATURES = [
   {
     num: '01',
-    title: 'Organize your way',
-    body: 'Sort images into nested folders and tag them so you can find what you need without digging through a messy camera roll.',
+    title: 'Upload and organise',
+    body: 'Add images from your device, drag them into folders.',
   },
   {
     num: '02',
-    title: 'Built for browsing',
-    body: 'A fast, focused gallery with zoom, pan, and rotation built in — no waiting around for thumbnails to load.',
+    title: 'Clean gallery and viewer',
+    body: 'Your images in a tidy grid, with full-resolution viewing.',
   },
   {
     num: '03',
-    title: 'Your library, your way',
-    body: 'Bookleaf keeps your photos private and organized exactly how you want, with no clutter or algorithmic feeds.',
+    title: 'Optional smart features',
+    body: 'Off by default, always will be.',
   },
 ]
 
@@ -46,14 +46,13 @@ export default function LandingPage() {
       <section className="grid grid-cols-2 items-center gap-12 overflow-hidden px-8 py-6">
         <div className="max-w-md">
           <p className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            Photo library, reimagined
+            (Still in beta)
           </p>
           <h1 className="mb-4 font-serif text-4xl font-semibold leading-tight">
-            A calmer home for your photos
+            Noiseless web image library
           </h1>
           <p className="mb-6 text-base text-muted-foreground">
-            Bookleaf is a focused space to organize, browse, and revisit your images — without
-            the noise of a social feed.
+            It's just you and your images here.
           </p>
           <Button size="lg" onClick={() => login()}>
             Get started
