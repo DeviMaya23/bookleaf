@@ -17,3 +17,17 @@ export async function deleteMe(getToken: GetToken): Promise<void> {
   const res = await apiFetch('/me', getToken, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete account')
 }
+
+export interface UpdateMeParams {
+  vision_enabled: boolean
+}
+
+export async function updateMe(getToken: GetToken, params: UpdateMeParams): Promise<Me> {
+  const res = await apiFetch('/me', getToken, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error('Failed to update user profile')
+  return res.json()
+}

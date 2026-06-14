@@ -291,6 +291,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.Use(authMiddleware)
 	protected.Use(observability.LoggingMiddleware(tel, authmiddleware.AuthenticatedUserIDFromContext))
 	protected.GET("/me", meHandler.GetMe)
+	protected.PATCH("/me", meHandler.UpdateMe)
 	protected.DELETE("/me", meHandler.DeleteMe)
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)

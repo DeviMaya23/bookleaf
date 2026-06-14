@@ -16,6 +16,7 @@ import (
 type fakeUserRepo struct {
 	users       map[string]*domain.User
 	getOrCreate error
+	updateErr   error
 }
 
 func newFakeUserRepo() *fakeUserRepo {
@@ -54,6 +55,20 @@ func (f *fakeUserRepo) HardDelete(_ context.Context, id string) error {
 	}
 	delete(f.users, id)
 	return nil
+}
+
+func (f *fakeUserRepo) Update(_ context.Context, id string, fields map[string]any) (*domain.User, error) {
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
+	user, ok := f.users[id]
+	if !ok {
+		return nil, errors.New("record not found")
+	}
+	if enabled, ok := fields["vision_enabled"].(bool); ok {
+		user.VisionEnabled = enabled
+	}
+	return user, nil
 }
 
 func (f *fakeUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
@@ -101,6 +116,27 @@ func TestUserUsecase_GetOrProvision_ProvisionFails(t *testing.T) {
 	uc := newTestUserUsecase(repo)
 
 	_, err := uc.GetOrProvision(context.Background(), "kp_new123")
+
+	require.Error(t, err)
+}
+
+func TestUserUsecase_UpdateVisionEnabled_Success(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", VisionEnabled: false}
+	uc := newTestUserUsecase(repo)
+
+	user, err := uc.UpdateVisionEnabled(context.Background(), "kp_abc123", true)
+
+	require.NoError(t, err)
+	assert.True(t, user.VisionEnabled)
+}
+
+func TestUserUsecase_UpdateVisionEnabled_RepoError(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.updateErr = errors.New("db error")
+	uc := newTestUserUsecase(repo)
+
+	_, err := uc.UpdateVisionEnabled(context.Background(), "kp_abc123", true)
 
 	require.Error(t, err)
 }
