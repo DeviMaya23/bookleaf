@@ -1,0 +1,17 @@
+meta {
+  name: Update Me
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/me
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "vision_enabled": true
+  }
+}

@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AdvancedSection from './AdvancedSection'
 
 const mockGetMe = vi.fn()
+const mockUpdateMe = vi.fn()
+const mockToastError = vi.fn()
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({
@@ -14,6 +16,13 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 
 vi.mock('@/features/auth/lib/me', () => ({
   getMe: () => mockGetMe(),
+  updateMe: (...args: unknown[]) => mockUpdateMe(...args),
+}))
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
 }))
 
 function renderAdvancedSection() {
@@ -32,7 +41,7 @@ describe('AdvancedSection', () => {
     vi.clearAllMocks()
   })
 
-  it('renders the AI features toggle as on and disabled when vision_enabled is true', async () => {
+  it('renders the AI features toggle as on when vision_enabled is true', async () => {
     mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
 
     renderAdvancedSection()
@@ -40,11 +49,10 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
     })
-    expect(screen.getByRole('switch')).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText('Active — folder suggestions on upload')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
   })
 
-  it('renders the AI features toggle as off and disabled when vision_enabled is false', async () => {
+  it('renders the AI features toggle as off when vision_enabled is false', async () => {
     mockGetMe.mockResolvedValue({ id: 'kp_2', vision_enabled: false })
 
     renderAdvancedSection()
@@ -52,8 +60,25 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
     })
-    expect(screen.getByRole('switch')).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByText('Disabled — all AI features are off')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
+  })
+
+  it('shows different description text depending on vision_enabled state', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    renderAdvancedSection()
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+    const enabledText = screen.getByTestId('vision-description').textContent
+
+    mockGetMe.mockResolvedValue({ id: 'kp_2', vision_enabled: false })
+    renderAdvancedSection()
+    await waitFor(() => {
+      expect(screen.getAllByRole('switch')[1]).toHaveAttribute('data-unchecked')
+    })
+    const disabledText = screen.getAllByTestId('vision-description')[1].textContent
+
+    expect(disabledText).not.toEqual(enabledText)
   })
 
   it('shows the AI features explanation on hover over the help tooltip', async () => {
@@ -70,5 +95,90 @@ describe('AdvancedSection', () => {
 
     await userEvent.unhover(screen.getByRole('button', { name: 'What does this do?' }))
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('enables vision via PATCH /me and updates the displayed state', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+    const initialDescription = screen.getByTestId('vision-description').textContent
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: true })
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
+  })
+
+  it('disables vision via PATCH /me and updates the displayed state', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+    const initialDescription = screen.getByTestId('vision-description').textContent
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: false })
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
+  })
+
+  it('disables the switch while the update is pending', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    let resolveUpdate: (value: { id: string; vision_enabled: boolean }) => void = () => {}
+    mockUpdateMe.mockImplementation(
+      () => new Promise((resolve) => { resolveUpdate = resolve }),
+    )
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    resolveUpdate({ id: 'kp_1', vision_enabled: true })
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).not.toHaveAttribute('aria-disabled')
+    })
+  })
+
+  it('shows an error toast and leaves the toggle unchanged when the update fails', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    mockUpdateMe.mockRejectedValue(new Error('boom'))
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Failed to update settings')
+    })
+    expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    expect(screen.getByRole('switch')).not.toHaveAttribute('aria-disabled')
   })
 })

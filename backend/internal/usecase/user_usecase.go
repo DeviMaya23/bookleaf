@@ -57,3 +57,18 @@ func (u *userUsecase) GetByID(ctx context.Context, kindeID string) (*domain.User
 	}
 	return user, nil
 }
+
+func (u *userUsecase) UpdateVisionEnabled(ctx context.Context, id string, enabled bool) (*domain.User, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateVisionEnabled")
+	defer span.End()
+
+	fields := map[string]any{"vision_enabled": enabled}
+
+	user, err := u.userRepo.Update(ctx, id, fields)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	return user, nil
+}
