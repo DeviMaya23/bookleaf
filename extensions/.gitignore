@@ -2,7 +2,8 @@ node_modules/
 dist/
 .env
 .env.local
-.env.production
+.env.chrome-production
+.env.chrome-production.local
 .env.firefox-production
 .env.firefox-production.local
 .env.sign

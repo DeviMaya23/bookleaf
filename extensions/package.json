@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:chrome:prod": "vite build --mode chrome-production",
     "build:firefox": "vite build --mode firefox",
     "build:firefox:prod": "vite build --mode firefox-production",
     "build:all": "vite build && vite build --mode firefox",
