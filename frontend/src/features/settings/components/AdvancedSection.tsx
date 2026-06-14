@@ -36,7 +36,7 @@ export default function AdvancedSection() {
       <div className="flex items-start justify-between gap-4 border-b border-border py-3">
         <div>
           <div className="mb-1 flex items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">AI features</span>
+            <span className="text-sm font-medium text-foreground">AI folder suggestions</span>
             <div className="relative inline-flex">
               <button
                 type="button"
@@ -52,7 +52,7 @@ export default function AdvancedSection() {
                   role="tooltip"
                   className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-[230px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
                 >
-                  Currently enables folder suggestions on single-file upload, using Google's Vision API.
+                  Enables folder suggestions on single-file upload, using Google's Vision API.
                 </div>
               )}
             </div>
