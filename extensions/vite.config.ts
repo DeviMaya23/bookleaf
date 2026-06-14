@@ -2,7 +2,9 @@ import { defineConfig } from "vite";
 import webExtension from "vite-plugin-web-extension";
 
 export default defineConfig(({ mode }) => {
-  const isFirefox = mode === "firefox";
+  const isFirefox = mode === "firefox" || mode === "firefox-production";
+  const geckoId =
+    mode === "firefox-production" ? "bookleaf@evimay.me" : "bookleaf-dev@evimay.me";
   return {
     build: {
       outDir: isFirefox ? "dist/firefox" : "dist/chrome",
@@ -21,7 +23,7 @@ export default defineConfig(({ mode }) => {
                 scripts: [background.service_worker],
               },
               browser_specific_settings: {
-                gecko: { id: "bookleaf@evimay.me" },
+                gecko: { id: geckoId },
               },
             };
           },

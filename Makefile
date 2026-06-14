@@ -1,6 +1,6 @@
 -include Makefile.local
 
-.PHONY: tidy run test-cover-repository rebuild fe-install fe-dev ext-install ext-build ext-build-firefox ext-build-all
+.PHONY: tidy run test-cover-repository rebuild fe-install fe-dev ext-install ext-build ext-build-firefox ext-build-all ext-build-prod
 
 tidy:
 	@cd backend && go mod tidy
@@ -34,3 +34,6 @@ ext-build-firefox:
 
 ext-build:
 	@cd extensions && npm run build:all
+
+ext-build-prod:
+	@cd extensions && npm run build:chrome:prod && npm run build:firefox:prod

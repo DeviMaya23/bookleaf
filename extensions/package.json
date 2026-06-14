@@ -5,8 +5,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:chrome:prod": "vite build --mode chrome-production",
     "build:firefox": "vite build --mode firefox",
+    "build:firefox:prod": "vite build --mode firefox-production",
     "build:all": "vite build && vite build --mode firefox",
+    "sign:firefox": "bash scripts/sign-firefox.sh",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {
@@ -19,6 +22,7 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
     "vite-plugin-web-extension": "^4.5.1",
+    "web-ext": "^9.0.1",
     "webextension-polyfill": "^0.12.0"
   }
 }

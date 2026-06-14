@@ -2,3 +2,9 @@ node_modules/
 dist/
 .env
 .env.local
+.env.chrome-production
+.env.chrome-production.local
+.env.firefox-production
+.env.firefox-production.local
+.env.sign
+web-ext-artifacts/
