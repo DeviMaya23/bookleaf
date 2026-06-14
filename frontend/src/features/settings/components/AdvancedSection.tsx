@@ -57,7 +57,7 @@ export default function AdvancedSection() {
               )}
             </div>
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground" data-testid="vision-description">
             {visionEnabled ? 'Gets folder suggestions on single-file upload' : 'Folder suggestions off'}
           </p>
         </div>

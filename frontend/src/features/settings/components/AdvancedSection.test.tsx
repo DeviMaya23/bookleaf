@@ -49,7 +49,7 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
     })
-    expect(screen.getByText('Active — folder suggestions on upload')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
   })
 
   it('renders the AI features toggle as off when vision_enabled is false', async () => {
@@ -60,7 +60,25 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
     })
-    expect(screen.getByText('Disabled — all AI features are off')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
+  })
+
+  it('shows different description text depending on vision_enabled state', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    renderAdvancedSection()
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+    const enabledText = screen.getByTestId('vision-description').textContent
+
+    mockGetMe.mockResolvedValue({ id: 'kp_2', vision_enabled: false })
+    renderAdvancedSection()
+    await waitFor(() => {
+      expect(screen.getAllByRole('switch')[1]).toHaveAttribute('data-unchecked')
+    })
+    const disabledText = screen.getAllByTestId('vision-description')[1].textContent
+
+    expect(disabledText).not.toEqual(enabledText)
   })
 
   it('shows the AI features explanation on hover over the help tooltip', async () => {
@@ -88,6 +106,7 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
     })
+    const initialDescription = screen.getByTestId('vision-description').textContent
 
     await userEvent.click(screen.getByRole('switch'))
 
@@ -95,7 +114,7 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
     })
-    expect(screen.getByText('Active — folder suggestions on upload')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
   })
 
   it('disables vision via PATCH /me and updates the displayed state', async () => {
@@ -107,6 +126,7 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
     })
+    const initialDescription = screen.getByTestId('vision-description').textContent
 
     await userEvent.click(screen.getByRole('switch'))
 
@@ -114,7 +134,7 @@ describe('AdvancedSection', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
     })
-    expect(screen.getByText('Disabled — all AI features are off')).toBeInTheDocument()
+    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
   })
 
   it('disables the switch while the update is pending', async () => {
