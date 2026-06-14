@@ -218,6 +218,47 @@ func TestLoad_SampleRatio(t *testing.T) {
 	}
 }
 
+func TestLoad_MaintenanceMode(t *testing.T) {
+	strPtr := func(s string) *string { return &s }
+
+	tests := []struct {
+		name        string
+		modeEnv     *string
+		wantEnabled bool
+	}{
+		{"unset defaults to disabled", nil, false},
+		{"true enables maintenance mode", strPtr("true"), true},
+		{"invalid value defaults to disabled", strPtr("notabool"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			setRequiredEnvVars(t)
+			if tt.modeEnv != nil {
+				t.Setenv("MAINTENANCE_MODE", *tt.modeEnv)
+			}
+
+			cfg, err := Load()
+
+			require.NoError(t, err)
+			require.NotNil(t, cfg)
+			assert.Equal(t, tt.wantEnabled, cfg.Maintenance.Enabled)
+		})
+	}
+}
+
+func TestLoad_MaintenanceBypassTokenUnsetDefaultsToEmpty(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequiredEnvVars(t)
+
+	cfg, err := Load()
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, "", cfg.Maintenance.BypassToken)
+}
+
 func TestLoad_LogFormat(t *testing.T) {
 	tests := []struct {
 		name       string
