@@ -67,7 +67,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-8 px-8 py-8" style={{ backgroundColor: '#F0EBE3' }}>
+      <section className="grid grid-cols-3 gap-8 bg-secondary px-8 py-8">
         {FEATURES.map((feature) => (
           <div key={feature.num}>
             <span className="text-xs font-semibold text-muted-foreground">{feature.num}</span>

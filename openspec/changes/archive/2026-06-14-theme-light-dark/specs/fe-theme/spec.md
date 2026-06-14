@@ -1,44 +1,4 @@
-## Purpose
-
-This spec covers the application's visual theming system, including the default "warm" theme palette and typography, a `ThemeProvider`/`useTheme()` API for reading and setting the active theme, and how Tailwind's `dark:` variant relates to the active theme.
-
----
-
-## Requirements
-
-### Requirement: Warm theme is the default active theme
-The system SHALL apply the "warm" named theme by default. The warm theme defines the application's color palette (`background`, `foreground`, `card`, `popover`, `muted`, `accent`, `secondary`, `primary`, `border`, `input`, `ring`, `sidebar`, and their `-foreground` counterparts, plus `radius`) and typography (DM Sans for UI text, Lora for the application wordmark).
-
-#### Scenario: Warm theme renders on initial load
-- **WHEN** the application loads with no stored theme preference
-- **THEN** the `<html>` element has `data-theme="warm"`
-- **AND** the warm palette CSS variables are in effect
-
----
-
-### Requirement: Theme preference provider
-The system SHALL provide a `ThemeProvider` exposing a `useTheme()` hook. `useTheme()` SHALL return the current theme and a setter function. `ThemeProvider` SHALL apply the active theme via a `data-theme` attribute on the `<html>` element and SHALL persist the theme preference to `localStorage`.
-
-#### Scenario: Default theme with no stored preference
-- **WHEN** no theme preference is stored in `localStorage`
-- **THEN** `useTheme()` returns `"warm"`
-- **AND** the `<html>` element has `data-theme="warm"`
-
-#### Scenario: Stored preference is restored on load
-- **WHEN** `localStorage` contains a previously-saved theme preference
-- **THEN** `ThemeProvider` initializes `useTheme()` with that stored value
-- **AND** applies it via the `data-theme` attribute on `<html>`
-
-#### Scenario: Setting a theme persists and applies it
-- **WHEN** `setTheme` is called with a valid theme value
-- **THEN** the `<html>` element's `data-theme` attribute updates to that value
-- **AND** the value is written to `localStorage`
-
-#### Scenario: useTheme used outside provider throws
-- **WHEN** `useTheme()` is called from a component not wrapped in `ThemeProvider`
-- **THEN** an error is thrown
-
----
+## MODIFIED Requirements
 
 ### Requirement: dark: utilities key off the active theme
 
@@ -54,7 +14,7 @@ The system SHALL define the Tailwind `dark:` variant to apply only when the acti
 - **WHEN** the active theme is `"sunless"`
 - **THEN** elements using `dark:` utility classes apply their dark-variant styles
 
----
+## ADDED Requirements
 
 ### Requirement: Lumen theme
 
@@ -66,8 +26,6 @@ The system SHALL provide a `"lumen"` named theme, selectable via `setTheme('lume
 - **THEN** the relevant element has `data-theme="lumen"`
 - **AND** the lumen palette CSS variables are in effect
 
----
-
 ### Requirement: Sunless theme
 
 The system SHALL provide a `"sunless"` named theme, selectable via `setTheme('sunless')`, defining a near-black color palette (`background`, `foreground`, `card`, `popover`, `muted`, `accent`, `secondary`, `primary`, `border`, `input`, `ring`, `sidebar`, `destructive`, and their `-foreground` counterparts, plus `radius`).
@@ -77,8 +35,6 @@ The system SHALL provide a `"sunless"` named theme, selectable via `setTheme('su
 - **WHEN** the active theme is `"sunless"`
 - **THEN** the relevant element has `data-theme="sunless"`
 - **AND** the sunless palette CSS variables are in effect
-
----
 
 ### Requirement: Theme picker in Settings
 
@@ -95,8 +51,6 @@ The Settings App section SHALL render all available themes (`warm`, `lumen`, `su
 - **WHEN** the user selects a theme entry other than the currently active one
 - **THEN** `setTheme` is called with that entry's theme id
 
----
-
 ### Requirement: Public pages render in the warm theme
 
 The system SHALL render all public/marketing routes (`/`, `/about`, `/privacy`, `/ai-notes`) with `data-theme="warm"`, regardless of the user's stored theme preference. The authenticated app (`/app/*`) SHALL continue to render with the user's stored theme preference.
@@ -110,8 +64,6 @@ The system SHALL render all public/marketing routes (`/`, `/about`, `/privacy`, 
 
 - **WHEN** a user with a stored theme preference of `"lumen"` or `"sunless"` navigates to `/app`
 - **THEN** the app renders with the `lumen` or `sunless` palette accordingly
-
----
 
 ### Requirement: Initial theme is applied before first paint
 
