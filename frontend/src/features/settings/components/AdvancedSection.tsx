@@ -52,14 +52,13 @@ export default function AdvancedSection() {
                   role="tooltip"
                   className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-[230px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
                 >
-                  Currently enables folder suggestions on upload — Bookleaf analyses image content
-                  to recommend where it should go.
+                  Currently enables folder suggestions on single-file upload, using Google's Vision API.
                 </div>
               )}
             </div>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {visionEnabled ? 'Active — folder suggestions on upload' : 'Disabled — all AI features are off'}
+            {visionEnabled ? 'Gets folder suggestions on single-file upload' : 'Folder suggestions off'}
           </p>
         </div>
         <Switch
