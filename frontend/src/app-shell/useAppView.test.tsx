@@ -18,9 +18,9 @@ function viewAt(path: string): AppView {
 
 describe('useAppView', () => {
   it('maps routes to the matching view', () => {
-    expect(viewAt('/')).toEqual({ type: 'all' })
-    expect(viewAt('/unsorted')).toEqual({ type: 'unsorted' })
-    expect(viewAt('/trash')).toEqual({ type: 'trash' })
+    expect(viewAt('/app')).toEqual({ type: 'all' })
+    expect(viewAt('/app/unsorted')).toEqual({ type: 'unsorted' })
+    expect(viewAt('/app/trash')).toEqual({ type: 'trash' })
     expect(viewAt('/folders/folder-1')).toEqual({ type: 'folder', id: 'folder-1' })
   })
 })

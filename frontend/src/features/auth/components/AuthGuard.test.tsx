@@ -13,7 +13,7 @@ function renderWithRouter(initialEntry = '/protected') {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
-        <Route path="/login" element={<div>Login page</div>} />
+        <Route path="/" element={<div>Landing page</div>} />
         <Route element={<AuthGuard />}>
           <Route path="/protected" element={<div>Protected content</div>} />
         </Route>
@@ -23,7 +23,7 @@ function renderWithRouter(initialEntry = '/protected') {
 }
 
 describe('AuthGuard', () => {
-  it('redirects to /login when unauthenticated', () => {
+  it('redirects to / when unauthenticated', () => {
     vi.mocked(useKindeAuth).mockReturnValue({
       isAuthenticated: false,
       isLoading: false,
@@ -31,7 +31,7 @@ describe('AuthGuard', () => {
 
     renderWithRouter()
 
-    expect(screen.getByText('Login page')).toBeInTheDocument()
+    expect(screen.getByText('Landing page')).toBeInTheDocument()
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 
@@ -44,6 +44,6 @@ describe('AuthGuard', () => {
     renderWithRouter()
 
     expect(screen.getByText('Protected content')).toBeInTheDocument()
-    expect(screen.queryByText('Login page')).not.toBeInTheDocument()
+    expect(screen.queryByText('Landing page')).not.toBeInTheDocument()
   })
 })

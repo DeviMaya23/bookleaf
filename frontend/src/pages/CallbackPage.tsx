@@ -11,12 +11,12 @@ export default function CallbackPage() {
     const error = searchParams.get('error')
     if (error) {
       const description = searchParams.get('error_description') ?? 'Sign-in failed. Please try again.'
-      navigate('/login', { state: { error: description }, replace: true })
+      navigate('/', { state: { error: description }, replace: true })
       return
     }
 
     if (!isLoading && isAuthenticated) {
-      navigate('/', { replace: true })
+      navigate('/app', { replace: true })
     }
   }, [isAuthenticated, isLoading, navigate, searchParams])
 

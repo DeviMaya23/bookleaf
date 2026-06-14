@@ -146,15 +146,15 @@ function renderApp(initialPath: string) {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <nav>
-          <Link to="/">All</Link>
-          <Link to="/folders/folder-1">Folder 1</Link>
-          <Link to="/folders/folder-2">Folder 2</Link>
+          <Link to="/app">All</Link>
+          <Link to="/app/folders/folder-1">Folder 1</Link>
+          <Link to="/app/folders/folder-2">Folder 2</Link>
         </nav>
         <Routes>
-          <Route path="/" element={<AppLayout />} />
-          <Route path="/unsorted" element={<AppLayout />} />
-          <Route path="/trash" element={<AppLayout />} />
-          <Route path="/folders/:folderId" element={<AppLayout />} />
+          <Route path="/app" element={<AppLayout />} />
+          <Route path="/app/unsorted" element={<AppLayout />} />
+          <Route path="/app/trash" element={<AppLayout />} />
+          <Route path="/app/folders/:folderId" element={<AppLayout />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -181,7 +181,7 @@ describe('AppLayout focus mode', () => {
   }
 
   it('enabling focus mode hides FolderSidebar and removes the ml-[240px] class from main', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     expect(screen.getByTestId('folder-sidebar')).toBeInTheDocument()
@@ -194,7 +194,7 @@ describe('AppLayout focus mode', () => {
   })
 
   it('enabling focus mode hides an open RightPanel in image mode', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Select image' }))
@@ -207,7 +207,7 @@ describe('AppLayout focus mode', () => {
 
   it('enabling focus mode hides an open RightPanel in folder mode', async () => {
     vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
-    renderApp('/folders/folder-1')
+    renderApp('/app/folders/folder-1')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
@@ -219,7 +219,7 @@ describe('AppLayout focus mode', () => {
   })
 
   it('clicking an image card while focus mode is active updates selection without rendering RightPanel, revealed once focus mode is disabled', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.click(focusToggle())
@@ -233,7 +233,7 @@ describe('AppLayout focus mode', () => {
   })
 
   it('double-clicking an image card while focus mode is active opens the viewer at full width with no RightPanel', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.click(focusToggle())
@@ -253,7 +253,7 @@ describe('AppLayout cross-feature integration', () => {
   })
 
   it('double-clicking an image opens the viewer and keeps it selected so the right panel shows once the viewer closes', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Open image' }))
@@ -266,7 +266,7 @@ describe('AppLayout cross-feature integration', () => {
   })
 
   it('deleting the active image clears its right-panel selection', async () => {
-    renderApp('/')
+    renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: 'Select image' }))

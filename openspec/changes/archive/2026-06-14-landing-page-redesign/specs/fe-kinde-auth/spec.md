@@ -1,18 +1,4 @@
-## ADDED Requirements
-
-### Requirement: KindeProvider initialised
-
-The app SHALL wrap the entire React tree with `KindeProvider` from `@kinde-oss/kinde-auth-react` in `main.tsx`, configured via `VITE_KINDE_CLIENT_ID`, `VITE_KINDE_ISSUER_URL`, `VITE_KINDE_REDIRECT_URL`, and `VITE_KINDE_LOGOUT_REDIRECT_URL` environment variables. `KindeProvider` MUST be the outermost wrapper, above `<BrowserRouter>`.
-
-#### Scenario: Provider initialises on app load
-
-- **WHEN** the app loads with all required Kinde env vars set
-- **THEN** `KindeProvider` initialises without errors and auth state is available throughout the component tree
-
-#### Scenario: Missing env vars are surfaced
-
-- **WHEN** a required Kinde env var is missing or empty
-- **THEN** the console emits a warning identifying which variable is unset
+## MODIFIED Requirements
 
 ### Requirement: Callback route
 
@@ -54,16 +40,10 @@ The app SHALL provide an `AuthGuard` layout component that wraps all protected r
 - **WHEN** `isLoading` is true on `KindeProvider` initialisation
 - **THEN** `AuthGuard` renders nothing and does not redirect
 
-### Requirement: Token-attached API client
+## REMOVED Requirements
 
-The app SHALL export an `apiFetch(path, options?)` function from `src/lib/api.ts`. Before sending any request, it SHALL retrieve the current Kinde access token via `getToken()` and attach it as `Authorization: Bearer <token>` in the request headers. The base URL for all requests SHALL be read from `VITE_API_BASE_URL`. The function SHALL be async and return a typed `Response`.
+### Requirement: Login page
 
-#### Scenario: Authenticated request includes bearer token
+**Reason**: The `/login` route is removed. Its responsibilities — a sign-in trigger, redirecting already-authenticated users away, and displaying an error passed via location state — are now provided by the public landing page at `/` (see `fe-landing-page`).
 
-- **WHEN** `apiFetch` is called while the user is authenticated
-- **THEN** the outgoing request includes `Authorization: Bearer <token>` with the current Kinde access token
-
-#### Scenario: Request uses configured base URL
-
-- **WHEN** `apiFetch('/images')` is called
-- **THEN** the request is sent to `${VITE_API_BASE_URL}/images`
+**Migration**: No user-facing migration needed. Any internal links or redirects that pointed at `/login` now point at `/`.
