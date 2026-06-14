@@ -6,6 +6,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import AppLayout from './AppLayout'
 import { getFolders } from '@/lib/folders'
 import { getTags } from '@/lib/tags'
+import { setMaintenanceActive } from '@/lib/maintenanceStore'
 import type { Image } from '@/lib/images'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
@@ -174,6 +175,7 @@ describe('AppLayout focus mode', () => {
     vi.clearAllMocks()
     vi.mocked(getFolders).mockResolvedValue([])
     vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
   })
 
   function focusToggle() {
@@ -250,6 +252,7 @@ describe('AppLayout cross-feature integration', () => {
     vi.clearAllMocks()
     vi.mocked(getFolders).mockResolvedValue([])
     vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
   })
 
   it('double-clicking an image opens the viewer and keeps it selected so the right panel shows once the viewer closes', async () => {
@@ -275,5 +278,41 @@ describe('AppLayout cross-feature integration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete image' }))
 
     expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+})
+
+describe('AppLayout maintenance mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  it('renders MaintenancePage when maintenance is active', async () => {
+    setMaintenanceActive(true)
+
+    renderApp('/app')
+
+    expect(await screen.findByTestId('maintenance-page')).toBeInTheDocument()
+    expect(screen.queryByTestId('image-grid')).not.toBeInTheDocument()
+  })
+
+  it('renders the normal shell when maintenance is inactive', async () => {
+    renderApp('/app')
+
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+    expect(screen.queryByTestId('maintenance-page')).not.toBeInTheDocument()
+  })
+
+  it('switches back to the normal shell when maintenance ends', async () => {
+    setMaintenanceActive(true)
+    renderApp('/app')
+    expect(await screen.findByTestId('maintenance-page')).toBeInTheDocument()
+
+    setMaintenanceActive(false)
+
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+    expect(screen.queryByTestId('maintenance-page')).not.toBeInTheDocument()
   })
 })

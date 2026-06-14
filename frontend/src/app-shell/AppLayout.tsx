@@ -24,6 +24,8 @@ import BatchUploadModal from '@/features/upload/components/BatchUploadModal'
 import RightPanel from '@/features/right-panel/components/RightPanel'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
+import { useMaintenanceActive } from '@/lib/maintenanceStore'
+import MaintenancePage from '@/components/MaintenancePage'
 import { useVisionSuggestion } from './useVisionSuggestion'
 import { handleFileAutoUpload } from './lib/dragHandlers'
 import type { Image } from '@/lib/images'
@@ -32,6 +34,7 @@ import { useAppView } from './useAppView'
 import { useAppDragAndDrop } from './useAppDragAndDrop'
 
 export default function AppLayout() {
+  const maintenanceActive = useMaintenanceActive()
   const view = useAppView()
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
@@ -133,6 +136,10 @@ export default function AppLayout() {
       setIsAutoUploading(false)
     }
   }, [getToken, folderId, queryClient, checkVision])
+
+  if (maintenanceActive) {
+    return <MaintenancePage />
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

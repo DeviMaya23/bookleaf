@@ -51,12 +51,18 @@ type VisionConfig struct {
 	APIKey string
 }
 
+type MaintenanceConfig struct {
+	Enabled     bool
+	BypassToken string
+}
+
 type Config struct {
 	Kinde              KindeConfig
 	DB                 DBConfig
 	R2                 R2Config
 	Obs                ObsConfig
 	Vision             VisionConfig
+	Maintenance        MaintenanceConfig
 	Port               string
 	CORSAllowedOrigins []string
 }
@@ -186,6 +192,9 @@ func loadFromEnv() (*Config, error) {
 	visionAPIKey := envWithDefault("GOOGLE_VISION_API_KEY", "")
 	port := envWithDefault("PORT", "8080")
 
+	maintenanceEnabled := envWithDefault("MAINTENANCE_MODE", "false") == "true"
+	maintenanceBypassToken := envWithDefault("MAINTENANCE_BYPASS_TOKEN", "")
+
 	sampleRatioStr := envWithDefault("OTEL_SAMPLE_RATIO", "0.1")
 	sampleRatio, err := strconv.ParseFloat(sampleRatioStr, 64)
 	if err != nil {
@@ -225,6 +234,10 @@ func loadFromEnv() (*Config, error) {
 		},
 		Vision: VisionConfig{
 			APIKey: visionAPIKey,
+		},
+		Maintenance: MaintenanceConfig{
+			Enabled:     maintenanceEnabled,
+			BypassToken: maintenanceBypassToken,
 		},
 		Port:               port,
 		CORSAllowedOrigins: strings.Split(corsAllowedOriginsRaw, ","),

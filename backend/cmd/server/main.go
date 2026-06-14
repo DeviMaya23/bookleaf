@@ -123,6 +123,10 @@ func initEcho(cfg *config.Config) *echo.Echo {
 		AllowHeaders: []string{
 			echo.HeaderAuthorization,
 			echo.HeaderContentType,
+			"X-Bookleaf-Bypass",
+		},
+		ExposeHeaders: []string{
+			"X-Bookleaf-Maintenance",
 		},
 	}))
 	return e
@@ -288,6 +292,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	e.GET("/health", healthHandler.GetHealth)
 
 	protected := e.Group("")
+	protected.Use(authmiddleware.NewMaintenanceMiddleware(cfg.Maintenance))
 	protected.Use(authMiddleware)
 	protected.Use(observability.LoggingMiddleware(tel, authmiddleware.AuthenticatedUserIDFromContext))
 	protected.GET("/me", meHandler.GetMe)
