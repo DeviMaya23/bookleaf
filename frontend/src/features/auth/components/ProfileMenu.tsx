@@ -26,19 +26,17 @@ export default function ProfileMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger>
-          <button className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent text-left">
-            <Avatar className="h-7 w-7 shrink-0">
-              <AvatarImage src={profile?.picture ?? undefined} />
-              <AvatarFallback className="text-xs">
-                {profile ? getInitials(profile) : '…'}
-              </AvatarFallback>
-            </Avatar>
-            <span className="truncate font-medium text-foreground">
-              {profile ? getFullName(profile) : '…'}
-            </span>
-            <ChevronUp className="ml-auto h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          </button>
+        <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent text-left">
+          <Avatar className="h-7 w-7 shrink-0">
+            <AvatarImage src={profile?.picture ?? undefined} />
+            <AvatarFallback className="text-xs">
+              {profile ? getInitials(profile) : '…'}
+            </AvatarFallback>
+          </Avatar>
+          <span className="truncate font-medium text-foreground">
+            {profile ? getFullName(profile) : '…'}
+          </span>
+          <ChevronUp className="ml-auto h-3.5 w-3.5 text-muted-foreground shrink-0" />
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="start" className="w-[220px]">
           {profile?.email && (
