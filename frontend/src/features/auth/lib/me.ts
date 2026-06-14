@@ -12,3 +12,8 @@ export async function getMe(getToken: GetToken): Promise<Me> {
   if (!res.ok) throw new Error('Failed to fetch user profile')
   return res.json()
 }
+
+export async function deleteMe(getToken: GetToken): Promise<void> {
+  const res = await apiFetch('/me', getToken, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete account')
+}

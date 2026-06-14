@@ -44,6 +44,15 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
       onClick?: () => void
       className?: string
     }) => React.createElement('button', { onClick, className }, children),
+    DropdownMenuSeparator: () => React.createElement('hr'),
+  }
+})
+
+vi.mock('@/features/settings/components/SettingsModal', async () => {
+  const React = await import('react')
+  return {
+    default: ({ open }: { open: boolean; onOpenChange: (open: boolean) => void }) =>
+      open ? React.createElement('div', { 'data-testid': 'settings-modal' }, 'Settings Modal') : null,
   }
 })
 
@@ -112,5 +121,25 @@ describe('ProfileMenu', () => {
 
     await userEvent.click(screen.getByText('Sign out'))
     expect(mockLogout).toHaveBeenCalledOnce()
+  })
+
+  it('opens the SettingsModal when Settings is clicked', async () => {
+    mockGetUserProfile.mockResolvedValue({
+      id: 'kp_4',
+      givenName: 'Jane',
+      familyName: 'Doe',
+      email: 'jane@example.com',
+      picture: null,
+    })
+
+    renderProfileMenu()
+
+    await waitFor(() => screen.getByText('JD'))
+
+    expect(screen.queryByTestId('settings-modal')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Settings'))
+
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument()
   })
 })
