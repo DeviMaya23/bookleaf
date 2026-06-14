@@ -83,6 +83,42 @@ describe('FolderPanelContent — empty name scenario', () => {
   })
 })
 
+describe('FolderPanelContent — image count subtitle', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(updateFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '' })
+    vi.mocked(exportFolder).mockResolvedValue(new Blob())
+  })
+
+  it('shows the plural label for multiple images', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 12 })
+    renderPanel()
+
+    expect(await screen.findByText('12 images')).toBeInTheDocument()
+  })
+
+  it('shows the singular label for one image', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 1 })
+    renderPanel()
+
+    expect(await screen.findByText('1 image')).toBeInTheDocument()
+  })
+
+  it('shows the plural label for zero images', async () => {
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 0 })
+    renderPanel()
+
+    expect(await screen.findByText('0 images')).toBeInTheDocument()
+  })
+
+  it('does not show a count while the folder detail is loading', async () => {
+    vi.mocked(getFolder).mockReturnValue(new Promise(() => {}))
+    renderPanel()
+
+    expect(screen.queryByText(/image/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('FolderPanelContent — export folder button', () => {
   beforeEach(() => {
     vi.clearAllMocks()

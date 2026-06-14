@@ -12,6 +12,10 @@ interface FolderPanelContentProps {
   onClose: () => void
 }
 
+function formatImageCount(count: number): string {
+  return count === 1 ? '1 image' : `${count} images`
+}
+
 export default function FolderPanelContent({ folder, onClose }: FolderPanelContentProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
@@ -72,6 +76,9 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
           onBlur={nameField.onBlur}
           className="w-full text-base font-semibold bg-transparent border-b border-transparent focus:border-border focus:bg-muted/40 outline-none px-0 py-0.5 transition-colors"
         />
+        {folderDetail && (
+          <p className="text-xs text-muted-foreground mt-0.5">{formatImageCount(folderDetail.image_count)}</p>
+        )}
         <button
           onClick={onClose}
           className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
