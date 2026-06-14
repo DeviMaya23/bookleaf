@@ -71,6 +71,21 @@ func (r *userRepository) HardDelete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *userRepository) Update(ctx context.Context, id string, fields map[string]any) (*domain.User, error) {
+	result := r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Where("id = ?", id).
+		Updates(fields)
+	if result.Error != nil {
+		return nil, fmt.Errorf("update user: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, fmt.Errorf("update user: %w", gorm.ErrRecordNotFound)
+	}
+
+	return r.GetByID(ctx, id)
+}
+
 func (r *userRepository) ListPendingKindeDeletion(ctx context.Context) ([]*domain.User, error) {
 	var users []*domain.User
 	if err := r.db.WithContext(ctx).

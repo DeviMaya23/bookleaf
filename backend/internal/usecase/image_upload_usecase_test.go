@@ -90,6 +90,9 @@ func (s *stubUserRepo) HardDelete(_ context.Context, _ string) error {
 func (s *stubUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
 	return nil, nil
 }
+func (s *stubUserRepo) Update(_ context.Context, _ string, _ map[string]any) (*domain.User, error) {
+	return s.user, nil
+}
 
 type stubImageFolderRepo struct {
 	folder *domain.Folder

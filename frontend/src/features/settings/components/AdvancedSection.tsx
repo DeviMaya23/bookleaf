@@ -1,17 +1,29 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
-import { getMe } from '@/features/auth/lib/me'
+import { getMe, updateMe } from '@/features/auth/lib/me'
 
 export default function AdvancedSection() {
   const { getToken } = useKindeAuth()
+  const queryClient = useQueryClient()
   const [tooltipOpen, setTooltipOpen] = useState(false)
 
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => getMe(getToken),
     staleTime: Infinity,
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (visionEnabled: boolean) => updateMe(getToken, { vision_enabled: visionEnabled }),
+    onSuccess: (updatedMe) => {
+      queryClient.setQueryData(['me'], updatedMe)
+    },
+    onError: () => {
+      toast.error('Failed to update settings')
+    },
   })
 
   const visionEnabled = me?.vision_enabled ?? false
@@ -50,7 +62,11 @@ export default function AdvancedSection() {
             {visionEnabled ? 'Active — folder suggestions on upload' : 'Disabled — all AI features are off'}
           </p>
         </div>
-        <Switch checked={visionEnabled} disabled />
+        <Switch
+          checked={visionEnabled}
+          onCheckedChange={(checked) => updateMutation.mutate(checked)}
+          disabled={updateMutation.isPending}
+        />
       </div>
     </div>
   )

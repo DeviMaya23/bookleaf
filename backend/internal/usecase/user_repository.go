@@ -15,4 +15,6 @@ type UserRepository interface {
 	HardDelete(ctx context.Context, id string) error
 	// ListPendingKindeDeletion returns all users with pending_kinde_deletion = true.
 	ListPendingKindeDeletion(ctx context.Context) ([]*domain.User, error)
+	// Update applies a partial update to the user's row and returns the updated record.
+	Update(ctx context.Context, id string, fields map[string]any) (*domain.User, error)
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -13,6 +14,7 @@ import (
 
 type UserUsecase interface {
 	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
+	UpdateVisionEnabled(ctx context.Context, id string, enabled bool) (*domain.User, error)
 }
 
 type AccountUsecase interface {
@@ -23,6 +25,10 @@ type MeHandler struct {
 	userUsecase    UserUsecase
 	accountUsecase AccountUsecase
 	tel            *observability.Telemetry
+}
+
+type updateMeRequest struct {
+	VisionEnabled json.RawMessage `json:"vision_enabled"`
 }
 
 func NewMeHandler(userUsecase UserUsecase, accountUsecase AccountUsecase, tel *observability.Telemetry) *MeHandler {
@@ -47,6 +53,42 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch authenticated user")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"id":             user.ID,
+		"vision_enabled": user.VisionEnabled,
+	})
+}
+
+func (h *MeHandler) UpdateMe(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateMe")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req updateMeRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	if len(req.VisionEnabled) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled is required")
+	}
+
+	var visionEnabled bool
+	if err := json.Unmarshal(req.VisionEnabled, &visionEnabled); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled must be a boolean")
+	}
+
+	user, err := h.userUsecase.UpdateVisionEnabled(ctx, userID, visionEnabled)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update user")
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
