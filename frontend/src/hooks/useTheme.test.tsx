@@ -24,6 +24,24 @@ describe('useTheme', () => {
     expect(document.documentElement.dataset.theme).toBe('warm')
   })
 
+  it('restores a stored lumen theme preference on load', () => {
+    localStorage.setItem('bookleaf-theme', 'lumen')
+
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider })
+
+    expect(result.current.theme).toBe('lumen')
+    expect(document.documentElement.dataset.theme).toBe('lumen')
+  })
+
+  it('restores a stored sunless theme preference on load', () => {
+    localStorage.setItem('bookleaf-theme', 'sunless')
+
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider })
+
+    expect(result.current.theme).toBe('sunless')
+    expect(document.documentElement.dataset.theme).toBe('sunless')
+  })
+
   it('setTheme updates the data-theme attribute and localStorage', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider })
 
@@ -31,6 +49,24 @@ describe('useTheme', () => {
 
     expect(document.documentElement.dataset.theme).toBe('warm')
     expect(localStorage.getItem('bookleaf-theme')).toBe('warm')
+  })
+
+  it('setTheme updates the data-theme attribute and localStorage to lumen', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider })
+
+    act(() => result.current.setTheme('lumen'))
+
+    expect(document.documentElement.dataset.theme).toBe('lumen')
+    expect(localStorage.getItem('bookleaf-theme')).toBe('lumen')
+  })
+
+  it('setTheme updates the data-theme attribute and localStorage to sunless', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider })
+
+    act(() => result.current.setTheme('sunless'))
+
+    expect(document.documentElement.dataset.theme).toBe('sunless')
+    expect(localStorage.getItem('bookleaf-theme')).toBe('sunless')
   })
 
   it('throws when used outside of ThemeProvider', () => {
