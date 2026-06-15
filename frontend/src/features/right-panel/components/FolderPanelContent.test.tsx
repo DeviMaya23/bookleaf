@@ -14,9 +14,46 @@ vi.mock('@/lib/folders', () => ({
   exportFolder: vi.fn(),
 }))
 
+vi.mock('@/lib/share', () => ({
+  getFolderShare: vi.fn(),
+  createFolderShare: vi.fn(),
+  deleteFolderShare: vi.fn(),
+}))
+
+vi.mock('@/components/ui/dialog', async () => {
+  const React = await import('react')
+  return {
+    Dialog: ({ open, children }: { open: boolean; onOpenChange?: (v: boolean) => void; children: React.ReactNode }) =>
+      open ? React.createElement(React.Fragment, null, children) : null,
+    DialogContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('div', { role: 'dialog' }, children),
+    DialogHeader: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    DialogTitle: ({ children }: { children: React.ReactNode }) =>
+      React.createElement('h2', null, children),
+    DialogFooter: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+  }
+})
+
+const mockToastSuccess = vi.fn()
+const mockToastError = vi.fn()
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
+}))
+
 import { updateFolder, getFolder, exportFolder } from '@/lib/folders'
+import { getFolderShare, createFolderShare, deleteFolderShare } from '@/lib/share'
 
 const folder = { id: 'folder-1', name: 'Nature', description: 'Outdoor shots' }
+
+beforeEach(() => {
+  vi.mocked(getFolderShare).mockResolvedValue(null)
+})
 
 function renderPanel() {
   const queryClient = new QueryClient({
@@ -186,5 +223,135 @@ describe('FolderPanelContent — export folder button', () => {
       expect(screen.getByRole('button', { name: /export folder/i })).not.toBeDisabled()
     })
     expect(exportFolder).toHaveBeenCalledWith(expect.any(Function), 'folder-1')
+  })
+})
+
+describe('FolderPanelContent — share folder section', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolder).mockResolvedValue({ ...folder, parent_id: null, created_at: '', updated_at: '', image_count: 1 })
+    vi.mocked(exportFolder).mockResolvedValue(new Blob())
+  })
+
+  it('shows the switch off and no link field when sharing is off', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue(null)
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+    expect(screen.queryByDisplayValue(/\/share\//)).not.toBeInTheDocument()
+  })
+
+  it('shows the switch on and the link field when sharing is on', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue({ token: 'abc123' })
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+    expect(screen.getByDisplayValue(`${window.location.origin}/share/abc123`)).toBeInTheDocument()
+  })
+
+  it('enables sharing and shows the link field when the switch is turned on', async () => {
+    vi.mocked(getFolderShare).mockResolvedValueOnce(null).mockResolvedValue({ token: 'new-token' })
+    vi.mocked(createFolderShare).mockResolvedValue({ token: 'new-token' })
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    expect(createFolderShare).toHaveBeenCalledWith(expect.any(Function), 'folder-1')
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(`${window.location.origin}/share/new-token`)).toBeInTheDocument()
+    })
+  })
+
+  it('opens a confirm dialog when turning sharing off, and disables sharing on confirm', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue({ token: 'abc123' })
+    vi.mocked(deleteFolderShare).mockResolvedValue(undefined)
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByRole('switch'))
+
+    expect(screen.getByRole('heading', { name: /disable sharing/i })).toBeInTheDocument()
+    expect(deleteFolderShare).not.toHaveBeenCalled()
+
+    vi.mocked(getFolderShare).mockResolvedValue(null)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Disable' }))
+
+    expect(deleteFolderShare).toHaveBeenCalledWith(expect.any(Function), 'folder-1')
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+    })
+    expect(screen.queryByDisplayValue(/\/share\//)).not.toBeInTheDocument()
+  })
+
+  it('cancelling the confirm dialog leaves sharing on and makes no request', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue({ token: 'abc123' })
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByRole('switch'))
+    expect(screen.getByRole('heading', { name: /disable sharing/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(deleteFolderShare).not.toHaveBeenCalled()
+    expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    expect(screen.getByDisplayValue(`${window.location.origin}/share/abc123`)).toBeInTheDocument()
+  })
+
+  it('copies the share link to the clipboard and shows a success toast', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue({ token: 'abc123' })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /copy share link/i }))
+
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/share/abc123`)
+    await waitFor(() => {
+      expect(mockToastSuccess).toHaveBeenCalledWith('Link copied')
+    })
+  })
+
+  it('shows an error toast when copying the share link fails', async () => {
+    vi.mocked(getFolderShare).mockResolvedValue({ token: 'abc123' })
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard unavailable'))
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    renderPanel()
+
+    await waitFor(() => {
+      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /copy share link/i }))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Failed to copy link')
+    })
   })
 })
