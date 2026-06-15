@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"testing"
 
+	"github.com/devi/bookleaf/internal/domain"
 	authmw "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
@@ -22,6 +24,7 @@ type mockShareUsecase struct {
 	token        string
 	created      bool
 	sharedFolder *usecase.SharedFolder
+	folder       *domain.Folder
 	err          error
 }
 
@@ -39,6 +42,26 @@ func (m *mockShareUsecase) DeleteShare(_ context.Context, _ uuid.UUID, _ string)
 
 func (m *mockShareUsecase) GetSharedFolder(_ context.Context, _ string) (*usecase.SharedFolder, error) {
 	return m.sharedFolder, m.err
+}
+
+func (m *mockShareUsecase) GetSharedFolderInfo(_ context.Context, _ string) (*domain.Folder, error) {
+	return m.folder, m.err
+}
+
+// mockFolderExporter is a value-return spy for FolderExporter.
+type mockFolderExporter struct {
+	exportBytes []byte
+	exportErr   error
+	called      bool
+}
+
+func (m *mockFolderExporter) ExportFolder(_ context.Context, _ uuid.UUID, _ string, w io.Writer) error {
+	m.called = true
+	if m.exportErr != nil {
+		return m.exportErr
+	}
+	_, err := w.Write(m.exportBytes)
+	return err
 }
 
 // --- CreateShare ---
@@ -76,7 +99,7 @@ func TestShareHandler_CreateShare(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewShareHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
+			h := NewShareHandler(tt.uc, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodPost, "/folders/"+folderID.String()+"/share", "")
 			c.SetPath("/folders/:id/share")
 			c.SetParamNames("id")
@@ -99,7 +122,7 @@ func TestShareHandler_CreateShare(t *testing.T) {
 }
 
 func TestShareHandler_CreateShare_InvalidUUID(t *testing.T) {
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodPost, "/folders/not-a-uuid/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -112,7 +135,7 @@ func TestShareHandler_CreateShare_InvalidUUID(t *testing.T) {
 
 func TestShareHandler_CreateShare_MissingAuthContext(t *testing.T) {
 	folderID := uuid.New()
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodPost, "/folders/"+folderID.String()+"/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -152,7 +175,7 @@ func TestShareHandler_GetShare(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewShareHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
+			h := NewShareHandler(tt.uc, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodGet, "/folders/"+folderID.String()+"/share", "")
 			c.SetPath("/folders/:id/share")
 			c.SetParamNames("id")
@@ -175,7 +198,7 @@ func TestShareHandler_GetShare(t *testing.T) {
 }
 
 func TestShareHandler_GetShare_InvalidUUID(t *testing.T) {
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/folders/not-a-uuid/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -188,7 +211,7 @@ func TestShareHandler_GetShare_InvalidUUID(t *testing.T) {
 
 func TestShareHandler_GetShare_MissingAuthContext(t *testing.T) {
 	folderID := uuid.New()
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/folders/"+folderID.String()+"/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -228,7 +251,7 @@ func TestShareHandler_DeleteShare(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewShareHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
+			h := NewShareHandler(tt.uc, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 			c, rec := newEchoContext(t, http.MethodDelete, "/folders/"+folderID.String()+"/share", "")
 			c.SetPath("/folders/:id/share")
 			c.SetParamNames("id")
@@ -247,7 +270,7 @@ func TestShareHandler_DeleteShare(t *testing.T) {
 }
 
 func TestShareHandler_DeleteShare_InvalidUUID(t *testing.T) {
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodDelete, "/folders/not-a-uuid/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -260,7 +283,7 @@ func TestShareHandler_DeleteShare_InvalidUUID(t *testing.T) {
 
 func TestShareHandler_DeleteShare_MissingAuthContext(t *testing.T) {
 	folderID := uuid.New()
-	h := NewShareHandler(&mockShareUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodDelete, "/folders/"+folderID.String()+"/share", "")
 	c.SetPath("/folders/:id/share")
 	c.SetParamNames("id")
@@ -287,7 +310,7 @@ func TestShareHandler_GetSharedFolder_Success(t *testing.T) {
 			},
 		},
 	}
-	h := NewShareHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(uc, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/share/tok_abc123", "")
 	c.SetPath("/share/:token")
 	c.SetParamNames("token")
@@ -313,7 +336,7 @@ func TestShareHandler_GetSharedFolder_Success(t *testing.T) {
 }
 
 func TestShareHandler_GetSharedFolder_UnknownToken(t *testing.T) {
-	h := NewShareHandler(&mockShareUsecase{err: gorm.ErrRecordNotFound}, observability.NewTelemetry(nil, nil, nil))
+	h := NewShareHandler(&mockShareUsecase{err: gorm.ErrRecordNotFound}, &mockFolderExporter{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/share/unknown-token", "")
 	c.SetPath("/share/:token")
 	c.SetParamNames("token")
@@ -322,4 +345,65 @@ func TestShareHandler_GetSharedFolder_UnknownToken(t *testing.T) {
 	err := h.GetSharedFolder(c)
 
 	assertHTTPError(t, err, http.StatusNotFound)
+}
+
+// --- ExportSharedFolder ---
+
+func TestShareHandler_ExportSharedFolder(t *testing.T) {
+	folderID := uuid.New()
+
+	tests := []struct {
+		name          string
+		uc            *mockShareUsecase
+		exporter      *mockFolderExporter
+		wantErrStatus int
+		wantFilename  string
+	}{
+		{
+			name:         "returns 200 with zip headers",
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "My Folder"}},
+			exporter:     &mockFolderExporter{exportBytes: []byte("zip-bytes")},
+			wantFilename: `attachment; filename="My Folder.zip"`,
+		},
+		{
+			name:         "sanitizes folder name with invalid filename characters",
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "Trip / 2024"}},
+			exporter:     &mockFolderExporter{},
+			wantFilename: `attachment; filename="Trip  2024.zip"`,
+		},
+		{
+			name:         "falls back to export.zip when name sanitizes to empty",
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "///"}},
+			exporter:     &mockFolderExporter{},
+			wantFilename: `attachment; filename="export.zip"`,
+		},
+		{
+			name:          "returns 404 for unknown token",
+			uc:            &mockShareUsecase{err: gorm.ErrRecordNotFound},
+			exporter:      &mockFolderExporter{},
+			wantErrStatus: http.StatusNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewShareHandler(tt.uc, tt.exporter, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodGet, "/share/tok_abc123/export", "")
+			c.SetPath("/share/:token/export")
+			c.SetParamNames("token")
+			c.SetParamValues("tok_abc123")
+
+			err := h.ExportSharedFolder(c)
+
+			if tt.wantErrStatus != 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+				assert.False(t, tt.exporter.called)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "application/zip", rec.Header().Get("Content-Type"))
+			assert.Equal(t, tt.wantFilename, rec.Header().Get("Content-Disposition"))
+		})
+	}
 }

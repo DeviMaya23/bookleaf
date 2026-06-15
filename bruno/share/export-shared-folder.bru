@@ -1,0 +1,11 @@
+meta {
+  name: Export Shared Folder
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/share/{{shareToken}}/export
+  body: none
+  auth: none
+}

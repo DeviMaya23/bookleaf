@@ -170,6 +170,20 @@ func (u *shareUsecase) thumbnailURL(ctx context.Context, path *string) *string {
 	return &url
 }
 
+func (u *shareUsecase) GetSharedFolderInfo(ctx context.Context, token string) (*domain.Folder, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetSharedFolderInfo")
+	defer span.End()
+
+	share, err := u.folderShareRepo.GetByToken(ctx, token)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	return &share.Folder, nil
+}
+
 func (u *shareUsecase) GetSharedFolder(ctx context.Context, token string) (*SharedFolder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetSharedFolder")
 	defer span.End()

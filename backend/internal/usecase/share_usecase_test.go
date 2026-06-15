@@ -227,6 +227,36 @@ func TestShareUsecase_GetSharedFolder_UnknownToken(t *testing.T) {
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
+// --- GetSharedFolderInfo ---
+
+func TestShareUsecase_GetSharedFolderInfo_ValidToken(t *testing.T) {
+	folderID := uuid.New()
+	share := &domain.FolderShare{
+		ID:       uuid.New(),
+		FolderID: folderID,
+		Token:    "tok_abc123",
+		Folder:   domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "travel"},
+	}
+	folderShareRepo := newFakeFolderShareRepo(share)
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	folder, err := uc.GetSharedFolderInfo(context.Background(), "tok_abc123")
+
+	require.NoError(t, err)
+	assert.Equal(t, folderID, folder.ID)
+	assert.Equal(t, "travel", folder.Name)
+	assert.Equal(t, "kp_abc123", folder.UserID)
+}
+
+func TestShareUsecase_GetSharedFolderInfo_UnknownToken(t *testing.T) {
+	folderShareRepo := newFakeFolderShareRepo()
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	_, err := uc.GetSharedFolderInfo(context.Background(), "unknown-token")
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
 func TestShareUsecase_GetSharedFolder_EmptyFolder(t *testing.T) {
 	folderID := uuid.New()
 	share := &domain.FolderShare{

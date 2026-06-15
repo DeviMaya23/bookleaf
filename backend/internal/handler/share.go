@@ -3,14 +3,18 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -19,17 +23,26 @@ type ShareUsecase interface {
 	GetShare(ctx context.Context, folderID uuid.UUID, userID string) (token string, err error)
 	DeleteShare(ctx context.Context, folderID uuid.UUID, userID string) error
 	GetSharedFolder(ctx context.Context, token string) (*usecase.SharedFolder, error)
+	GetSharedFolderInfo(ctx context.Context, token string) (*domain.Folder, error)
+}
+
+// FolderExporter is the narrow export capability ShareHandler needs,
+// satisfied implicitly by the existing folderUsecase.
+type FolderExporter interface {
+	ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error
 }
 
 type ShareHandler struct {
-	shareUsecase ShareUsecase
-	tel          *observability.Telemetry
+	shareUsecase   ShareUsecase
+	folderExporter FolderExporter
+	tel            *observability.Telemetry
 }
 
-func NewShareHandler(shareUsecase ShareUsecase, tel *observability.Telemetry) *ShareHandler {
+func NewShareHandler(shareUsecase ShareUsecase, folderExporter FolderExporter, tel *observability.Telemetry) *ShareHandler {
 	return &ShareHandler{
-		shareUsecase: shareUsecase,
-		tel:          tel,
+		shareUsecase:   shareUsecase,
+		folderExporter: folderExporter,
+		tel:            tel,
 	}
 }
 
@@ -166,4 +179,37 @@ func (h *ShareHandler) GetSharedFolder(c echo.Context) error {
 		Folder: sharedFolderInfo{Name: shared.Name, Notes: shared.Notes},
 		Images: images,
 	})
+}
+
+func (h *ShareHandler) ExportSharedFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ExportSharedFolder")
+	defer span.End()
+
+	token := c.Param("token")
+
+	folder, err := h.shareUsecase.GetSharedFolderInfo(ctx, token)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "share not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get shared folder")
+	}
+
+	filename := sanitizeFilename(folder.Name) + ".zip"
+	c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+	c.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("attachment; filename=%q", filename))
+	c.Response().WriteHeader(http.StatusOK)
+
+	if err := h.folderExporter.ExportFolder(ctx, folder.ID, folder.UserID, c.Response()); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		observability.LoggerFromContext(ctx, h.tel.Logger).Error("export shared folder failed",
+			zap.Error(err),
+			zap.String("folder_id", folder.ID.String()),
+		)
+	}
+
+	return nil
 }
