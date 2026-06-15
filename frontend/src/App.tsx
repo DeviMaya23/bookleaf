@@ -7,6 +7,7 @@ import CallbackPage from './pages/CallbackPage'
 import AboutPage from './pages/AboutPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import AiNotesPage from './pages/AiNotesPage'
+import SharePage from './features/share-viewer/components/SharePage'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/ai-notes" element={<AiNotesPage />} />
+        <Route path="/share/:token" element={<SharePage />} />
       </Route>
       <Route path="/callback" element={<CallbackPage />} />
       <Route path="/app" element={<AuthGuard />}>

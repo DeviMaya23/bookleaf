@@ -32,6 +32,9 @@ type SharedImage struct {
 	Title        string
 	ThumbnailURL *string
 	FullResURL   string
+	DownloadURL  string
+	Width        *int
+	Height       *int
 }
 
 type SharedFolder struct {
@@ -210,10 +213,20 @@ func (u *shareUsecase) GetSharedFolder(ctx context.Context, token string) (*Shar
 			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("generate presigned url: %w", err)
 		}
+		filename := img.Title + "." + downloadFileExtension(img.MIMEType)
+		downloadURL, err := u.store.GeneratePresignedDownloadURL(ctx, img.R2Path, filename, presignedGetTTL)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("generate presigned download url: %w", err)
+		}
 		images[i] = SharedImage{
 			Title:        img.Title,
 			ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath),
 			FullResURL:   fullResURL,
+			DownloadURL:  downloadURL,
+			Width:        img.Width,
+			Height:       img.Height,
 		}
 	}
 
