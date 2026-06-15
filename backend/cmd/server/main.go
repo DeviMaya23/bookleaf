@@ -11,8 +11,8 @@ import (
 
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/kinde"
 	"github.com/devi/bookleaf/internal/platform/config"
-	"github.com/devi/bookleaf/internal/platform/kinde"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
