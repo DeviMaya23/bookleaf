@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { ChevronLeft, FlipHorizontal, Focus, RotateCw } from 'lucide-react'
+import { ChevronLeft, FlipHorizontal, Focus, Loader2, RotateCw } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { getImage } from '@/lib/images'
 import type { Image } from '@/lib/images'
@@ -33,7 +33,12 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const displaySrc = imageDetail?.image_url ?? image.thumbnail_url
+  const displaySrc = imageDetail?.image_url
+
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    setLoaded(false)
+  }, [displaySrc])
 
   return (
     <div className="flex flex-col w-full h-full">
@@ -88,13 +93,46 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
         style={{ cursor: dragging ? 'grabbing' : 'grab' }}
         {...dragHandlers}
       >
+        {image.thumbnail_url && !loaded && (
+          <img
+            src={image.thumbnail_url}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform,
+              width: image.width ?? undefined,
+              height: image.height ?? undefined,
+              objectFit: 'contain',
+              filter: 'blur(16px)',
+            }}
+          />
+        )}
         {displaySrc && (
           <img
             src={displaySrc}
             alt={image.title}
             draggable={false}
-            style={{ position: 'absolute', left: '50%', top: '50%', transform }}
+            onLoad={() => setLoaded(true)}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform,
+              width: image.width ?? undefined,
+              height: image.height ?? undefined,
+              objectFit: 'contain',
+              opacity: loaded ? 1 : 0,
+            }}
           />
+        )}
+        {!loaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-white drop-shadow" />
+          </div>
         )}
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-3 py-1 rounded-full whitespace-nowrap pointer-events-none">
           {`${image.title} · ${image.width} × ${image.height}`}
