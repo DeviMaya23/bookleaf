@@ -48,6 +48,13 @@ func (s *spyShareStorage) GeneratePresignedGetURL(_ context.Context, key string,
 	return s.url + "?key=" + key, nil
 }
 
+func (s *spyShareStorage) GeneratePresignedDownloadURL(_ context.Context, key, filename string, _ time.Duration) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.url + "?key=" + key + "&filename=" + filename, nil
+}
+
 func newTestShareUsecase(folderShareRepo FolderShareRepository, folderRepo ShareFolderRepository, imageRepo ShareImageRepository, store StorageService) *shareUsecase {
 	return NewShareUsecase(folderShareRepo, folderRepo, imageRepo, store, noopTel())
 }
@@ -194,8 +201,9 @@ func TestShareUsecase_GetSharedFolder_AssemblesFolderAndImages(t *testing.T) {
 		},
 	}
 	folderShareRepo := newFakeFolderShareRepo(share)
+	width, height := 800, 600
 	images := []*domain.Image{
-		{ID: uuid.New(), Title: "first", R2Path: "users/kp_abc123/images/a.jpg", ThumbnailPath: &thumbnailPath},
+		{ID: uuid.New(), Title: "first", R2Path: "users/kp_abc123/images/a.jpg", ThumbnailPath: &thumbnailPath, MIMEType: "image/jpeg", Width: &width, Height: &height},
 		{ID: uuid.New(), Title: "second", R2Path: "users/kp_abc123/images/b.jpg"},
 	}
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{images: images}, &spyShareStorage{url: "https://r2.example.com/presigned"})
@@ -212,10 +220,18 @@ func TestShareUsecase_GetSharedFolder_AssemblesFolderAndImages(t *testing.T) {
 	require.NotNil(t, result.Images[0].ThumbnailURL)
 	assert.Equal(t, "https://r2.example.com/presigned?key="+thumbnailPath, *result.Images[0].ThumbnailURL)
 	assert.Equal(t, "https://r2.example.com/presigned?key=users/kp_abc123/images/a.jpg", result.Images[0].FullResURL)
+	assert.Equal(t, "https://r2.example.com/presigned?key=users/kp_abc123/images/a.jpg&filename=first.jpg", result.Images[0].DownloadURL)
+	require.NotNil(t, result.Images[0].Width)
+	assert.Equal(t, 800, *result.Images[0].Width)
+	require.NotNil(t, result.Images[0].Height)
+	assert.Equal(t, 600, *result.Images[0].Height)
 
 	assert.Equal(t, "second", result.Images[1].Title)
 	assert.Nil(t, result.Images[1].ThumbnailURL)
 	assert.Equal(t, "https://r2.example.com/presigned?key=users/kp_abc123/images/b.jpg", result.Images[1].FullResURL)
+	assert.Equal(t, "https://r2.example.com/presigned?key=users/kp_abc123/images/b.jpg&filename=second.bin", result.Images[1].DownloadURL)
+	assert.Nil(t, result.Images[1].Width)
+	assert.Nil(t, result.Images[1].Height)
 }
 
 func TestShareUsecase_GetSharedFolder_UnknownToken(t *testing.T) {

@@ -59,6 +59,9 @@ type sharedImageResponse struct {
 	Title        string  `json:"title"`
 	ThumbnailURL *string `json:"thumbnail_url"`
 	FullResURL   string  `json:"full_res_url"`
+	DownloadURL  string  `json:"download_url"`
+	Width        *int    `json:"width"`
+	Height       *int    `json:"height"`
 }
 
 type sharedFolderResponse struct {
@@ -172,6 +175,9 @@ func (h *ShareHandler) GetSharedFolder(c echo.Context) error {
 			Title:        img.Title,
 			ThumbnailURL: img.ThumbnailURL,
 			FullResURL:   img.FullResURL,
+			DownloadURL:  img.DownloadURL,
+			Width:        img.Width,
+			Height:       img.Height,
 		}
 	}
 

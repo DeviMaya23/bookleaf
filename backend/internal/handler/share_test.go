@@ -300,13 +300,14 @@ func TestShareHandler_DeleteShare_MissingAuthContext(t *testing.T) {
 func TestShareHandler_GetSharedFolder_Success(t *testing.T) {
 	notes := "trip board"
 	thumbnailURL := "https://r2.example.com/thumb.jpg"
+	width, height := 800, 600
 	uc := &mockShareUsecase{
 		sharedFolder: &usecase.SharedFolder{
 			Name:  "travel",
 			Notes: &notes,
 			Images: []usecase.SharedImage{
-				{Title: "first", ThumbnailURL: &thumbnailURL, FullResURL: "https://r2.example.com/full.jpg"},
-				{Title: "second", ThumbnailURL: nil, FullResURL: "https://r2.example.com/full2.jpg"},
+				{Title: "first", ThumbnailURL: &thumbnailURL, FullResURL: "https://r2.example.com/full.jpg", DownloadURL: "https://r2.example.com/full.jpg?download", Width: &width, Height: &height},
+				{Title: "second", ThumbnailURL: nil, FullResURL: "https://r2.example.com/full2.jpg", DownloadURL: "https://r2.example.com/full2.jpg?download"},
 			},
 		},
 	}
@@ -331,8 +332,16 @@ func TestShareHandler_GetSharedFolder_Success(t *testing.T) {
 	require.NotNil(t, body.Images[0].ThumbnailURL)
 	assert.Equal(t, thumbnailURL, *body.Images[0].ThumbnailURL)
 	assert.Equal(t, "https://r2.example.com/full.jpg", body.Images[0].FullResURL)
+	assert.Equal(t, "https://r2.example.com/full.jpg?download", body.Images[0].DownloadURL)
+	require.NotNil(t, body.Images[0].Width)
+	assert.Equal(t, 800, *body.Images[0].Width)
+	require.NotNil(t, body.Images[0].Height)
+	assert.Equal(t, 600, *body.Images[0].Height)
 	assert.Equal(t, "second", body.Images[1].Title)
 	assert.Nil(t, body.Images[1].ThumbnailURL)
+	assert.Equal(t, "https://r2.example.com/full2.jpg?download", body.Images[1].DownloadURL)
+	assert.Nil(t, body.Images[1].Width)
+	assert.Nil(t, body.Images[1].Height)
 }
 
 func TestShareHandler_GetSharedFolder_UnknownToken(t *testing.T) {
