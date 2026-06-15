@@ -1,0 +1,11 @@
+meta {
+  name: Get Shared Folder
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/share/{{shareToken}}
+  body: none
+  auth: none
+}

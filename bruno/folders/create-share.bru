@@ -1,0 +1,17 @@
+meta {
+  name: Create Share
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/folders/{{folderId}}/share
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.status === 201 || res.status === 200) {
+    bru.setVar("shareToken", res.body.token);
+  }
+}

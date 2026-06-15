@@ -1,0 +1,11 @@
+meta {
+  name: Delete Share
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/folders/{{folderId}}/share
+  body: none
+  auth: inherit
+}
