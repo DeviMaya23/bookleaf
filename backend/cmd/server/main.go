@@ -11,8 +11,8 @@ import (
 
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
+	"github.com/devi/bookleaf/internal/kinde"
 	"github.com/devi/bookleaf/internal/platform/config"
-	"github.com/devi/bookleaf/internal/platform/kinde"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
 	"github.com/devi/bookleaf/internal/storage"
@@ -288,12 +288,13 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
-	shareHandler := httphandler.NewShareHandler(shareUsecase, tel)
+	shareHandler := httphandler.NewShareHandler(shareUsecase, folderUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
 	e.GET("/health", healthHandler.GetHealth)
 	e.GET("/share/:token", shareHandler.GetSharedFolder)
+	e.GET("/share/:token/export", shareHandler.ExportSharedFolder)
 
 	protected := e.Group("")
 	protected.Use(authmiddleware.NewMaintenanceMiddleware(cfg.Maintenance))

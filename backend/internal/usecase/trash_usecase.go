@@ -11,16 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type TrashUsecase interface {
-	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
-	ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error)
-	Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error)
-	PurgeExpiredTrash(ctx context.Context, threshold time.Duration) error
-	DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error
-	EmptyTrash(ctx context.Context, userID string) error
-	ProcessR2Delete(ctx context.Context, r2Path string, thumbnailPath *string) error
-}
-
 type trashUsecase struct {
 	imageRepo TrashRepository
 	store     StorageService

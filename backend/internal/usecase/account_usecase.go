@@ -9,20 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// AccountUsecase manages the lifecycle of a user's account deletion.
-type AccountUsecase interface {
-	// DeleteAccount wipes a user's app data (images, folders, tags, pending
-	// uploads) in one transaction, tombstones the user row, and enqueues
-	// async R2 and Kinde cleanup jobs.
-	DeleteAccount(ctx context.Context, userID string) error
-	// ProcessAccountKindeDeletion deletes the user's Kinde identity and, on
-	// success, hard-deletes the user's tombstoned row.
-	ProcessAccountKindeDeletion(ctx context.Context, userID string) error
-	// ReconcilePendingKindeDeletions re-enqueues AccountKindeDeletionArgs for
-	// every user still tombstoned with pending_kinde_deletion = true.
-	ReconcilePendingKindeDeletions(ctx context.Context) error
-}
-
 type accountUsecase struct {
 	accountRepo AccountRepository
 	userRepo    UserRepository
