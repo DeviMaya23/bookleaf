@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -55,4 +56,77 @@ func (f *fakeFolderRepo) Create(_ context.Context, folder *domain.Folder) (*doma
 	}
 	f.add(folder)
 	return folder, nil
+}
+
+// fakeFolderShareRepo is an in-memory FolderShareRepository.
+// CreateShare reads existing state (GetByFolderID) to decide whether to
+// create a new row, so this is a fake rather than a spy.
+type fakeFolderShareRepo struct {
+	byFolderID map[uuid.UUID]*domain.FolderShare
+	byToken    map[string]*domain.FolderShare
+
+	// firstGetByFolderIDNotFound makes the first GetByFolderID call return
+	// not-found regardless of pre-seeded state, simulating a row that does
+	// not exist yet when CreateShare first checks.
+	firstGetByFolderIDNotFound bool
+	getByFolderIDCalls         int
+
+	// failCreateWithUniqueViolation makes Create return a Postgres unique
+	// constraint violation without inserting a row.
+	failCreateWithUniqueViolation bool
+	createCalls                   int
+}
+
+func newFakeFolderShareRepo(initial ...*domain.FolderShare) *fakeFolderShareRepo {
+	f := &fakeFolderShareRepo{
+		byFolderID: make(map[uuid.UUID]*domain.FolderShare),
+		byToken:    make(map[string]*domain.FolderShare),
+	}
+	for _, share := range initial {
+		f.add(share)
+	}
+	return f
+}
+
+func (f *fakeFolderShareRepo) add(share *domain.FolderShare) {
+	f.byFolderID[share.FolderID] = share
+	f.byToken[share.Token] = share
+}
+
+func (f *fakeFolderShareRepo) Create(_ context.Context, folderID uuid.UUID, token string) (*domain.FolderShare, error) {
+	f.createCalls++
+	if f.failCreateWithUniqueViolation {
+		return nil, errors.New(`ERROR: duplicate key value violates unique constraint "folder_shares_folder_id_key" (SQLSTATE 23505)`)
+	}
+	share := &domain.FolderShare{ID: uuid.New(), FolderID: folderID, Token: token}
+	f.add(share)
+	return share, nil
+}
+
+func (f *fakeFolderShareRepo) GetByFolderID(_ context.Context, folderID uuid.UUID) (*domain.FolderShare, error) {
+	f.getByFolderIDCalls++
+	if f.firstGetByFolderIDNotFound && f.getByFolderIDCalls == 1 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	share, ok := f.byFolderID[folderID]
+	if !ok {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return share, nil
+}
+
+func (f *fakeFolderShareRepo) GetByToken(_ context.Context, token string) (*domain.FolderShare, error) {
+	share, ok := f.byToken[token]
+	if !ok {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return share, nil
+}
+
+func (f *fakeFolderShareRepo) DeleteByFolderID(_ context.Context, folderID uuid.UUID) error {
+	if share, ok := f.byFolderID[folderID]; ok {
+		delete(f.byFolderID, folderID)
+		delete(f.byToken, share.Token)
+	}
+	return nil
 }

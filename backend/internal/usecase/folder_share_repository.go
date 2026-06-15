@@ -1,0 +1,17 @@
+package usecase
+
+import (
+	"context"
+
+	"github.com/devi/bookleaf/internal/domain"
+	"github.com/google/uuid"
+)
+
+type FolderShareRepository interface {
+	Create(ctx context.Context, folderID uuid.UUID, token string) (*domain.FolderShare, error)
+	GetByFolderID(ctx context.Context, folderID uuid.UUID) (*domain.FolderShare, error)
+	// GetByToken preloads the associated Folder.
+	GetByToken(ctx context.Context, token string) (*domain.FolderShare, error)
+	// DeleteByFolderID does not error when no row exists for the given folder.
+	DeleteByFolderID(ctx context.Context, folderID uuid.UUID) error
+}

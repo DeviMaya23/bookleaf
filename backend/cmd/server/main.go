@@ -229,6 +229,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 
 	imageUsecase := usecase.NewImageUsecase(imageRepository, tagRepository, folderRepository, storageService, tel)
 	trashUsecase := usecase.NewTrashUsecase(imageRepository, storageService, enqueuer, tel)
+	folderShareRepository := repository.NewFolderShareRepository(db)
+	shareUsecase := usecase.NewShareUsecase(folderShareRepository, folderRepository, imageRepository, storageService, tel)
 	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
 
 	accountRepository := repository.NewAccountRepository(db)
@@ -286,10 +288,12 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
+	shareHandler := httphandler.NewShareHandler(shareUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
 	e.GET("/health", healthHandler.GetHealth)
+	e.GET("/share/:token", shareHandler.GetSharedFolder)
 
 	protected := e.Group("")
 	protected.Use(authmiddleware.NewMaintenanceMiddleware(cfg.Maintenance))
@@ -304,6 +308,9 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.GET("/folders/:id/export", folderHandler.ExportFolder)
 	protected.PATCH("/folders/:id", folderHandler.UpdateFolder)
 	protected.DELETE("/folders/:id", folderHandler.DeleteFolder)
+	protected.POST("/folders/:id/share", shareHandler.CreateShare)
+	protected.GET("/folders/:id/share", shareHandler.GetShare)
+	protected.DELETE("/folders/:id/share", shareHandler.DeleteShare)
 	protected.POST("/tags", tagHandler.CreateTag)
 	protected.GET("/tags", tagHandler.ListTags)
 	protected.PUT("/tags/:id", tagHandler.UpdateTag)
