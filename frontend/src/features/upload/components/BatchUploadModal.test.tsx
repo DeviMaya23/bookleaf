@@ -47,8 +47,8 @@ describe('BatchUploadModal', () => {
     it('uploads all files successfully and invalidates the image query per file', async () => {
       const user = userEvent.setup()
       vi.mocked(uploadImageFile)
-        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
-        .mockResolvedValueOnce({ image_id: 'img-2', suggested_folder_name: 'Nature' })
+        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+        .mockResolvedValueOnce({ image_id: 'img-2', suggested_folder_name: 'Nature', duplicates: [] })
 
       const file1 = makeFile('a.jpg')
       const file2 = makeFile('b.jpg')
@@ -93,7 +93,7 @@ describe('BatchUploadModal', () => {
       vi.mocked(uploadImageFile)
         .mockRejectedValueOnce(new Error('fail'))
         .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
 
       renderModal({ initialFiles: [makeFile('d.jpg')] })
 
@@ -113,9 +113,42 @@ describe('BatchUploadModal', () => {
       expect(uploadImageFile).toHaveBeenCalledTimes(3)
     })
 
+    it('shows duplicate annotation when a file matches an existing image', async () => {
+      const user = userEvent.setup()
+      vi.mocked(uploadImageFile).mockResolvedValueOnce({
+        image_id: 'img-1',
+        suggested_folder_name: null,
+        duplicates: [{ id: 'dup-1', title: 'sunset.jpg', thumbnail_path: null }],
+      })
+
+      renderModal({ initialFiles: [makeFile('photo.jpg')] })
+      await user.click(screen.getByRole('button', { name: /upload 1 image/i }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('duplicate-annotation')).toBeInTheDocument()
+      })
+    })
+
+    it('shows no duplicate annotation when no duplicates are returned', async () => {
+      const user = userEvent.setup()
+      vi.mocked(uploadImageFile).mockResolvedValueOnce({
+        image_id: 'img-1',
+        suggested_folder_name: null,
+        duplicates: [],
+      })
+
+      renderModal({ initialFiles: [makeFile('photo.jpg')] })
+      await user.click(screen.getByRole('button', { name: /upload 1 image/i }))
+
+      await waitFor(() => {
+        expect(uploadImageFile).toHaveBeenCalledTimes(1)
+      })
+      expect(screen.queryByTestId('duplicate-annotation')).not.toBeInTheDocument()
+    })
+
     it('sends folder_id when a folder is active and omits it on non-folder routes', async () => {
       const user = userEvent.setup()
-      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
 
       // With folder active
       renderModal({ folderId: 'folder-42', initialFiles: [makeFile('e.jpg')] })
@@ -141,7 +174,7 @@ describe('BatchUploadModal', () => {
 
     it('marks oversized files as Too large and unsupported types as Unsupported type, uploading valid files', async () => {
       const user = userEvent.setup()
-      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
 
       const oversized = makeFile('big.jpg', 'image/jpeg', 51 * 1024 * 1024)
       const unsupported = makeFile('doc.pdf', 'application/pdf', 100)

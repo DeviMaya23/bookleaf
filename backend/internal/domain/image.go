@@ -27,6 +27,7 @@ type Image struct {
 	Width         *int            `gorm:"column:width"`
 	Height        *int            `gorm:"column:height"`
 	FileSize      *int64          `gorm:"column:file_size"`
+	PHash         *string         `gorm:"column:phash;type:bit(64)"`
 	AILabels      json.RawMessage `gorm:"column:ai_labels;type:jsonb"`
 	CreatedAt     time.Time       `gorm:"column:created_at"`
 	UpdatedAt     time.Time       `gorm:"column:updated_at"`

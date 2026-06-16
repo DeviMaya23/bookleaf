@@ -447,4 +447,41 @@ func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID stri
 	return nil
 }
 
+func (r *imageRepository) FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND id != ? AND phash IS NOT NULL AND bit_count(phash # ?::bit(64)) <= ?", userID, excludeID, phash, threshold).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("find duplicate images: %w", err)
+	}
+	return images, nil
+}
+
+func (r *imageRepository) ListUnhashed(ctx context.Context, limit int) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("phash IS NULL AND deleted_at IS NULL").
+		Limit(limit).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list unhashed images: %w", err)
+	}
+	return images, nil
+}
+
+func (r *imageRepository) UpdatePHash(ctx context.Context, id uuid.UUID, phash string) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("id = ?", id).
+		Update("phash", phash)
+	if result.Error != nil {
+		return fmt.Errorf("update image phash: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("update image phash: %w", gorm.ErrRecordNotFound)
+	}
+	return nil
+}
+
 var _ usecase.ImageRepository = (*imageRepository)(nil)
+var _ usecase.ImageHashRepository = (*imageRepository)(nil)

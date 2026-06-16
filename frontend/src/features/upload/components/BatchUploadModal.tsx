@@ -1,7 +1,8 @@
-import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { UploadCloud, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { UploadCloud, Loader2, CheckCircle2, AlertCircle, Clock, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ interface BatchFile {
   file: File
   status: FileStatus
   retryCount: number
+  duplicateOf?: string
 }
 
 interface BatchUploadModalProps {
@@ -53,13 +55,54 @@ function StatusCell({
   batchFile: BatchFile
   onRetry: (id: string) => void
 }) {
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const tooltipId = useId()
+
+  function handleMouseEnter() {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setTooltipPos({ top: rect.top - 4, left: rect.left + rect.width / 2 })
+    }
+  }
+
   switch (batchFile.status) {
     case 'PENDING':
       return <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-label="Waiting" />
     case 'UPLOADING':
       return <Loader2 className="w-4 h-4 animate-spin text-primary flex-shrink-0" aria-label="Uploading" />
     case 'SUCCESS':
-      return <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" aria-label="Uploaded" />
+      return (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <CheckCircle2 className="w-4 h-4 text-green-500" aria-label="Uploaded" />
+          {batchFile.duplicateOf && (
+            <div className="relative inline-flex" data-testid="duplicate-annotation">
+              <button
+                ref={buttonRef}
+                type="button"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={() => setTooltipPos(null)}
+                className="flex items-center text-amber-600"
+                aria-label="Possible duplicate"
+                aria-describedby={tooltipId}
+              >
+                <AlertTriangle className="w-3 h-3" />
+              </button>
+              {tooltipPos && createPortal(
+                <div
+                  id={tooltipId}
+                  role="tooltip"
+                  style={{ top: tooltipPos.top, left: tooltipPos.left }}
+                  className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full w-max max-w-[200px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
+                >
+                  Duplicate of &ldquo;{batchFile.duplicateOf}&rdquo;
+                </div>,
+                document.body,
+              )}
+            </div>
+          )}
+        </div>
+      )
     case 'FAILED_FINAL':
       return (
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -127,13 +170,14 @@ export default function BatchUploadModal({
     inFlightRef.current++
     updateFile(batchFile.id, { status: 'UPLOADING' })
     try {
-      await uploadImageFile(getToken, {
+      const result = await uploadImageFile(getToken, {
         file: batchFile.file,
         folderId,
         title: fileBaseName(batchFile.file.name),
       })
       if (!closedRef.current) {
-        updateFile(batchFile.id, { status: 'SUCCESS' })
+        const duplicateOf = result.duplicates?.length > 0 ? result.duplicates[0].title : undefined
+        updateFile(batchFile.id, { status: 'SUCCESS', duplicateOf })
         queryClient.invalidateQueries({ queryKey: ['images'] })
       }
     } catch {

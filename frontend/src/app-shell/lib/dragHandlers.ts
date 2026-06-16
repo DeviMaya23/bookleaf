@@ -103,16 +103,22 @@ export async function handleFolderDrop(
   return 'noop'
 }
 
+export interface AutoUploadResult {
+  image: Image
+  duplicates: Array<{ id: string; title: string; thumbnail_path: string | null }>
+}
+
 export async function handleFileAutoUpload(
   getToken: GetToken,
   file: File,
   folderId: string | null,
-): Promise<Image> {
+): Promise<AutoUploadResult> {
   const err = validateImageFile(file)
   if (err) {
     throw new Error(err)
   }
 
   const result = await uploadImageFile(getToken, { file, folderId })
-  return getImage(getToken, result.image_id)
+  const image = await getImage(getToken, result.image_id)
+  return { image, duplicates: result.duplicates ?? [] }
 }
