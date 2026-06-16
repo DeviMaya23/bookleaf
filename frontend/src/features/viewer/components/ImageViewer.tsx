@@ -95,6 +95,7 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
       >
         {image.thumbnail_url && !loaded && (
           <img
+            data-testid="viewer-img"
             src={image.thumbnail_url}
             alt=""
             aria-hidden="true"
