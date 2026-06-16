@@ -56,7 +56,7 @@ describe('ImageViewer — thumbnail placeholder', () => {
 
     renderViewer(makeImage())
 
-    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/thumb.jpg')
+    expect(screen.getByTestId('viewer-img')).toHaveAttribute('src', 'https://example.com/thumb.jpg')
   })
 })
 
@@ -149,7 +149,7 @@ describe('ImageViewer — rotate button', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /rotate/i }))
 
-    expect(screen.getByRole('img').style.transform).toContain('rotate(90deg)')
+    expect(screen.getByTestId('viewer-img').style.transform).toContain('rotate(90deg)')
   })
 })
 
@@ -164,7 +164,7 @@ describe('ImageViewer — flip button', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /flip/i }))
 
-    expect(screen.getByRole('img').style.transform).toContain('scaleX(-1)')
+    expect(screen.getByTestId('viewer-img').style.transform).toContain('scaleX(-1)')
   })
 })
 

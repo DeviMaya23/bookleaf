@@ -68,8 +68,8 @@ export default function SharePage() {
         <span className="text-sm text-muted-foreground truncate">{folder.name}</span>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div ref={setContainer} className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 flex flex-col overflow-y-auto sm:flex-row sm:overflow-hidden">
+        <div ref={setContainer} className="p-6 sm:flex-1 sm:overflow-y-auto">
           {images.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
               <ImageIcon className="w-10 h-10" />
@@ -96,7 +96,7 @@ export default function SharePage() {
           )}
         </div>
 
-        <SharedFolderPanel token={token} folder={folder} imageCount={images.length} />
+        <SharedFolderPanel token={token} folder={folder} imageCount={images.length} className="order-first sm:order-last" />
       </div>
 
       {lightboxIndex !== null && (
