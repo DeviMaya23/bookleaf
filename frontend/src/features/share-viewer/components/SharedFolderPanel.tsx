@@ -9,13 +9,14 @@ interface SharedFolderPanelProps {
   token: string
   folder: { name: string; notes: string | null }
   imageCount: number
+  className?: string
 }
 
 function formatImageCount(count: number): string {
   return count === 1 ? '1 image' : `${count} images`
 }
 
-export default function SharedFolderPanel({ token, folder, imageCount }: SharedFolderPanelProps) {
+export default function SharedFolderPanel({ token, folder, imageCount, className }: SharedFolderPanelProps) {
   const [isExporting, setIsExporting] = useState(false)
 
   const handleExport = async () => {
@@ -38,13 +39,13 @@ export default function SharedFolderPanel({ token, folder, imageCount }: SharedF
   }
 
   return (
-    <div className="flex flex-col h-full w-[280px] border-l flex-shrink-0">
+    <div className={`flex flex-col border-b sm:h-full sm:w-[280px] sm:border-b-0 sm:border-l sm:flex-shrink-0${className ? ` ${className}` : ''}`}>
       <div className="flex-shrink-0 border-b px-4 pt-4 pb-3">
         <h1 className="text-base font-semibold">{folder.name}</h1>
         <p className="text-xs text-muted-foreground mt-0.5">{formatImageCount(imageCount)}</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="sm:flex-1 sm:overflow-y-auto">
         <div className="px-4 py-3 border-b">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Notes</p>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">
