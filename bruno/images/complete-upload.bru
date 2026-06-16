@@ -14,6 +14,23 @@ body:json {
   {
     "width": 1920,
     "height": 1080,
-    "file_size": 245760
+    "file_size": 245760,
+    "phash": "0110110100110101010101010101010101010101010101010101010101010101"
   }
+}
+
+docs {
+  Response includes a `duplicates` array. Each entry has `id`, `title`, and `thumbnail_path`.
+  Example response:
+  {
+    "image_id": "...",
+    "duplicates": [
+      {
+        "id": "...",
+        "title": "sunset original",
+        "thumbnail_path": "users/kp_abc123/thumbnails/..."
+      }
+    ]
+  }
+  `duplicates` is an empty array when no matches are found or when `phash` is omitted.
 }

@@ -172,12 +172,14 @@ export async function putToR2(uploadUrl: string, file: Blob | File): Promise<voi
 export interface CompleteUploadResult {
   image_id: string
   suggested_folder_name: string | null
+  duplicates: Array<{ id: string; title: string; thumbnail_path: string | null }>
 }
 
 export interface CompleteUploadParams {
   width?: number
   height?: number
   fileSize?: number
+  phash?: string
 }
 
 export async function completeUpload(
@@ -185,10 +187,11 @@ export async function completeUpload(
   id: string,
   params?: CompleteUploadParams,
 ): Promise<CompleteUploadResult> {
-  const body: Record<string, number> = {}
+  const body: Record<string, number | string> = {}
   if (params?.width !== undefined) body.width = params.width
   if (params?.height !== undefined) body.height = params.height
   if (params?.fileSize !== undefined) body.file_size = params.fileSize
+  if (params?.phash !== undefined) body.phash = params.phash
   const res = await apiFetch(`/images/${id}/complete`, getToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

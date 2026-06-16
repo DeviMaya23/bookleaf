@@ -1,14 +1,19 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"strings"
 	"time"
 
+	"github.com/corona10/goimagehash"
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/storage"
@@ -30,6 +35,7 @@ type UploadImageRepository interface {
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
 	UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error
+	FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error)
 }
 
 const uploadURLTTL = 15 * time.Minute
@@ -46,12 +52,16 @@ type UploadInitResult struct {
 	ThumbnailKey       string
 }
 
+const duplicateHashThreshold = 10
+
 type CompleteUploadResult struct {
-	ImageID uuid.UUID
+	ImageID    uuid.UUID
+	Duplicates []*domain.Image
 }
 
 type imageUploadUsecase struct {
 	imageRepo         UploadImageRepository
+	hashRepo          ImageHashRepository
 	pendingUploadRepo PendingUploadRepository
 	folderRepo        ImageFolderRepository
 	userRepo          UserRepository
@@ -64,6 +74,7 @@ type imageUploadUsecase struct {
 
 func NewImageUploadUsecase(
 	imageRepo UploadImageRepository,
+	hashRepo ImageHashRepository,
 	pendingUploadRepo PendingUploadRepository,
 	folderRepo ImageFolderRepository,
 	userRepo UserRepository,
@@ -79,6 +90,7 @@ func NewImageUploadUsecase(
 
 	return &imageUploadUsecase{
 		imageRepo:         imageRepo,
+		hashRepo:          hashRepo,
 		pendingUploadRepo: pendingUploadRepo,
 		folderRepo:        folderRepo,
 		userRepo:          userRepo,
@@ -165,7 +177,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 	}, nil
 }
 
-func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64) (*CompleteUploadResult, error) {
+func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*CompleteUploadResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CompleteUpload")
 	defer span.End()
 
@@ -202,6 +214,7 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		Height:        positiveIntOrNil(height),
 		FileSize:      positiveInt64OrNil(fileSize),
 		ThumbnailPath: &thumbnailKey,
+		PHash:         phash,
 	}
 
 	if err := u.pendingUploadRepo.Transaction(ctx, func(pendingRepo PendingUploadRepository, imageRepo ImageRepository) error {
@@ -219,6 +232,18 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
+	}
+
+	if phash != nil {
+		duplicates, err := u.imageRepo.FindDuplicates(ctx, pending.UserID, *phash, pending.ID, duplicateHashThreshold)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("find duplicates: %w", err)
+		}
+		result.Duplicates = duplicates
+	} else {
+		result.Duplicates = []*domain.Image{}
 	}
 
 	if err := u.enqueuer.Insert(ctx, VisionArgs{
@@ -308,6 +333,91 @@ func (u *imageUploadUsecase) CleanupStaleUploads(ctx context.Context, threshold 
 		logger.Info("stale upload cleanup complete",
 			zap.String("event", "r2.stale.cleanup_complete"),
 			zap.Int("cleaned", len(stale)),
+		)
+	}
+
+	return nil
+}
+
+func (u *imageUploadUsecase) BackfillPhash(ctx context.Context, batchSize int) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BackfillPhash")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	images, err := u.hashRepo.ListUnhashed(ctx, batchSize)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("list unhashed images: %w", err)
+	}
+
+	processed := 0
+	for _, img := range images {
+		r2Key := img.R2Path
+		if img.ThumbnailPath != nil {
+			r2Key = *img.ThumbnailPath
+		}
+
+		src, fetchErr := u.store.GetObject(ctx, r2Key)
+		if fetchErr != nil {
+			logger.Warn("backfill phash: failed to fetch image",
+				zap.String("event", "phash.backfill.fetch_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.String("r2_key", r2Key),
+				zap.Error(fetchErr),
+			)
+			continue
+		}
+
+		imgBytes, readErr := io.ReadAll(src)
+		src.Close()
+		if readErr != nil {
+			logger.Warn("backfill phash: failed to read image bytes",
+				zap.String("event", "phash.backfill.read_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(readErr),
+			)
+			continue
+		}
+
+		decoded, _, decodeErr := image.Decode(bytes.NewReader(imgBytes))
+		if decodeErr != nil {
+			logger.Warn("backfill phash: failed to decode image",
+				zap.String("event", "phash.backfill.decode_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(decodeErr),
+			)
+			continue
+		}
+
+		hash, hashErr := goimagehash.PerceptionHash(decoded)
+		if hashErr != nil {
+			logger.Warn("backfill phash: failed to compute phash",
+				zap.String("event", "phash.backfill.hash_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(hashErr),
+			)
+			continue
+		}
+
+		phash := fmt.Sprintf("%064b", hash.GetHash())
+		if updateErr := u.hashRepo.UpdatePHash(ctx, img.ID, phash); updateErr != nil {
+			logger.Warn("backfill phash: failed to update phash",
+				zap.String("event", "phash.backfill.update_failed"),
+				zap.String("image_id", img.ID.String()),
+				zap.Error(updateErr),
+			)
+			continue
+		}
+		processed++
+	}
+
+	if processed > 0 || len(images) > 0 {
+		logger.Info("phash backfill complete",
+			zap.String("event", "phash.backfill.complete"),
+			zap.Int("processed", processed),
+			zap.Int("batch", len(images)),
 		)
 	}
 

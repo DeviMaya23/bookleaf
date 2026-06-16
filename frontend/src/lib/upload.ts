@@ -53,11 +53,11 @@ export async function uploadImageFile(
     sourceUrl,
   })
 
-  const { blob: thumbnail, width, height } = await generateThumbnail(uploadBlob)
+  const { blob: thumbnail, width, height, phash } = await generateThumbnail(uploadBlob)
   await Promise.all([
     putToR2(initiated.upload_url, uploadBlob),
     putToR2(initiated.thumbnail_upload_url, thumbnail),
   ])
 
-  return completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size })
+  return completeUpload(getToken, initiated.id, { width, height, fileSize: uploadBlob.size, phash })
 }

@@ -7,6 +7,29 @@ import (
 	"github.com/riverqueue/river"
 )
 
+// BackfillPhash periodic job
+
+type backfillPhashUsecase interface {
+	BackfillPhash(ctx context.Context, batchSize int) error
+}
+
+type BackfillPhashArgs struct{}
+
+func (BackfillPhashArgs) Kind() string { return "backfill_phash" }
+
+type BackfillPhashWorker struct {
+	river.WorkerDefaults[BackfillPhashArgs]
+	usecase backfillPhashUsecase
+}
+
+func NewBackfillPhashWorker(uc backfillPhashUsecase) *BackfillPhashWorker {
+	return &BackfillPhashWorker{usecase: uc}
+}
+
+func (w *BackfillPhashWorker) Work(ctx context.Context, _ *river.Job[BackfillPhashArgs]) error {
+	return w.usecase.BackfillPhash(ctx, 20)
+}
+
 // CleanupStaleUploads periodic job
 
 type cleanupUsecase interface {

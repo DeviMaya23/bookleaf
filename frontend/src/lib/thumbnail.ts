@@ -1,3 +1,5 @@
+import { computePHash } from '@/lib/phash'
+
 const THUMBNAIL_MAX_PX = 600
 const THUMBNAIL_QUALITY = 0.9
 const HEIC_QUALITY = 0.93
@@ -6,6 +8,7 @@ export interface ThumbnailResult {
   blob: Blob
   width: number
   height: number
+  phash: string
 }
 
 export async function generateThumbnail(source: Blob): Promise<ThumbnailResult> {
@@ -21,8 +24,9 @@ export async function generateThumbnail(source: Blob): Promise<ThumbnailResult> 
   ctx.drawImage(bitmap, 0, 0, tw, th)
   bitmap.close()
 
+  const phash = computePHash(canvas)
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: THUMBNAIL_QUALITY })
-  return { blob, width, height }
+  return { blob, width, height, phash }
 }
 
 export async function convertHeicToJpeg(file: File): Promise<Blob> {

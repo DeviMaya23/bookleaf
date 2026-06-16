@@ -31,13 +31,21 @@ type initiateImageUploadResponse struct {
 }
 
 type completeUploadRequest struct {
-	Width    *int   `json:"width"`
-	Height   *int   `json:"height"`
-	FileSize *int64 `json:"file_size"`
+	Width    *int    `json:"width"`
+	Height   *int    `json:"height"`
+	FileSize *int64  `json:"file_size"`
+	PHash    *string `json:"phash"`
+}
+
+type duplicateImageResponse struct {
+	ID            uuid.UUID `json:"id"`
+	Title         string    `json:"title"`
+	ThumbnailPath *string   `json:"thumbnail_path"`
 }
 
 type completeUploadResponse struct {
-	ImageID uuid.UUID `json:"image_id"`
+	ImageID    uuid.UUID                `json:"image_id"`
+	Duplicates []duplicateImageResponse `json:"duplicates"`
 }
 
 type acceptSuggestionRequest struct {
@@ -46,7 +54,7 @@ type acceptSuggestionRequest struct {
 
 type UploadUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
-	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64) (*usecase.CompleteUploadResult, error)
+	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
 	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 }
 
@@ -113,7 +121,7 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	result, err := h.uploadUsecase.CompleteUpload(ctx, imageID, userID, req.Width, req.Height, req.FileSize)
+	result, err := h.uploadUsecase.CompleteUpload(ctx, imageID, userID, req.Width, req.Height, req.FileSize, req.PHash)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -123,8 +131,18 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete image upload")
 	}
 
+	duplicates := make([]duplicateImageResponse, 0, len(result.Duplicates))
+	for _, d := range result.Duplicates {
+		duplicates = append(duplicates, duplicateImageResponse{
+			ID:            d.ID,
+			Title:         d.Title,
+			ThumbnailPath: d.ThumbnailPath,
+		})
+	}
+
 	return c.JSON(http.StatusOK, completeUploadResponse{
-		ImageID: result.ImageID,
+		ImageID:    result.ImageID,
+		Duplicates: duplicates,
 	})
 }
 

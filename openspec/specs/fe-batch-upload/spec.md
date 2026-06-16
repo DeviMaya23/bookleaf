@@ -82,20 +82,25 @@ The system SHALL upload at most 3 files concurrently. Additional files SHALL rem
 ---
 
 ### Requirement: Per-file upload sequence
-For each file in the batch, the system SHALL execute the existing three-step upload sequence: (1) `POST /images` to initiate, (2) `PUT` to the presigned R2 URL, (3) `POST /images/:id/complete` with a JSON body containing `width`, `height`, and `file_size`. The `folder_id` SHALL be set to the current folder, or omitted when on a non-folder route. The title SHALL be the filename without extension.
+For each file in the batch, the system SHALL execute the existing three-step upload sequence: (1) `POST /images` to initiate, (2) `PUT` to the presigned R2 URL, (3) `POST /images/:id/complete` with a JSON body containing `width`, `height`, `file_size`, and `phash`. The `folder_id` SHALL be set to the current folder, or omitted when on a non-folder route. The title SHALL be the filename without extension.
 
-The thumbnail-generation step SHALL decode the image (via `createImageBitmap`, the same decode used to build the thumbnail PUT to R2) to determine its pixel dimensions; the system SHALL reuse this decode to capture `width` and `height` rather than performing a second decode. `file_size` SHALL be the byte length of the uploaded blob (the converted JPEG blob for HEIC, the original blob otherwise).
+The thumbnail-generation step SHALL decode the image (via `createImageBitmap`, the same decode used to build the thumbnail PUT to R2) to determine its pixel dimensions; the system SHALL reuse this decode to capture `width` and `height` rather than performing a second decode. `file_size` SHALL be the byte length of the uploaded blob. `phash` SHALL be computed on the 32×32 greyscale thumbnail canvas, producing a 64-character binary string, and included in the `POST /images/:id/complete` request body.
 
 #### Scenario: Each file follows the three-step upload sequence
 - **WHEN** a file is uploaded as part of a batch
 - **THEN** `POST /images` is called with the file's title (filename without extension), MIME type, and optional `folder_id`
 - **AND** the file bytes are PUT to the returned presigned URL
-- **AND** `POST /images/:id/complete` is called after the PUT succeeds, with `width`, `height`, and `file_size` in the request body
+- **AND** `POST /images/:id/complete` is called after the PUT succeeds, with `width`, `height`, `file_size`, and `phash` in the request body
 
 #### Scenario: Dimensions and file size are derived from the decoded bitmap and uploaded blob
 - **WHEN** a file in a batch is uploaded
 - **THEN** the `width` and `height` sent to `POST /images/:id/complete` match the `ImageBitmap` dimensions produced while generating that file's thumbnail
 - **AND** the `file_size` sent matches the byte length of the blob that was PUT to the presigned upload URL
+
+#### Scenario: phash is computed and sent for each file
+- **WHEN** a file in a batch is uploaded
+- **THEN** a 64-character binary pHash string is computed from the thumbnail canvas
+- **AND** it is included in the `POST /images/:id/complete` request body as `phash`
 
 #### Scenario: folder_id is included when a folder is active
 - **WHEN** the user is on `/folders/:folderId` and uploads a batch
@@ -175,3 +180,21 @@ The system SHALL NOT display the folder suggestion UI for any file in a batch up
 - **WHEN** a file in a batch upload completes and the response includes a `suggested_folder_name`
 - **THEN** no folder suggestion UI is shown
 - **AND** the file is marked as successfully uploaded
+
+---
+
+### Requirement: Per-file duplicate annotation in batch modal
+
+When a file's upload sequence completes successfully and the `POST /images/:id/complete` response includes a non-empty `duplicates` array, the file's row in the batch modal SHALL display a warning icon alongside the success indicator. The full title of the first matching duplicate SHALL be accessible via a tooltip on the warning icon. No inline text SHALL be shown. The file is still treated as successfully uploaded.
+
+#### Scenario: Duplicate warning icon shown when match detected
+
+- **WHEN** a file in the batch completes successfully and the `completeUpload` response contains one or more duplicates
+- **THEN** the file row shows the success indicator
+- **AND** a warning icon is shown next to it
+- **AND** hovering the warning icon reveals a tooltip with the first duplicate's title
+
+#### Scenario: No annotation shown when no duplicates
+
+- **WHEN** a file in the batch completes successfully and the `completeUpload` response has an empty `duplicates` array
+- **THEN** the file row shows only the success indicator with no warning icon

@@ -36,7 +36,7 @@ func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ 
 	return m.uploadResult, m.err
 }
 
-func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string, width, height *int, fileSize *int64) (*usecase.CompleteUploadResult, error) {
+func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string, width, height *int, fileSize *int64, _ *string) (*usecase.CompleteUploadResult, error) {
 	m.lastWidth = width
 	m.lastHeight = height
 	m.lastFileSize = fileSize

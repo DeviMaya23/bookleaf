@@ -118,8 +118,11 @@ export default function AppLayout() {
     const file = files[0]
     setIsAutoUploading(true)
     try {
-      const imageDetail = await handleFileAutoUpload(getToken, file, folderId)
+      const { image: imageDetail, duplicates } = await handleFileAutoUpload(getToken, file, folderId)
       queryClient.invalidateQueries({ queryKey: ['images'] })
+      if (duplicates.length > 0) {
+        toast.warning(`Possible duplicate of "${duplicates[0].title}"`)
+      }
       checkVision(imageDetail.id)
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)

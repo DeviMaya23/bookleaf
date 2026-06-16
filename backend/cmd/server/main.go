@@ -231,7 +231,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	trashUsecase := usecase.NewTrashUsecase(imageRepository, storageService, enqueuer, tel)
 	folderShareRepository := repository.NewFolderShareRepository(db)
 	shareUsecase := usecase.NewShareUsecase(folderShareRepository, folderRepository, imageRepository, storageService, tel)
-	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
+	uploadUsecase := usecase.NewImageUploadUsecase(imageRepository, imageRepository, pendingUploadRepository, folderRepository, userRepository, storageService, visionService, enqueuer, tel)
 
 	accountRepository := repository.NewAccountRepository(db)
 	kindeClient := kinde.NewClient(cfg.Kinde)
@@ -244,6 +244,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewR2DeleteWorker(trashUsecase))
 	river.AddWorker(workers, worker.NewAccountKindeDeletionWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -264,6 +265,11 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 			river.NewPeriodicJob(
 				river.PeriodicInterval(24*time.Hour),
 				func() (river.JobArgs, *river.InsertOpts) { return worker.AccountKindeDeletionReconcileArgs{}, nil },
+				nil,
+			),
+			river.NewPeriodicJob(
+				river.PeriodicInterval(5*time.Minute),
+				func() (river.JobArgs, *river.InsertOpts) { return worker.BackfillPhashArgs{}, nil },
 				nil,
 			),
 		},

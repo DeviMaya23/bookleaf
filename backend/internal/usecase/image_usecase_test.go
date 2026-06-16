@@ -50,6 +50,9 @@ type mockImageRepository struct {
 	listByFolderCalls    int
 	lastListByFolderID   uuid.UUID
 	listByFolderImages   []*domain.Image
+	findDuplicatesResult []*domain.Image
+	findDuplicatesErr    error
+	findDuplicatesCalls  int
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
@@ -116,6 +119,16 @@ func (m *mockImageRepository) ListAllByUserID(_ context.Context, _ string) ([]*d
 	return m.images, m.err
 }
 func (m *mockImageRepository) HardDeleteAllByUserID(_ context.Context, _ string) error {
+	return m.err
+}
+func (m *mockImageRepository) FindDuplicates(_ context.Context, _ string, _ string, _ uuid.UUID, _ int) ([]*domain.Image, error) {
+	m.findDuplicatesCalls++
+	return m.findDuplicatesResult, m.findDuplicatesErr
+}
+func (m *mockImageRepository) ListUnhashed(_ context.Context, _ int) ([]*domain.Image, error) {
+	return nil, m.err
+}
+func (m *mockImageRepository) UpdatePHash(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
 

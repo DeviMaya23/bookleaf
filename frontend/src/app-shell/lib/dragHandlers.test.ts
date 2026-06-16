@@ -175,10 +175,10 @@ describe('handleFileAutoUpload', () => {
     return new File(['bytes'], name, { type })
   }
 
-  it('returns full ImageDetail via getImage on success', async () => {
+  it('returns full ImageDetail via getImage on success with duplicates', async () => {
     const imageData = { id: 'img-new', title: 'sunset', folder_ids: ['folder-1'] }
     vi.mocked(validateImageFile).mockReturnValueOnce(null)
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null })
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null, duplicates: [] })
     vi.mocked(getImage).mockResolvedValueOnce(imageData as never)
 
     const file = makeFile('sunset.jpg', 'image/jpeg')
@@ -186,7 +186,8 @@ describe('handleFileAutoUpload', () => {
 
     expect(uploadImageFile).toHaveBeenCalledWith(getToken, { file, folderId: 'folder-1' })
     expect(getImage).toHaveBeenCalledWith(getToken, 'img-new')
-    expect(result).toBe(imageData)
+    expect(result.image).toBe(imageData)
+    expect(result.duplicates).toEqual([])
   })
 
   it('rejects unsupported type without calling uploadImageFile', async () => {

@@ -41,7 +41,7 @@ describe('UploadModal', () => {
 
   it('closes modal and shows success toast on successful upload', async () => {
     const user = userEvent.setup()
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
     const onUploadSuccess = vi.fn()
 
     const { onOpenChange } = renderModal(null, onUploadSuccess)
@@ -67,7 +67,7 @@ describe('UploadModal', () => {
 
   it('uploads with description and source_url when Add details is filled', async () => {
     const user = userEvent.setup()
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null })
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
 
     renderModal('folder-1')
 

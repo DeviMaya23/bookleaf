@@ -182,7 +182,11 @@ func newImageUploadUsecase(
 	store StorageService,
 	vision VisionService,
 ) *imageUploadUsecase {
-	return NewImageUploadUsecase(imageRepo, pendingRepo, folderRepo, userRepo, store, vision, &noopJobEnqueuer{}, noopTel())
+	var hashRepo ImageHashRepository
+	if mr, ok := imageRepo.(ImageHashRepository); ok {
+		hashRepo = mr
+	}
+	return NewImageUploadUsecase(imageRepo, hashRepo, pendingRepo, folderRepo, userRepo, store, vision, &noopJobEnqueuer{}, noopTel())
 }
 
 // --- InitiateUpload ---
@@ -264,9 +268,9 @@ func TestImageUploadUsecase_CompleteUpload_PersistsClientSuppliedValues(t *testi
 	}
 	pendingRepo.transactionImageRepo = imageRepo
 	store := &mockStorageService{}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), store, nil, &noopJobEnqueuer{}, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), store, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(1920), intPtr(1080), int64Ptr(245760))
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(1920), intPtr(1080), int64Ptr(245760), nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.createdImage)
@@ -286,9 +290,9 @@ func TestImageUploadUsecase_CompleteUpload_NonPositiveValuesStoredAsNull(t *test
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.bin", MIMEType: "application/octet-stream"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(-1), intPtr(0), int64Ptr(1024))
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", intPtr(-1), intPtr(0), int64Ptr(1024), nil)
 
 	require.NoError(t, err)
 	assert.Nil(t, imageRepo.createdImage.Width)
@@ -304,9 +308,9 @@ func TestImageUploadUsecase_CompleteUpload_OmittedValuesStoredAsNull(t *testing.
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.bin", MIMEType: "application/octet-stream"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	assert.Nil(t, imageRepo.createdImage.Width)
@@ -322,9 +326,9 @@ func TestImageUploadUsecase_CompleteUpload_SetsFolderWhenPendingHasFolderID(t *t
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg", FolderID: &folderID},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.setFolderFolderID)
@@ -339,14 +343,75 @@ func TestImageUploadUsecase_CompleteUpload_AlwaysSetsThumbnailPath(t *testing.T)
 	}
 	pendingRepo.transactionImageRepo = imageRepo
 	enqueuer := &spyJobEnqueuer{}
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, enqueuer, noopTel())
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, enqueuer, noopTel())
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, imageRepo.createdImage.ThumbnailPath)
 	assert.True(t, strings.HasPrefix(*imageRepo.createdImage.ThumbnailPath, "users/kp_abc123/thumbnails/"))
 	assert.Equal(t, 1, enqueuer.insertCalls, "only vision job should be enqueued")
+}
+
+func TestImageUploadUsecase_CompleteUpload_PhashProvided_DuplicatesFound(t *testing.T) {
+	imageID := uuid.New()
+	dupID := uuid.New()
+	thumb := "users/kp_abc123/thumbnails/dup.jpg"
+	phash := "0110110100110101010101010101010101010101010101010101010101010101"
+	dup := &domain.Image{ID: dupID, Title: "duplicate image", ThumbnailPath: &thumb}
+	imageRepo := &mockImageRepository{
+		image:                &domain.Image{ID: imageID},
+		findDuplicatesResult: []*domain.Image{dup},
+	}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, &phash)
+
+	require.NoError(t, err)
+	require.Len(t, result.Duplicates, 1)
+	assert.Equal(t, dupID, result.Duplicates[0].ID)
+	assert.Equal(t, "duplicate image", result.Duplicates[0].Title)
+	assert.Equal(t, &thumb, result.Duplicates[0].ThumbnailPath)
+}
+
+func TestImageUploadUsecase_CompleteUpload_PhashProvided_NoDuplicates(t *testing.T) {
+	imageID := uuid.New()
+	phash := "0110110100110101010101010101010101010101010101010101010101010101"
+	imageRepo := &mockImageRepository{
+		image:                &domain.Image{ID: imageID},
+		findDuplicatesResult: []*domain.Image{},
+	}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, &phash)
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Duplicates)
+	assert.Equal(t, 1, imageRepo.findDuplicatesCalls)
+}
+
+func TestImageUploadUsecase_CompleteUpload_PhashAbsent_FindDuplicatesNotCalled(t *testing.T) {
+	imageID := uuid.New()
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID}}
+	pendingRepo := &mockPendingUploadRepository{
+		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
+	}
+	pendingRepo.transactionImageRepo = imageRepo
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, noopTel())
+
+	result, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, result.Duplicates)
+	assert.Equal(t, 0, imageRepo.findDuplicatesCalls)
 }
 
 // --- ProcessVisionLabelling ---
@@ -422,9 +487,9 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Success(t *testing.T) {
 		pending: &domain.PendingUpload{ID: imageID, UserID: "kp_abc123", R2Path: "test.jpg", MIMEType: "image/jpeg"},
 	}
 	pendingRepo.transactionImageRepo = imageRepo
-	uc := NewImageUploadUsecase(imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, pendingRepo, nil, defaultUserRepo(), &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	points := findInt64Sum(collect(), "r2.upload.count")
@@ -439,9 +504,9 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	imageID := uuid.New()
 	tel, collect := makeMetricsTel(t)
 	pendingRepo := &mockPendingUploadRepository{getErr: gorm.ErrRecordNotFound}
-	uc := NewImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
+	uc := NewImageUploadUsecase(&mockImageRepository{}, &mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, nil, &noopJobEnqueuer{}, tel)
 
-	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil)
+	_, err := uc.CompleteUpload(context.Background(), imageID, "kp_abc123", nil, nil, nil, nil)
 	require.Error(t, err)
 
 	points := findInt64Sum(collect(), "r2.upload.count")

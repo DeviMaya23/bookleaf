@@ -111,6 +111,9 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['images'] })
       toast.success('Image uploaded successfully')
+      if (result.duplicates && result.duplicates.length > 0) {
+        toast.warning(`Possible duplicate of "${result.duplicates[0].title}"`)
+      }
       onUploadSuccess?.(result.image_id)
       handleClose()
     },
