@@ -81,6 +81,7 @@ export default function LandingPage() {
         <Link to="/about">About</Link>
         <Link to="/privacy">Privacy</Link>
         <Link to="/ai-notes">AI Notes</Link>
+        <Link to="/extensions">Extensions</Link>
       </footer>
     </div>
   )

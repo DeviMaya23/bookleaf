@@ -5,13 +5,15 @@ import { XIcon } from 'lucide-react'
 import AccountSection from './AccountSection'
 import AppSection from './AppSection'
 import AdvancedSection from './AdvancedSection'
+import ExtensionsSection from './ExtensionsSection'
 
-type SettingsSection = 'account' | 'app' | 'advanced'
+type SettingsSection = 'account' | 'app' | 'advanced' | 'extensions'
 
 const SECTIONS: { id: SettingsSection; label: string }[] = [
   { id: 'account', label: 'Account' },
   { id: 'app', label: 'App' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'extensions', label: 'Extensions' },
 ]
 
 interface SettingsModalProps {
@@ -70,6 +72,7 @@ export default function SettingsModal({ open, onOpenChange }: SettingsModalProps
               {activeSection === 'account' && <AccountSection />}
               {activeSection === 'app' && <AppSection />}
               {activeSection === 'advanced' && <AdvancedSection />}
+              {activeSection === 'extensions' && <ExtensionsSection />}
             </div>
           </div>
         </div>
