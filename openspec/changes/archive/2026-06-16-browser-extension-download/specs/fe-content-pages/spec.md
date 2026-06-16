@@ -6,7 +6,6 @@ The app SHALL expose an `/extensions` route rendering a page built on `SimplePag
 
 The Firefox section SHALL:
 - Provide a download link using `EXTENSION_FIREFOX_URL`
-- Explain that the extension is signed by Mozilla but not listed on the Firefox Add-ons store
 - Include fallback manual install instructions: open `about:addons`, click the gear icon, select "Install Add-on From File", and choose the downloaded `.xpi`
 
 The Chrome section SHALL:

@@ -28,7 +28,6 @@ The Settings modal SHALL include an **Extensions** section. The section SHALL di
 
 The Firefox subsection SHALL:
 - Provide a download link using `EXTENSION_FIREFOX_URL`
-- Include a brief note that the extension is signed by Mozilla but not listed on the store
 - Include fallback manual install instructions: `about:addons` → gear icon → "Install Add-on From File"
 
 The Chrome subsection SHALL:
