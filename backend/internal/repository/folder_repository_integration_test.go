@@ -222,6 +222,22 @@ func TestFolderRepository_Update_OverwritesProvidedFields(t *testing.T) {
 	assert.Equal(t, "updated description", *updated.Description)
 }
 
+func TestFolderRepository_Update_WritesIconColumn(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_abc123")
+	existing := setupUpdateFolder(t, tx, "kp_abc123", nil, nil)
+	repo := NewFolderRepository(tx)
+
+	icon := "star"
+	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+		"icon": &icon,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated.Icon)
+	assert.Equal(t, "star", *updated.Icon)
+}
+
 func TestFolderRepository_Update_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)

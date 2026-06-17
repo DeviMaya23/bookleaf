@@ -24,7 +24,7 @@ function makeFolder(overrides: Partial<Folder> = {}): Folder {
   return {
     id: 'folder-1',
     name: 'Vacation Photos',
-    description: null,
+    description: null, icon: null,
     parent_id: null,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',

@@ -10,6 +10,7 @@ import (
 	"github.com/devi/bookleaf/internal/domain"
 	authmw "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
+	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,17 +19,17 @@ type mockUserUsecase struct {
 	user *domain.User
 	err  error
 
-	lastUpdateID      string
-	lastUpdateEnabled bool
+	lastUpdateID     string
+	lastUpdateParams usecase.UpdateUserPreferencesParams
 }
 
 func (m *mockUserUsecase) GetByID(_ context.Context, _ string) (*domain.User, error) {
 	return m.user, m.err
 }
 
-func (m *mockUserUsecase) UpdateVisionEnabled(_ context.Context, id string, enabled bool) (*domain.User, error) {
+func (m *mockUserUsecase) UpdatePreferences(_ context.Context, id string, params usecase.UpdateUserPreferencesParams) (*domain.User, error) {
 	m.lastUpdateID = id
-	m.lastUpdateEnabled = enabled
+	m.lastUpdateParams = params
 	return m.user, m.err
 }
 
@@ -47,7 +48,7 @@ func (m *mockAccountUsecase) DeleteAccount(_ context.Context, userID string) err
 // --- GetMe ---
 
 func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: true}}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/me", "")
 
 	err := h.GetMe(c)
@@ -58,6 +59,7 @@ func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "kp_abc123", resp["id"])
 	assert.Equal(t, true, resp["vision_enabled"])
+	assert.Equal(t, true, resp["folder_icons_enabled"])
 }
 
 func TestMeHandler_GetMe_GenericError(t *testing.T) {
@@ -80,7 +82,8 @@ func TestMeHandler_UpdateMe_EnablesVision(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.True(t, uc.lastUpdateEnabled)
+	require.NotNil(t, uc.lastUpdateParams.VisionEnabled)
+	assert.True(t, *uc.lastUpdateParams.VisionEnabled)
 	assert.Equal(t, "kp_abc123", uc.lastUpdateID)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -97,11 +100,39 @@ func TestMeHandler_UpdateMe_DisablesVision(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.False(t, uc.lastUpdateEnabled)
+	require.NotNil(t, uc.lastUpdateParams.VisionEnabled)
+	assert.False(t, *uc.lastUpdateParams.VisionEnabled)
 	var resp map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, "kp_abc123", resp["id"])
 	assert.Equal(t, false, resp["vision_enabled"])
+}
+
+func TestMeHandler_UpdateMe_DisablesFolderIcons(t *testing.T) {
+	uc := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: false}}
+	h := NewMeHandler(uc, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodPatch, "/me", `{"folder_icons_enabled": false}`)
+
+	err := h.UpdateMe(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, uc.lastUpdateParams.FolderIconsEnabled)
+	assert.False(t, *uc.lastUpdateParams.FolderIconsEnabled)
+	assert.Nil(t, uc.lastUpdateParams.VisionEnabled)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "kp_abc123", resp["id"])
+	assert.Equal(t, false, resp["folder_icons_enabled"])
+}
+
+func TestMeHandler_UpdateMe_NonBooleanFolderIconsEnabled(t *testing.T) {
+	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{"folder_icons_enabled": "yes"}`)
+
+	err := h.UpdateMe(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
 }
 
 func TestMeHandler_UpdateMe_MissingField(t *testing.T) {

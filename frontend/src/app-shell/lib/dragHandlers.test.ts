@@ -27,7 +27,7 @@ function makeFolder(id: string, parentId: string | null = null): Folder {
   return {
     id,
     name: `Folder ${id}`,
-    description: null,
+    description: null, icon: null,
     parent_id: parentId,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',

@@ -16,11 +16,13 @@ import (
 )
 
 var ErrInvalidFolderName = errors.New("folder name is required")
+var ErrInvalidFolderIcon = errors.New("folder icon is not in the allowlist")
 
 type UpdateFolderParams struct {
 	Name        *string
 	ParentID    **uuid.UUID
 	Description **string
+	Icon        **string
 }
 
 type FolderImageRepository interface {
@@ -49,7 +51,7 @@ func NewFolderUsecase(folderRepo FolderRepository, imageRepo FolderImageReposito
 	}
 }
 
-func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error) {
+func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CreateFolder")
 	defer span.End()
 
@@ -59,11 +61,18 @@ func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentI
 		return nil, ErrInvalidFolderName
 	}
 
+	if icon != nil && !IsValidFolderIcon(*icon) {
+		span.RecordError(ErrInvalidFolderIcon)
+		span.SetStatus(codes.Error, ErrInvalidFolderIcon.Error())
+		return nil, ErrInvalidFolderIcon
+	}
+
 	folder, err := u.folderRepo.Create(ctx, &domain.Folder{
 		UserID:      userID,
 		Name:        name,
 		ParentID:    parentID,
 		Description: description,
+		Icon:        icon,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -121,6 +130,12 @@ func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string,
 		return nil, ErrInvalidFolderName
 	}
 
+	if params.Icon != nil && *params.Icon != nil && !IsValidFolderIcon(**params.Icon) {
+		span.RecordError(ErrInvalidFolderIcon)
+		span.SetStatus(codes.Error, ErrInvalidFolderIcon.Error())
+		return nil, ErrInvalidFolderIcon
+	}
+
 	fields := make(map[string]any)
 	if params.Name != nil {
 		fields["name"] = *params.Name
@@ -130,6 +145,9 @@ func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string,
 	}
 	if params.Description != nil {
 		fields["description"] = *params.Description
+	}
+	if params.Icon != nil {
+		fields["icon"] = *params.Icon
 	}
 
 	folder, err := u.folderRepo.Update(ctx, id, userID, fields)

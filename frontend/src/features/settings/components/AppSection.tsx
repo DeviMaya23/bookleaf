@@ -1,4 +1,9 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
+import { toast } from 'sonner'
 import { useTheme, type Theme } from '@/hooks/useTheme'
+import { Switch } from '@/components/ui/switch'
+import { getMe, updateMe } from '@/features/auth/lib/me'
 
 const THEME_OPTIONS: Record<Theme, { label: string; sub: string; swatches: string[] }> = {
   warm: {
@@ -20,6 +25,26 @@ const THEME_OPTIONS: Record<Theme, { label: string; sub: string; swatches: strin
 
 export default function AppSection() {
   const { theme, setTheme } = useTheme()
+  const { getToken } = useKindeAuth()
+  const queryClient = useQueryClient()
+
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(getToken),
+    staleTime: Infinity,
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (folderIconsEnabled: boolean) => updateMe(getToken, { folder_icons_enabled: folderIconsEnabled }),
+    onSuccess: (updatedMe) => {
+      queryClient.setQueryData(['me'], updatedMe)
+    },
+    onError: () => {
+      toast.error('Failed to update settings')
+    },
+  })
+
+  const folderIconsEnabled = me?.folder_icons_enabled ?? true
 
   return (
     <div>
@@ -55,6 +80,23 @@ export default function AppSection() {
             </div>
           </label>
         ))}
+      </div>
+
+      <p className="mt-5 mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        Folders
+      </p>
+      <div className="flex items-center justify-between gap-4 border-b border-border py-3">
+        <div>
+          <p className="text-sm font-medium text-foreground">Folder icons</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Show icons next to folders in the sidebar
+          </p>
+        </div>
+        <Switch
+          checked={folderIconsEnabled}
+          onCheckedChange={(checked) => updateMutation.mutate(checked)}
+          disabled={updateMutation.isPending}
+        />
       </div>
     </div>
   )

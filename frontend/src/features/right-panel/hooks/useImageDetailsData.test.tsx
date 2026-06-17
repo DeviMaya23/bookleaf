@@ -17,7 +17,7 @@ vi.mock('@/lib/folders', () => ({ getFolders: vi.fn() }))
 vi.mock('@/lib/tags', () => ({ getTags: vi.fn() }))
 
 function makeFolder(id: string, name: string): Folder {
-  return { id, name, description: null, parent_id: null, created_at: '', updated_at: '' }
+  return { id, name, description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }
 }
 
 function makeImage(overrides?: Partial<Image>): Image {

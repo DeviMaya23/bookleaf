@@ -38,13 +38,13 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-function renderTrashEntry(active: boolean, onClick = vi.fn()) {
+function renderTrashEntry(active: boolean, onClick = vi.fn(), iconsEnabled = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return {
     queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <TrashEntry active={active} onClick={onClick} />
+        <TrashEntry active={active} iconsEnabled={iconsEnabled} onClick={onClick} />
       </QueryClientProvider>,
     ),
   }
@@ -65,6 +65,18 @@ describe('TrashEntry', () => {
     renderTrashEntry(false)
 
     expect(screen.getByText('Trash')).not.toHaveClass('bg-accent', 'text-accent-foreground', 'font-medium')
+  })
+
+  it('renders the trash-2 icon when iconsEnabled is true', () => {
+    renderTrashEntry(false, vi.fn(), true)
+
+    expect(screen.getByText('Trash').closest('div')?.querySelector('svg')).toBeTruthy()
+  })
+
+  it('renders no icon when iconsEnabled is false', () => {
+    renderTrashEntry(false, vi.fn(), false)
+
+    expect(screen.getByText('Trash').closest('div')?.querySelector('svg')).toBeFalsy()
   })
 
   it('shows Empty trash item in the context menu', () => {

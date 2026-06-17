@@ -68,6 +68,9 @@ func (f *fakeUserRepo) Update(_ context.Context, id string, fields map[string]an
 	if enabled, ok := fields["vision_enabled"].(bool); ok {
 		user.VisionEnabled = enabled
 	}
+	if enabled, ok := fields["folder_icons_enabled"].(bool); ok {
+		user.FolderIconsEnabled = enabled
+	}
 	return user, nil
 }
 
@@ -120,23 +123,37 @@ func TestUserUsecase_GetOrProvision_ProvisionFails(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestUserUsecase_UpdateVisionEnabled_Success(t *testing.T) {
+func TestUserUsecase_UpdatePreferences_VisionEnabledSuccess(t *testing.T) {
 	repo := newFakeUserRepo()
 	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", VisionEnabled: false}
 	uc := newTestUserUsecase(repo)
+	enabled := true
 
-	user, err := uc.UpdateVisionEnabled(context.Background(), "kp_abc123", true)
+	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{VisionEnabled: &enabled})
 
 	require.NoError(t, err)
 	assert.True(t, user.VisionEnabled)
 }
 
-func TestUserUsecase_UpdateVisionEnabled_RepoError(t *testing.T) {
+func TestUserUsecase_UpdatePreferences_FolderIconsEnabledSuccess(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", FolderIconsEnabled: true}
+	uc := newTestUserUsecase(repo)
+	disabled := false
+
+	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{FolderIconsEnabled: &disabled})
+
+	require.NoError(t, err)
+	assert.False(t, user.FolderIconsEnabled)
+}
+
+func TestUserUsecase_UpdatePreferences_RepoError(t *testing.T) {
 	repo := newFakeUserRepo()
 	repo.updateErr = errors.New("db error")
 	uc := newTestUserUsecase(repo)
+	enabled := true
 
-	_, err := uc.UpdateVisionEnabled(context.Background(), "kp_abc123", true)
+	_, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{VisionEnabled: &enabled})
 
 	require.Error(t, err)
 }

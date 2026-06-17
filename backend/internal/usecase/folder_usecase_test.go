@@ -96,9 +96,29 @@ func newTestFolderUsecase(folderRepo FolderRepository, imageRepo FolderImageRepo
 func TestFolderUsecase_Create_BlankName(t *testing.T) {
 	uc := newTestFolderUsecase(&stubFolderRepo{}, &stubFolderImageRepo{})
 
-	_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil, nil)
+	_, err := uc.Create(context.Background(), "kp_abc123", "   ", nil, nil, nil)
 
 	require.ErrorIs(t, err, ErrInvalidFolderName)
+}
+
+func TestFolderUsecase_Create_InvalidIcon(t *testing.T) {
+	uc := newTestFolderUsecase(&stubFolderRepo{}, &stubFolderImageRepo{})
+	icon := "not-a-real-icon"
+
+	_, err := uc.Create(context.Background(), "kp_abc123", "travel", nil, nil, &icon)
+
+	require.ErrorIs(t, err, ErrInvalidFolderIcon)
+}
+
+func TestFolderUsecase_Create_ValidIconPassesThrough(t *testing.T) {
+	icon := "star"
+	repo := &stubFolderRepo{folder: &domain.Folder{Name: "travel", Icon: &icon}}
+	uc := newTestFolderUsecase(repo, &stubFolderImageRepo{})
+
+	folder, err := uc.Create(context.Background(), "kp_abc123", "travel", nil, nil, &icon)
+
+	require.NoError(t, err)
+	assert.Equal(t, &icon, folder.Icon)
 }
 
 func TestFolderUsecase_Update_BlankName(t *testing.T) {
@@ -122,6 +142,31 @@ func TestFolderUsecase_Update_PassesThroughOnlyProvidedFields(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"name": name}, repo.updateFields)
+}
+
+func TestFolderUsecase_Update_InvalidIcon(t *testing.T) {
+	repo := &stubFolderRepo{}
+	uc := newTestFolderUsecase(repo, &stubFolderImageRepo{})
+	icon := "not-a-real-icon"
+	iconPtr := &icon
+
+	_, err := uc.Update(context.Background(), uuid.New(), "kp_abc123", UpdateFolderParams{Icon: &iconPtr})
+
+	require.ErrorIs(t, err, ErrInvalidFolderIcon)
+	assert.Nil(t, repo.updateFields)
+}
+
+func TestFolderUsecase_Update_IconOmittedFromFieldsWhenNotProvided(t *testing.T) {
+	folderID := uuid.New()
+	name := "updated"
+	repo := &stubFolderRepo{folder: &domain.Folder{ID: folderID, Name: name}}
+	uc := newTestFolderUsecase(repo, &stubFolderImageRepo{})
+
+	_, err := uc.Update(context.Background(), folderID, "kp_abc123", UpdateFolderParams{Name: &name})
+
+	require.NoError(t, err)
+	_, hasIcon := repo.updateFields["icon"]
+	assert.False(t, hasIcon)
 }
 
 func TestFolderUsecase_Update_NotFound(t *testing.T) {
