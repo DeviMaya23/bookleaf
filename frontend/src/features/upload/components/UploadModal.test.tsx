@@ -18,15 +18,15 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
-import { uploadImageFile } from '@/lib/upload'
+import { uploadImageFile, validateImageFile } from '@/lib/upload'
 import { toast } from 'sonner'
 
-function renderModal(folderId: string | null = null, onUploadSuccess?: (id: string) => void) {
+function renderModal(folderId: string | null = null, onUploadSuccess?: (id: string) => void, initialFile?: File) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onOpenChange = vi.fn()
   render(
     <QueryClientProvider client={queryClient}>
-      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} onUploadSuccess={onUploadSuccess} />
+      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} onUploadSuccess={onUploadSuccess} initialFile={initialFile} />
     </QueryClientProvider>,
   )
   return { onOpenChange }
@@ -95,6 +95,35 @@ describe('UploadModal', () => {
       )
     })
     expect(toast.success).toHaveBeenCalledWith('Image uploaded successfully')
+  })
+
+  it('stages file and focuses title input when initialFile is provided', async () => {
+    const file = makeImageFile('image.png', 'image/png')
+    renderModal(null, undefined, file)
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'image.png' })).toBeInTheDocument()
+    })
+    const titleInput = screen.getByPlaceholderText('image')
+    expect(titleInput).toHaveValue('')
+    await waitFor(() => expect(titleInput).toHaveFocus())
+  })
+
+  it('does not focus title input when opened without initialFile', () => {
+    renderModal()
+
+    const titleInput = screen.getByPlaceholderText('Title')
+    expect(titleInput).not.toHaveFocus()
+  })
+
+  it('rejects an unsupported initialFile type with inline error and stages no file', () => {
+    vi.mocked(validateImageFile).mockReturnValueOnce('unsupported_type')
+    const file = makeImageFile('document.pdf', 'application/pdf')
+
+    renderModal(null, undefined, file)
+
+    expect(screen.getByText('Unsupported file type.')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'document.pdf' })).not.toBeInTheDocument()
   })
 
   it('shows error toast and keeps modal open when upload fails', async () => {
