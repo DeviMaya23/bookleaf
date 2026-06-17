@@ -39,6 +39,7 @@ export default function AppLayout() {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadInitialFile, setUploadInitialFile] = useState<File | null>(null)
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
   const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([])
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
@@ -57,6 +58,23 @@ export default function AppLayout() {
     setSelectedImage(null)
     setAutoFocusTitle(false)
   }, [viewKey])
+
+  useEffect(() => {
+    function handlePaste(event: ClipboardEvent) {
+      const tag = (event.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (uploadOpen) return
+      const items = Array.from(event.clipboardData?.items ?? [])
+      const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      if (!imageItem) return
+      const file = imageItem.getAsFile()
+      if (!file) return
+      setUploadInitialFile(file)
+      setUploadOpen(true)
+    }
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [uploadOpen])
 
   const { data: folders = [] } = useQuery({
     queryKey: ['folders'],
@@ -252,8 +270,12 @@ export default function AppLayout() {
         ) : null}
         <UploadModal
           open={uploadOpen}
-          onOpenChange={setUploadOpen}
+          onOpenChange={(open) => {
+            setUploadOpen(open)
+            if (!open) setUploadInitialFile(null)
+          }}
           folderId={folderId}
+          initialFile={uploadInitialFile ?? undefined}
           onUploadSuccess={checkVision}
         />
         <BatchUploadModal

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { toast } from 'sonner'
@@ -18,9 +18,10 @@ interface UploadModalProps {
   onOpenChange: (open: boolean) => void
   folderId: string | null
   onUploadSuccess?: (imageId: string) => void
+  initialFile?: File
 }
 
-export default function UploadModal({ open, onOpenChange, folderId, onUploadSuccess }: UploadModalProps) {
+export default function UploadModal({ open, onOpenChange, folderId, onUploadSuccess, initialFile }: UploadModalProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
@@ -34,6 +35,14 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
   const [isDragOver, setIsDragOver] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!initialFile || !open) return
+    handleFile(initialFile)
+    setTitle('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile, open])
 
   function revokePreview() {
     if (previewUrl) {
@@ -124,7 +133,7 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" initialFocus={initialFile ? titleInputRef : undefined}>
         <DialogHeader>
           <DialogTitle>Upload image</DialogTitle>
         </DialogHeader>
@@ -180,9 +189,10 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
           />
 
           <input
+            ref={titleInputRef}
             type="text"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            placeholder="Title"
+            placeholder={file ? fileBaseName(file.name) : 'Title'}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
