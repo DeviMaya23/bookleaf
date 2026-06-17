@@ -35,7 +35,7 @@ func sanitizeFilename(name string) string {
 }
 
 type FolderUsecase interface {
-	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)
+	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error)
 	List(ctx context.Context, userID string) ([]*domain.Folder, error)
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*usecase.FolderDetail, error)
 	Update(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateFolderParams) (*domain.Folder, error)
@@ -52,18 +52,21 @@ type folderRequest struct {
 	Name        string     `json:"name"`
 	ParentID    *uuid.UUID `json:"parent_id"`
 	Description *string    `json:"description"`
+	Icon        *string    `json:"icon"`
 }
 
 type updateFolderRequest struct {
 	Name        json.RawMessage `json:"name"`
 	ParentID    json.RawMessage `json:"parent_id"`
 	Description json.RawMessage `json:"description"`
+	Icon        json.RawMessage `json:"icon"`
 }
 
 type folderResponse struct {
 	ID          uuid.UUID  `json:"id"`
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
+	Icon        *string    `json:"icon"`
 	ParentID    *uuid.UUID `json:"parent_id"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
@@ -95,12 +98,15 @@ func (h *FolderHandler) CreateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	folder, err := h.folderUsecase.Create(ctx, userID, req.Name, req.ParentID, req.Description)
+	folder, err := h.folderUsecase.Create(ctx, userID, req.Name, req.ParentID, req.Description, req.Icon)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, usecase.ErrInvalidFolderName) {
 			return echo.NewHTTPError(http.StatusBadRequest, "folder name is required")
+		}
+		if errors.Is(err, usecase.ErrInvalidFolderIcon) {
+			return echo.NewHTTPError(http.StatusBadRequest, "folder icon is not in the allowlist")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create folder")
 	}
@@ -223,12 +229,29 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 		}
 	}
 
+	if len(req.Icon) > 0 {
+		if string(req.Icon) == "null" {
+			params.Icon = new(*string)
+		} else {
+			var icon string
+			if err := json.Unmarshal(req.Icon, &icon); err != nil {
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid icon")
+			}
+			inner := icon
+			outer := &inner
+			params.Icon = &outer
+		}
+	}
+
 	folder, err := h.folderUsecase.Update(ctx, folderID, userID, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, usecase.ErrInvalidFolderName) {
 			return echo.NewHTTPError(http.StatusBadRequest, "folder name is required")
+		}
+		if errors.Is(err, usecase.ErrInvalidFolderIcon) {
+			return echo.NewHTTPError(http.StatusBadRequest, "folder icon is not in the allowlist")
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
@@ -312,6 +335,7 @@ func toFolderResponse(folder *domain.Folder) folderResponse {
 		ID:          folder.ID,
 		Name:        folder.Name,
 		Description: folder.Description,
+		Icon:        folder.Icon,
 		ParentID:    folder.ParentID,
 		CreatedAt:   folder.CreatedAt,
 		UpdatedAt:   folder.UpdatedAt,

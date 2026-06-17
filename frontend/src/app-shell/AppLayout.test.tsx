@@ -167,7 +167,7 @@ function imageGrid() {
 }
 
 function makeFolder(id: string, name: string) {
-  return { id, name, description: null, parent_id: null, created_at: '', updated_at: '' }
+  return { id, name, description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }
 }
 
 describe('AppLayout focus mode', () => {

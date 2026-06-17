@@ -32,7 +32,7 @@ type mockFolderUsecase struct {
 	exportErr        error
 }
 
-func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID, _ *string) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID, _ *string, _ *string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
@@ -103,12 +103,13 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 	}{
 		{
 			name: "returns 201 with folder body",
-			body: `{"name":"travel","description":"trip board"}`,
+			body: `{"name":"travel","description":"trip board","icon":"star"}`,
 			uc: &mockFolderUsecase{
 				folder: &domain.Folder{
 					ID:          folderID,
 					Name:        "travel",
 					Description: func() *string { v := "trip board"; return &v }(),
+					Icon:        func() *string { v := "star"; return &v }(),
 					CreatedAt:   now,
 					UpdatedAt:   now,
 				},
@@ -119,6 +120,12 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 			name:          "returns 400 for invalid name",
 			body:          `{"name":""}`,
 			uc:            &mockFolderUsecase{err: usecase.ErrInvalidFolderName},
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "returns 400 for non-allowlisted icon",
+			body:          `{"name":"travel","icon":"not-a-real-icon"}`,
+			uc:            &mockFolderUsecase{err: usecase.ErrInvalidFolderIcon},
 			wantErrStatus: http.StatusBadRequest,
 		},
 		{
@@ -148,6 +155,8 @@ func TestFolderHandler_CreateFolder(t *testing.T) {
 			assert.Equal(t, "travel", resp["name"])
 			_, hasDescription := resp["description"]
 			assert.True(t, hasDescription)
+			_, hasIcon := resp["icon"]
+			assert.True(t, hasIcon)
 		})
 	}
 }
@@ -294,6 +303,12 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 			wantErrStatus: http.StatusNotFound,
 		},
 		{
+			name:          "returns 400 for non-allowlisted icon",
+			body:          `{"icon":"not-a-real-icon"}`,
+			uc:            &mockFolderUsecase{err: usecase.ErrInvalidFolderIcon},
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
 			name:          "returns 500 on generic error",
 			body:          `{"name":"updated"}`,
 			uc:            &mockFolderUsecase{err: errors.New("db error")},
@@ -323,6 +338,8 @@ func TestFolderHandler_UpdateFolder(t *testing.T) {
 			assert.Equal(t, "updated", resp["name"])
 			_, hasDescription := resp["description"]
 			assert.True(t, hasDescription)
+			_, hasIcon := resp["icon"]
+			assert.True(t, hasIcon)
 		})
 	}
 }
@@ -343,6 +360,41 @@ func TestFolderHandler_UpdateFolder_AbsentFieldsLeaveParamsNil(t *testing.T) {
 	assert.Equal(t, "updated", *uc.lastUpdateParams.Name)
 	assert.Nil(t, uc.lastUpdateParams.ParentID)
 	assert.Nil(t, uc.lastUpdateParams.Description)
+	assert.Nil(t, uc.lastUpdateParams.Icon)
+}
+
+func TestFolderHandler_UpdateFolder_IconPresenceSetsParam(t *testing.T) {
+	folderID := uuid.New()
+	icon := "star"
+	uc := &mockFolderUsecase{folder: &domain.Folder{ID: folderID, Icon: &icon}}
+	h := NewFolderHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), `{"icon":"star"}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.Icon)
+	require.NotNil(t, *uc.lastUpdateParams.Icon)
+	assert.Equal(t, "star", **uc.lastUpdateParams.Icon)
+}
+
+func TestFolderHandler_UpdateFolder_ExplicitNullIconResetsToDefault(t *testing.T) {
+	folderID := uuid.New()
+	uc := &mockFolderUsecase{folder: &domain.Folder{ID: folderID}}
+	h := NewFolderHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPatch, "/folders/"+folderID.String(), `{"icon":null}`)
+	c.SetPath("/folders/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(folderID.String())
+
+	err := h.UpdateFolder(c)
+
+	require.NoError(t, err)
+	require.NotNil(t, uc.lastUpdateParams.Icon)
+	assert.Nil(t, *uc.lastUpdateParams.Icon)
 }
 
 func TestFolderHandler_UpdateFolder_ExplicitNullClearsParentAndDescription(t *testing.T) {

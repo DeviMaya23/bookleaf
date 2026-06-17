@@ -1,5 +1,5 @@
 ### Requirement: System folder navigation entries
-The sidebar SHALL display three pinned system entries at the top of the navigation: **All**, **Unsorted**, and **Trash**. All and Unsorted SHALL use the default text color. Trash SHALL use a muted/de-emphasized color. Selecting a system entry SHALL navigate to the corresponding route (`/app`, `/app/unsorted`, `/app/trash`).
+The sidebar SHALL display three pinned system entries at the top of the navigation: **All**, **Unsorted**, and **Trash**. All and Unsorted SHALL use the default text color. Trash SHALL use a muted/de-emphasized color. Selecting a system entry SHALL navigate to the corresponding route (`/app`, `/app/unsorted`, `/app/trash`). When folder icons are enabled, each system entry SHALL display a fixed icon to the left of its label (see the `folder-icon-customization` capability for the specific icons and the visibility toggle).
 
 #### Scenario: All three system entries are visible
 - **WHEN** the sidebar is rendered
@@ -16,7 +16,7 @@ The sidebar SHALL display three pinned system entries at the top of the navigati
 ---
 
 ### Requirement: Nested folder tree rendering
-The sidebar SHALL render the user folder list as a tree, derived from the `parent_id` field returned by `GET /folders`. Root folders (those with `parent_id: null`) are displayed at the top level. Each folder with children SHALL show an expand/collapse toggle. Depth-based indentation SHALL increase per nesting level.
+The sidebar SHALL render the user folder list as a tree, derived from the `parent_id` field returned by `GET /folders`. Root folders (those with `parent_id: null`) are displayed at the top level. Each folder with children SHALL show an expand/collapse toggle. Depth-based indentation SHALL increase per nesting level. When folder icons are enabled, each folder row SHALL display the folder's icon (or the default, if unset) between the expand/collapse toggle and the folder name (see the `folder-icon-customization` capability).
 
 #### Scenario: Root folders appear at top level
 - **WHEN** `GET /folders` returns folders with `parent_id: null`

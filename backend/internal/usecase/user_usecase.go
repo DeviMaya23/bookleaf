@@ -58,11 +58,22 @@ func (u *userUsecase) GetByID(ctx context.Context, kindeID string) (*domain.User
 	return user, nil
 }
 
-func (u *userUsecase) UpdateVisionEnabled(ctx context.Context, id string, enabled bool) (*domain.User, error) {
-	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateVisionEnabled")
+type UpdateUserPreferencesParams struct {
+	VisionEnabled      *bool
+	FolderIconsEnabled *bool
+}
+
+func (u *userUsecase) UpdatePreferences(ctx context.Context, id string, params UpdateUserPreferencesParams) (*domain.User, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdatePreferences")
 	defer span.End()
 
-	fields := map[string]any{"vision_enabled": enabled}
+	fields := make(map[string]any)
+	if params.VisionEnabled != nil {
+		fields["vision_enabled"] = *params.VisionEnabled
+	}
+	if params.FolderIconsEnabled != nil {
+		fields["folder_icons_enabled"] = *params.FolderIconsEnabled
+	}
 
 	user, err := u.userRepo.Update(ctx, id, fields)
 	if err != nil {

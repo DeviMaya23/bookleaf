@@ -8,13 +8,14 @@ import (
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
+	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
 )
 
 type UserUsecase interface {
 	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
-	UpdateVisionEnabled(ctx context.Context, id string, enabled bool) (*domain.User, error)
+	UpdatePreferences(ctx context.Context, id string, params usecase.UpdateUserPreferencesParams) (*domain.User, error)
 }
 
 type AccountUsecase interface {
@@ -28,7 +29,8 @@ type MeHandler struct {
 }
 
 type updateMeRequest struct {
-	VisionEnabled json.RawMessage `json:"vision_enabled"`
+	VisionEnabled      json.RawMessage `json:"vision_enabled"`
+	FolderIconsEnabled json.RawMessage `json:"folder_icons_enabled"`
 }
 
 func NewMeHandler(userUsecase UserUsecase, accountUsecase AccountUsecase, tel *observability.Telemetry) *MeHandler {
@@ -56,8 +58,9 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":             user.ID,
-		"vision_enabled": user.VisionEnabled,
+		"id":                   user.ID,
+		"vision_enabled":       user.VisionEnabled,
+		"folder_icons_enabled": user.FolderIconsEnabled,
 	})
 }
 
@@ -75,16 +78,29 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	if len(req.VisionEnabled) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled is required")
+	if len(req.VisionEnabled) == 0 && len(req.FolderIconsEnabled) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled or folder_icons_enabled is required")
 	}
 
-	var visionEnabled bool
-	if err := json.Unmarshal(req.VisionEnabled, &visionEnabled); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled must be a boolean")
+	var params usecase.UpdateUserPreferencesParams
+
+	if len(req.VisionEnabled) > 0 {
+		var visionEnabled bool
+		if err := json.Unmarshal(req.VisionEnabled, &visionEnabled); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled must be a boolean")
+		}
+		params.VisionEnabled = &visionEnabled
 	}
 
-	user, err := h.userUsecase.UpdateVisionEnabled(ctx, userID, visionEnabled)
+	if len(req.FolderIconsEnabled) > 0 {
+		var folderIconsEnabled bool
+		if err := json.Unmarshal(req.FolderIconsEnabled, &folderIconsEnabled); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "folder_icons_enabled must be a boolean")
+		}
+		params.FolderIconsEnabled = &folderIconsEnabled
+	}
+
+	user, err := h.userUsecase.UpdatePreferences(ctx, userID, params)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -92,8 +108,9 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":             user.ID,
-		"vision_enabled": user.VisionEnabled,
+		"id":                   user.ID,
+		"vision_enabled":       user.VisionEnabled,
+		"folder_icons_enabled": user.FolderIconsEnabled,
 	})
 }
 

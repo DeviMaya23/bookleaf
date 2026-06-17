@@ -49,7 +49,7 @@ vi.mock('sonner', () => ({
 import { updateFolder, getFolder, exportFolder } from '@/lib/folders'
 import { getFolderShare, createFolderShare, deleteFolderShare } from '@/lib/share'
 
-const folder = { id: 'folder-1', name: 'Nature', description: 'Outdoor shots' }
+const folder = { id: 'folder-1', name: 'Nature', description: 'Outdoor shots', icon: null }
 
 beforeEach(() => {
   vi.mocked(getFolderShare).mockResolvedValue(null)

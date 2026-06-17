@@ -10,8 +10,8 @@ const tags: Tag[] = [
   { id: 'tag-2', name: 'Dogs' },
 ]
 const folders: Folder[] = [
-  { id: 'folder-1', name: 'Vacation', description: null, parent_id: null, created_at: '', updated_at: '' },
-  { id: 'folder-2', name: 'Work', description: null, parent_id: null, created_at: '', updated_at: '' },
+  { id: 'folder-1', name: 'Vacation', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
+  { id: 'folder-2', name: 'Work', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
 ]
 
 function render(view: AppView) {

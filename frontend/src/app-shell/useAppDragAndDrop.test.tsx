@@ -25,7 +25,7 @@ vi.mock('./lib/dragHandlers', async (importOriginal) => {
 })
 
 const folders: Folder[] = [
-  { id: 'folder-1', name: 'Nature', description: null, parent_id: null, created_at: '', updated_at: '' },
+  { id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
 ]
 
 function dragEnd(active: { id: string; type: string; [k: string]: unknown }, over: { id: string; type: string; [k: string]: unknown } | null): DragEndEvent {

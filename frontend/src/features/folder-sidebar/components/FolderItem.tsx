@@ -5,11 +5,16 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
 } from '@/components/ui/context-menu'
 import { getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 import type { FolderNode } from '../lib/folderTree'
+import { FOLDER_ICONS } from '../lib/folderIcons'
+import FolderIconView from './FolderIconView'
 
 interface FolderItemProps {
   folder: FolderNode
@@ -18,16 +23,18 @@ interface FolderItemProps {
   folders: Folder[]
   activeDragType: string | null
   activeDragFolderId: string | null
+  iconsEnabled: boolean
   onSelect: (folder: FolderNode) => void
   onRename: (folder: Folder) => void
   onDelete: (folder: Folder) => void
   onNewSubfolder: (folder: Folder) => void
+  onChangeIcon: (folder: Folder, icon: string) => void
 }
 
 export default function FolderItem({
   folder, depth, view, folders,
-  activeDragType, activeDragFolderId,
-  onSelect, onRename, onDelete, onNewSubfolder,
+  activeDragType, activeDragFolderId, iconsEnabled,
+  onSelect, onRename, onDelete, onNewSubfolder, onChangeIcon,
 }: FolderItemProps) {
   const [open, setOpen] = useState(depth === 0)
   const hasChildren = folder.children.length > 0
@@ -57,6 +64,7 @@ export default function FolderItem({
     setDragRef(el)
   }
 
+
   return (
     <div style={{ opacity: isDragging ? 0.4 : 1 }}>
       <ContextMenu>
@@ -83,6 +91,9 @@ export default function FolderItem({
             >
               ▶
             </span>
+            {iconsEnabled && (
+              <FolderIconView icon={folder.icon} className="w-3.5 h-3.5 shrink-0" />
+            )}
             <span className="flex-1 truncate">{folder.name}</span>
           </div>
         </ContextMenuTrigger>
@@ -93,6 +104,17 @@ export default function FolderItem({
           <ContextMenuItem onClick={() => onRename(folder)}>
             Rename
           </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Change icon</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-72 overflow-y-auto">
+              {Object.entries(FOLDER_ICONS).map(([key, Icon]) => (
+                <ContextMenuItem key={key} onClick={() => onChangeIcon(folder, key)}>
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  {key}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
           <ContextMenuItem
             onClick={() => onDelete(folder)}
             className="text-destructive focus:text-destructive"
@@ -113,10 +135,12 @@ export default function FolderItem({
               folders={folders}
               activeDragType={activeDragType}
               activeDragFolderId={activeDragFolderId}
+              iconsEnabled={iconsEnabled}
               onSelect={onSelect}
               onRename={onRename}
               onDelete={onDelete}
               onNewSubfolder={onNewSubfolder}
+              onChangeIcon={onChangeIcon}
             />
           ))}
         </div>

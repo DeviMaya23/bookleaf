@@ -4,6 +4,7 @@ export interface Folder {
   id: string
   name: string
   description: string | null
+  icon: string | null
   parent_id: string | null
   created_at: string
   updated_at: string
@@ -27,9 +28,15 @@ export async function getFolder(getToken: GetToken, id: string): Promise<FolderD
   return res.json()
 }
 
-export async function createFolder(getToken: GetToken, name: string, parentId?: string): Promise<Folder> {
-  const body: Record<string, string> = { name }
+export async function createFolder(
+  getToken: GetToken,
+  name: string,
+  parentId?: string,
+  icon?: string | null,
+): Promise<Folder> {
+  const body: Record<string, string | null> = { name }
   if (parentId) body.parent_id = parentId
+  if (icon !== undefined) body.icon = icon
   const res = await apiFetch('/folders', getToken, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -42,6 +49,7 @@ export async function createFolder(getToken: GetToken, name: string, parentId?: 
 export interface UpdateFolderParams {
   name?: string
   description?: string | null
+  icon?: string | null
   parent_id?: string | null
 }
 

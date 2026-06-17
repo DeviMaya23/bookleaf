@@ -45,7 +45,7 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
 })
 
 function makeFolder(id: string, name: string): Folder {
-  return { id, name, description: null, parent_id: null, created_at: '', updated_at: '' }
+  return { id, name, description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }
 }
 
 function Harness({ view, tags, folders }: { view: AppView; tags: Tag[]; folders: Folder[] }) {

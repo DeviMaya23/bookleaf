@@ -20,6 +20,14 @@ export function useFolderMutations() {
     onSuccess: invalidate,
   })
 
+  const changeIconMutation = useMutation({
+    mutationFn: ({ id, icon }: { id: string; icon: string }) => updateFolder(getToken, id, { icon }),
+    onSuccess: invalidate,
+    onError: () => {
+      toast.error('Failed to update folder icon')
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteFolder(getToken, id),
     onSuccess: () => {
@@ -31,5 +39,5 @@ export function useFolderMutations() {
     },
   })
 
-  return { createMutation, renameMutation, deleteMutation }
+  return { createMutation, renameMutation, deleteMutation, changeIconMutation }
 }

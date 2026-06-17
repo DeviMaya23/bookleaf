@@ -6,18 +6,19 @@ The system SHALL expose a `POST /folders` endpoint on the protected route group 
 
 Request body:
 ```json
-{ "name": "string (required)", "parent_id": "uuid (optional)", "description": "string (optional)" }
+{ "name": "string (required)", "parent_id": "uuid (optional)", "description": "string (optional)", "icon": "string (optional)" }
 ```
 
 Response body (201):
 ```json
-{ "id": "uuid", "name": "string", "description": "string|null", "parent_id": "uuid|null", "created_at": "timestamp", "updated_at": "timestamp" }
+{ "id": "uuid", "name": "string", "description": "string|null", "icon": "string|null", "parent_id": "uuid|null", "created_at": "timestamp", "updated_at": "timestamp" }
 ```
 
 - `parent_id` in the request is optional; omitting it creates a root-level folder
 - If `parent_id` is provided, the referenced folder MUST be owned by the authenticated user
 - `name` is required and MUST NOT be empty
 - `description` is optional; omitting it stores NULL
+- `icon` is optional; omitting it stores NULL (the default icon is used). If provided, it MUST be a key in the folder icon allowlist.
 
 #### Scenario: Authenticated user creates a folder with description
 
@@ -30,6 +31,24 @@ Response body (201):
 - **WHEN** an authenticated `POST /folders` request omits `description`
 - **THEN** the response is `201 Created`
 - **AND** `description` in the body is `null`
+
+#### Scenario: Authenticated user creates a folder with an icon
+
+- **WHEN** an authenticated `POST /folders` request is made with a valid `name` and an allowlisted `icon`
+- **THEN** the response is `201 Created`
+- **AND** the body contains the new folder with the supplied `icon`
+
+#### Scenario: Authenticated user creates a folder without an icon
+
+- **WHEN** an authenticated `POST /folders` request omits `icon`
+- **THEN** the response is `201 Created`
+- **AND** `icon` in the body is `null`
+
+#### Scenario: Request with a non-allowlisted icon is rejected
+
+- **WHEN** an authenticated `POST /folders` request is made with an `icon` value not in the allowlist
+- **THEN** the response is `400 Bad Request`
+- **AND** no folder is created
 
 #### Scenario: Authenticated user creates a nested folder
 
@@ -55,7 +74,7 @@ The system SHALL expose a `GET /folders` endpoint on the protected route group t
 
 Response body (200):
 ```json
-[{ "id": "uuid", "name": "string", "description": "string|null", "parent_id": "uuid|null", "created_at": "timestamp", "updated_at": "timestamp" }]
+[{ "id": "uuid", "name": "string", "description": "string|null", "icon": "string|null", "parent_id": "uuid|null", "created_at": "timestamp", "updated_at": "timestamp" }]
 ```
 
 - Returns a flat list of all folders for the user (no nesting in the response)
@@ -65,7 +84,7 @@ Response body (200):
 
 - **WHEN** an authenticated `GET /folders` request is made
 - **THEN** the response is `200 OK`
-- **AND** each folder object includes a `description` field (null when not set)
+- **AND** each folder object includes `description` and `icon` fields (null when not set)
 
 #### Scenario: User with no folders receives empty array
 
@@ -90,6 +109,7 @@ Response body (200):
   "id": "uuid",
   "name": "string",
   "description": "string|null",
+  "icon": "string|null",
   "parent_id": "uuid|null",
   "image_count": "integer",
   "created_at": "timestamp",
@@ -105,7 +125,7 @@ Response body (200):
 
 - **WHEN** an authenticated `GET /folders/:id` request is made for a folder owned by the user
 - **THEN** the response is `200 OK`
-- **AND** the body includes `description` and `image_count`
+- **AND** the body includes `description`, `icon`, and `image_count`
 
 #### Scenario: image_count reflects non-deleted images only
 
@@ -126,47 +146,61 @@ Response body (200):
 
 ### Requirement: PATCH /folders/:id — Update Folder
 
-The system SHALL expose a `PATCH /folders/:id` endpoint on the protected route group that partially updates a folder's `name`, `parent_id`, and/or `description`. Only fields present in the request body are modified — omitted fields are left unchanged. This replaces the prior `PUT /folders/:id` full-replace contract, which silently nulled any field absent from the request body.
+The system SHALL expose a `PATCH /folders/:id` endpoint on the protected route group that partially updates a folder's `name`, `parent_id`, `description`, and/or `icon`. Only fields present in the request body are modified — omitted fields are left unchanged. This replaces the prior `PUT /folders/:id` full-replace contract, which silently nulled any field absent from the request body.
 
 Request body (all fields optional; presence, not just value, is significant):
 ```json
-{ "name": "string (optional)", "parent_id": "uuid|null (optional)", "description": "string|null (optional)" }
+{ "name": "string (optional)", "parent_id": "uuid|null (optional)", "description": "string|null (optional)", "icon": "string|null (optional)" }
 ```
 
-Response body (200): updated folder in the same shape as `GET /folders` list item (with `description`, without `image_count`).
+Response body (200): updated folder in the same shape as `GET /folders` list item (with `description` and `icon`, without `image_count`).
 
 - The folder MUST be owned by the authenticated user
 - If `name` is present in the request, it MUST NOT be empty or whitespace-only; if `name` is absent, the folder's existing `name` is preserved unchanged
 - If `parent_id` is present in the request (including explicit `null`), the folder's `parent_id` is updated to that value; if `parent_id` is absent, the folder's existing `parent_id` is preserved unchanged
 - If `parent_id` is present as a non-null value, the referenced parent folder MUST be owned by the same user
 - If `description` is present in the request (including explicit `null`), the folder's `description` is updated to that value — `null` clears it; if `description` is absent, the folder's existing `description` is preserved unchanged
+- If `icon` is present in the request (including explicit `null`), the folder's `icon` is updated to that value — `null` resets it to the default icon; if `icon` is absent, the folder's existing `icon` is preserved unchanged. If `icon` is present as a non-null value, it MUST be a key in the folder icon allowlist.
 
-#### Scenario: Updating only the name preserves parent and description
+#### Scenario: Updating only the name preserves parent, description, and icon
 
-- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "name": "<new name>" }` for a folder that has a non-null `parent_id` and `description`
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "name": "<new name>" }` for a folder that has a non-null `parent_id`, `description`, and `icon`
 - **THEN** the response is `200 OK`
 - **AND** the folder's `name` is updated
-- **AND** the folder's `parent_id` and `description` are unchanged
+- **AND** the folder's `parent_id`, `description`, and `icon` are unchanged
 
-#### Scenario: Updating only the parent preserves name and description
+#### Scenario: Updating only the parent preserves name, description, and icon
 
-- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "parent_id": "<uuid>" }` (or `{ "parent_id": null }`) for a folder that has a non-empty `name` and `description`
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "parent_id": "<uuid>" }` (or `{ "parent_id": null }`) for a folder that has a non-empty `name`, `description`, and `icon`
 - **THEN** the response is `200 OK`
 - **AND** the folder's `parent_id` is updated to the provided value
-- **AND** the folder's `name` and `description` are unchanged
+- **AND** the folder's `name`, `description`, and `icon` are unchanged
 
-#### Scenario: Updating only the description preserves name and parent
+#### Scenario: Updating only the description preserves name, parent, and icon
 
-- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "description": "<text>" }` (or `{ "description": null }`) for a folder that has a non-empty `name` and a non-null `parent_id`
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "description": "<text>" }` (or `{ "description": null }`) for a folder that has a non-empty `name`, a non-null `parent_id`, and a non-null `icon`
 - **THEN** the response is `200 OK`
 - **AND** the folder's `description` is updated to the provided value (or cleared, if `null`)
-- **AND** the folder's `name` and `parent_id` are unchanged
+- **AND** the folder's `name`, `parent_id`, and `icon` are unchanged
+
+#### Scenario: Updating only the icon preserves name, parent, and description
+
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with only `{ "icon": "<allowlisted key>" }` (or `{ "icon": null }`) for a folder that has a non-empty `name`, a non-null `parent_id`, and a non-null `description`
+- **THEN** the response is `200 OK`
+- **AND** the folder's `icon` is updated to the provided value (or reset to default, if `null`)
+- **AND** the folder's `name`, `parent_id`, and `description` are unchanged
+
+#### Scenario: Updating to a non-allowlisted icon is rejected
+
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with `icon` present and set to a value not in the allowlist
+- **THEN** the response is `400 Bad Request`
+- **AND** no field on the folder is modified
 
 #### Scenario: Authenticated user updates multiple fields at once
 
-- **WHEN** an authenticated `PATCH /folders/:id` request is made with `{ "name": "<new name>", "description": "<text>" }`
+- **WHEN** an authenticated `PATCH /folders/:id` request is made with `{ "name": "<new name>", "description": "<text>", "icon": "<allowlisted key>" }`
 - **THEN** the response is `200 OK`
-- **AND** the body contains the folder with both `name` and `description` updated
+- **AND** the body contains the folder with `name`, `description`, and `icon` all updated
 - **AND** the folder's `parent_id` is unchanged
 
 #### Scenario: Folder not found or not owned by user
@@ -244,7 +278,7 @@ Methods required:
 - `Create(ctx, folder *domain.Folder) (*domain.Folder, error)`
 - `List(ctx, userID string) ([]*domain.Folder, error)`
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Folder, error)`
-- `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Folder, error)` — performs a selective column update using only the keys present in `fields` (e.g. `Model(&domain.Folder{}).Where("id = ? AND user_id = ?", id, userID).Updates(fields)`), returns `gorm.ErrRecordNotFound` wrapped when no row matches, and re-fetches the updated folder on success. This mirrors `imageRepository.Update` and replaces the prior full-row-replace implementation that overwrote `name`, `parent_id`, and `description` unconditionally.
+- `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Folder, error)` — performs a selective column update using only the keys present in `fields` (e.g. `Model(&domain.Folder{}).Where("id = ? AND user_id = ?", id, userID).Updates(fields)`), returns `gorm.ErrRecordNotFound` wrapped when no row matches, and re-fetches the updated folder on success. This mirrors `imageRepository.Update` and replaces the prior full-row-replace implementation that overwrote `name`, `parent_id`, and `description` unconditionally. `fields` MAY include an `icon` key.
 - `DeleteWithCascade(ctx, id uuid.UUID, userID string) error` — in a single transaction: nulls child folders' `parent_id`, then hard-deletes the folder row; the `image_folders` cleanup is handled by `ON DELETE CASCADE` and does NOT require an explicit step
 - `FindByName(ctx, userID, name string) (*domain.Folder, error)`
 - `CountImagesByFolder(ctx, id uuid.UUID, userID string) (int, error)` — counts non-deleted images with a row in `image_folders` for the given folder; implemented as `Model(&domain.Image{}) + JOIN image_folders WHERE image_folders.folder_id = ? AND images.user_id = ?`
@@ -256,9 +290,14 @@ Methods required:
 
 #### Scenario: Update modifies only the supplied fields
 
-- **WHEN** `Update` is called with `fields` containing only `{"name": "<new name>"}` for a folder that has a non-null `parent_id` and `description`
+- **WHEN** `Update` is called with `fields` containing only `{"name": "<new name>"}` for a folder that has a non-null `parent_id`, `description`, and `icon`
 - **THEN** only the `name` column is written to the database
-- **AND** the folder's `parent_id` and `description` columns retain their prior values
+- **AND** the folder's `parent_id`, `description`, and `icon` columns retain their prior values
+
+#### Scenario: Update writes the icon column when supplied
+
+- **WHEN** `Update` is called with `fields` containing `{"icon": "<allowlisted key>"}`
+- **THEN** only the `icon` column is written to the database
 
 #### Scenario: Update returns not-found for a missing or unowned folder
 
@@ -297,14 +336,15 @@ type UpdateFolderParams struct {
     Name        *string
     ParentID    **uuid.UUID
     Description **string
+    Icon        **string
 }
 ```
 
 Interface methods:
-- `Create(ctx, userID, name string, parentID *uuid.UUID, description *string) (*domain.Folder, error)`
+- `Create(ctx, userID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error)` — `icon`, if non-nil, MUST be validated against the folder icon allowlist before being passed to the repository
 - `List(ctx, userID string) ([]*domain.Folder, error)`
 - `GetByID(ctx, id uuid.UUID, userID string) (*FolderDetail, error)`
-- `Update(ctx, id uuid.UUID, userID string, params UpdateFolderParams) (*domain.Folder, error)` — validates that `Name`, if non-nil, is non-blank; builds a selective field map containing only the params that are non-nil and passes it to `folderRepo.Update`; replaces the prior `Update(ctx, id, userID, name string, parentID *uuid.UUID, description *string)` signature, which always wrote all three fields
+- `Update(ctx, id uuid.UUID, userID string, params UpdateFolderParams) (*domain.Folder, error)` — validates that `Name`, if non-nil, is non-blank; validates that `Icon`, if non-nil and pointing to a non-nil value, is a key in the folder icon allowlist; builds a selective field map containing only the params that are non-nil and passes it to `folderRepo.Update`; replaces the prior `Update(ctx, id, userID, name string, parentID *uuid.UUID, description *string)` signature, which always wrote all three fields and did not support `icon`
 - `Delete(ctx, id uuid.UUID, userID string) error`
 
 `folderUsecase` SHALL receive an `ImageRepository` as a constructor dependency so `GetByID` can call `imageRepo.CountByFolderID`.
@@ -320,9 +360,15 @@ Interface methods:
 - **THEN** the usecase returns `ErrInvalidFolderName`
 - **AND** the repository's `Update` is not called
 
+#### Scenario: Update validates a non-allowlisted icon
+
+- **WHEN** `Update` is called with `params.Icon` pointing to a non-nil value not present in the folder icon allowlist
+- **THEN** the usecase returns an invalid-icon error
+- **AND** the repository's `Update` is not called
+
 #### Scenario: Update passes through only provided fields
 
-- **WHEN** `Update` is called with `params.Name` set and `params.ParentID`/`params.Description` left `nil`
+- **WHEN** `Update` is called with `params.Name` set and `params.ParentID`/`params.Description`/`params.Icon` left `nil`
 - **THEN** the usecase calls `folderRepo.Update` with a fields map containing only the `name` key
 
 ---
@@ -359,6 +405,11 @@ The system SHALL have unit tests for `folderUsecase` covering each method with a
 
 - **WHEN** the usecase method is called and the mock repository returns an error
 - **THEN** the test asserts the error is propagated
+
+#### Scenario: Update unit test covers icon allowlist rejection
+
+- **WHEN** `Update` is called with a non-allowlisted `Icon` value
+- **THEN** the test asserts an invalid-icon error is returned and the mocked repository's `Update` is not called
 
 ---
 

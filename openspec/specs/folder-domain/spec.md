@@ -10,6 +10,7 @@ Fields (all DB columns use snake_case):
 - `ParentID` — self-referencing FK to `folders(id)` (nullable; nil means top-level folder) (`parent_id`)
 - `Name` — display name, required (`name`)
 - `Description` — user-supplied annotation, nullable (`description`)
+- `Icon` — user-selected icon key, nullable; `nil` means the default icon is used (`icon`)
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 
 `DeletedAt` is not present. Folders use hard delete only.
@@ -23,6 +24,11 @@ Fields (all DB columns use snake_case):
 
 - **WHEN** the Go package is compiled
 - **THEN** `Folder` has a nullable `Description *string` field with a correct GORM column tag
+
+#### Scenario: Folder struct includes icon field
+
+- **WHEN** the Go package is compiled
+- **THEN** `Folder` has a nullable `Icon *string` field with a correct GORM column tag (`gorm:"column:icon"`)
 
 #### Scenario: Top-level folder has no parent
 
@@ -74,3 +80,22 @@ The system SHALL include a `golang-migrate` SQL migration (000007, `add_folder_d
 
 - **WHEN** migration 000007 down is applied
 - **THEN** the `description` column is dropped from `folders` without error
+
+### Requirement: Folder Icon Migration
+
+The system SHALL include a `golang-migrate` SQL migration (`000017_add_folder_icon`) that adds an `icon text` nullable column to the `folders` table.
+
+#### Scenario: Migration adds icon column
+
+- **WHEN** migration 000017 up is applied
+- **THEN** the `folders` table gains a nullable `icon` column of type `text`
+
+#### Scenario: Migration is reversible
+
+- **WHEN** migration 000017 down is applied
+- **THEN** the `icon` column is dropped from `folders` without error
+
+#### Scenario: Existing folders are unaffected by the migration
+
+- **WHEN** migration 000017 up is applied to a database with existing folder rows
+- **THEN** all existing rows have `icon = NULL`

@@ -3,8 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
-import { getFolderSubtreeIds, getFolders, createFolder } from '@/lib/folders'
+import { getFolderSubtreeIds, getFolders, createFolder, updateFolder } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
+import { getMe } from '@/features/auth/lib/me'
 import FolderSidebar from './FolderSidebar'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
@@ -27,11 +28,16 @@ vi.mock('@/lib/folders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/folders')>()),
   getFolders: vi.fn(),
   createFolder: vi.fn(),
+  updateFolder: vi.fn(),
 }))
 
 vi.mock('@/lib/images', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/images')>()),
   emptyTrash: vi.fn(),
+}))
+
+vi.mock('@/features/auth/lib/me', () => ({
+  getMe: vi.fn().mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true }),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -54,6 +60,12 @@ vi.mock('@/components/ui/context-menu', async () => {
       className?: string
     }) =>
       React.createElement('button', { role: 'menuitem', className, onClick }, children),
+    ContextMenuSub: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    ContextMenuSubTrigger: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    ContextMenuSubContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
   }
 })
 
@@ -72,7 +84,7 @@ function makeFolder(id: string, parentId: string | null = null): Folder {
   return {
     id,
     name: `Folder ${id}`,
-    description: null,
+    description: null, icon: null,
     parent_id: parentId,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
@@ -139,6 +151,62 @@ describe('FolderSidebar new folder controls', () => {
 
     await screen.findByText('Folder 1')
     expect(screen.queryByRole('button', { name: '+ New folder' })).not.toBeInTheDocument()
+  })
+})
+
+describe('FolderSidebar folder icons', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true })
+  })
+
+  it('renders icons for All, Unsorted, Trash, and user folders when folder_icons_enabled is true', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+
+    renderSidebar()
+
+    const folderRow = (await screen.findByText('Folder 1')).closest('div')
+    expect(folderRow?.querySelector('svg')).toBeTruthy()
+    expect(screen.getByText('All').closest('div')?.querySelector('svg')).toBeTruthy()
+    expect(screen.getByText('Unsorted').closest('div')?.querySelector('svg')).toBeTruthy()
+    expect(screen.getByText('Trash').closest('div')?.querySelector('svg')).toBeTruthy()
+  })
+
+  it('renders no icons when folder_icons_enabled is false', async () => {
+    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: false })
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+
+    renderSidebar()
+
+    const folderRow = (await screen.findByText('Folder 1')).closest('div')
+    expect(folderRow?.querySelector('svg')).toBeFalsy()
+    expect(screen.getByText('All').closest('div')?.querySelector('svg')).toBeFalsy()
+    expect(screen.getByText('Unsorted').closest('div')?.querySelector('svg')).toBeFalsy()
+    expect(screen.getByText('Trash').closest('div')?.querySelector('svg')).toBeFalsy()
+  })
+
+  it('offers a "Change icon" option in a folder\'s context menu but not on Trash', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+
+    renderSidebar()
+
+    await screen.findByText('Folder 1')
+    expect(screen.getByText('Change icon')).toBeInTheDocument()
+    expect(screen.queryAllByText('Change icon')).toHaveLength(1)
+  })
+
+  it('updates a folder\'s icon via the "Change icon" submenu', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+    vi.mocked(updateFolder).mockResolvedValue({ ...makeFolder('1'), icon: 'star' })
+
+    renderSidebar()
+
+    await screen.findByText('Folder 1')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'star' }))
+
+    await waitFor(() => {
+      expect(updateFolder).toHaveBeenCalledWith(expect.any(Function), '1', { icon: 'star' })
+    })
   })
 })
 

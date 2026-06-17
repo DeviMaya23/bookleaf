@@ -10,13 +10,16 @@ import {
 } from '@/components/ui/context-menu'
 import { emptyTrash } from '@/lib/images'
 import EmptyTrashDialog from './EmptyTrashDialog'
+import { FOLDER_ICONS, SYSTEM_ICON_KEYS } from '../lib/folderIcons'
 
 interface TrashEntryProps {
   active: boolean
+  iconsEnabled: boolean
   onClick: () => void
 }
 
-export default function TrashEntry({ active, onClick }: TrashEntryProps) {
+export default function TrashEntry({ active, iconsEnabled, onClick }: TrashEntryProps) {
+  const Icon = FOLDER_ICONS[SYSTEM_ICON_KEYS.trash]
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -35,13 +38,14 @@ export default function TrashEntry({ active, onClick }: TrashEntryProps) {
       <ContextMenu>
         <ContextMenuTrigger>
           <div
-            className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
               active
                 ? 'bg-accent text-accent-foreground font-medium'
                 : 'text-muted-foreground/60 hover:bg-accent hover:text-accent-foreground'
             }`}
             onClick={onClick}
           >
+            {iconsEnabled && <Icon className="w-3.5 h-3.5 shrink-0" />}
             Trash
           </div>
         </ContextMenuTrigger>

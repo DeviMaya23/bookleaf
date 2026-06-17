@@ -13,6 +13,7 @@ type Folder struct {
 	ParentID    *uuid.UUID `gorm:"column:parent_id;type:uuid;index"`
 	Name        string     `gorm:"column:name;not null"`
 	Description *string    `gorm:"column:description"`
+	Icon        *string    `gorm:"column:icon"`
 	CreatedAt   time.Time  `gorm:"column:created_at"`
 	UpdatedAt   time.Time  `gorm:"column:updated_at"`
 

@@ -8,6 +8,7 @@ import { PlusIcon } from 'lucide-react'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
+import { getMe } from '@/features/auth/lib/me'
 import FolderNameDialog from './FolderNameDialog'
 import DeleteFolderDialog from './DeleteFolderDialog'
 import FolderItem from './FolderItem'
@@ -18,6 +19,9 @@ import ProfileMenu from '@/features/auth/components/ProfileMenu'
 import { buildFolderTree, filterFolderTree, type FolderNode } from '../lib/folderTree'
 import { useFolderMutations } from '../hooks/useFolderMutations'
 import { isImageDragData, isFolderDragData } from '@/app-shell/lib/dragHandlers'
+import { FOLDER_ICONS, SYSTEM_ICON_KEYS } from '../lib/folderIcons'
+
+const AllIcon = FOLDER_ICONS[SYSTEM_ICON_KEYS.all]
 
 type NameDialogState =
   | { mode: 'create-root' }
@@ -44,7 +48,14 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
     queryFn: () => getFolders(getToken),
   })
 
-  const { createMutation, renameMutation, deleteMutation } = useFolderMutations()
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(getToken),
+    staleTime: Infinity,
+  })
+  const iconsEnabled = me?.folder_icons_enabled ?? true
+
+  const { createMutation, renameMutation, deleteMutation, changeIconMutation } = useFolderMutations()
 
   const [folderFilter, setFolderFilter] = useState('')
   const [nameDialog, setNameDialog] = useState<NameDialogState>(null)
@@ -93,21 +104,23 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
 
       <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
         <div
-          className={`px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
             view.type === 'all'
               ? 'bg-accent text-accent-foreground font-medium'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           }`}
           onClick={() => navigate('/app')}
         >
+          {iconsEnabled && <AllIcon className="w-3.5 h-3.5 shrink-0" />}
           All
         </div>
         <UnsortedEntry
           active={view.type === 'unsorted'}
           activeDragType={activeDragType}
+          iconsEnabled={iconsEnabled}
           onClick={() => navigate('/app/unsorted')}
         />
-        <TrashEntry active={view.type === 'trash'} onClick={() => navigate('/app/trash')} />
+        <TrashEntry active={view.type === 'trash'} iconsEnabled={iconsEnabled} onClick={() => navigate('/app/trash')} />
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />
@@ -135,10 +148,12 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
             folders={folders}
             activeDragType={activeDragType}
             activeDragFolderId={activeDragFolderId}
+            iconsEnabled={iconsEnabled}
             onSelect={handleFolderSelect}
             onRename={(target) => setNameDialog({ mode: 'rename', target })}
             onDelete={setDeleteTarget}
             onNewSubfolder={(parent) => setNameDialog({ mode: 'create-sub', parent })}
+            onChangeIcon={(target, icon) => changeIconMutation.mutate({ id: target.id, icon })}
           />
         ))}
 
