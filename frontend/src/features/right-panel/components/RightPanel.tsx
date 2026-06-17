@@ -21,7 +21,7 @@ type RightPanelProps =
 
 export default function RightPanel(props: RightPanelProps) {
   return (
-    <aside className="w-80 flex-shrink-0 border-l h-screen flex flex-col bg-background overflow-hidden">
+    <aside className="hidden sm:flex w-80 flex-shrink-0 border-l h-screen flex-col bg-background overflow-hidden">
       {props.mode === 'folder' ? (
         <FolderPanelContent key={props.folder.id} folder={props.folder} onClose={props.onClose} />
       ) : (

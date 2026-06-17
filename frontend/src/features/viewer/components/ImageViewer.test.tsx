@@ -209,6 +209,13 @@ describe('ImageViewer — focus toggle', () => {
 
     expect(onToggleFocusMode).toHaveBeenCalledOnce()
   })
+
+  it('is hidden below sm and shown at sm and up', () => {
+    renderViewer(makeImage())
+
+    const toggle = screen.getByRole('button', { name: 'Focus mode' })
+    expect(toggle.parentElement?.className).toMatch(/hidden sm:flex/)
+  })
 })
 
 describe('ImageViewer — zoom slider', () => {

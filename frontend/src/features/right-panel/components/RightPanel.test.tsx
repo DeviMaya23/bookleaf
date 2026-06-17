@@ -72,6 +72,12 @@ describe('RightPanel — success scenario', () => {
     expect(screen.getByDisplayValue('A nice sunset')).toBeInTheDocument()
     expect(screen.getByDisplayValue('https://example.com')).toBeInTheDocument()
   })
+
+  it('is hidden below sm and shown at sm and up', () => {
+    renderPanel(makeImage())
+
+    expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
+  })
 })
 
 describe('RightPanel tags — success scenario', () => {
