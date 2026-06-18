@@ -24,6 +24,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      extensions: ${{ steps.filter.outputs.extensions }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,6 +38,8 @@ jobs:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+            extensions:
+              - 'extensions/**'
 
   backend-ci:
     name: Backend CI
@@ -101,3 +104,31 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  extensions-ci:
+    name: Extensions CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.extensions == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extensions
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: extensions/package.json
+          cache: npm
+          cache-dependency-path: extensions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build:all
