@@ -29,7 +29,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   handleSave({ srcUrl, pageUrl: pageUrl ?? "", title, tabId: tab?.id });
 });
 
-function isTokenValid(auth: BookleafAuth | null): auth is BookleafAuth {
+export function isTokenValid(auth: BookleafAuth | null): auth is BookleafAuth {
   if (!auth) return false;
   return Date.now() < auth.expiresAt;
 }
@@ -44,7 +44,7 @@ async function fetchImageBlob(
   return { blob, mimeType };
 }
 
-async function resolveImageBlob(
+export async function resolveImageBlob(
   srcUrl: string,
 ): Promise<{ blob: Blob; mimeType: string; bitmap: ImageBitmap | null }> {
   const candidateUrl = resolveHighResUrl(srcUrl);
@@ -85,7 +85,7 @@ async function generateThumbnail(
   return { blob: thumbnailBlob, width, height };
 }
 
-async function blobToDataUrl(blob: Blob): Promise<string> {
+export async function blobToDataUrl(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -96,7 +96,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:image/jpeg;base64,${btoa(binary)}`;
 }
 
-async function saveImage({
+export async function saveImage({
   blob,
   mimeType,
   title,
@@ -170,7 +170,7 @@ async function saveImage({
   return image_id;
 }
 
-async function handleSave({
+export async function handleSave({
   srcUrl,
   pageUrl,
   title,

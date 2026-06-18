@@ -20,23 +20,28 @@ export type CandidateValidation =
   | { valid: true; bitmap: ImageBitmap | null }
   | { valid: false; bitmap: null };
 
+export function validateResponseShape(response: Response): boolean {
+  if (!response.ok) return false;
+  const contentType = response.headers.get("Content-Type")?.split(";")[0].trim();
+  return !!contentType && ALLOWED_CONTENT_TYPES.has(contentType);
+}
+
+export function validateDimension(dims: { width: number; height: number }): boolean {
+  return dims.width >= MIN_DIMENSION && dims.height >= MIN_DIMENSION;
+}
+
 export async function validateCandidate(
   response: Response,
   blob: Blob,
 ): Promise<CandidateValidation> {
-  if (!response.ok) return { valid: false, bitmap: null };
-
-  const contentType = response.headers.get("Content-Type")?.split(";")[0].trim();
-  if (!contentType || !ALLOWED_CONTENT_TYPES.has(contentType)) {
-    return { valid: false, bitmap: null };
-  }
+  if (!validateResponseShape(response)) return { valid: false, bitmap: null };
 
   if (typeof createImageBitmap === "undefined") {
     return { valid: true, bitmap: null };
   }
 
   const bitmap = await createImageBitmap(blob);
-  if (bitmap.width < MIN_DIMENSION || bitmap.height < MIN_DIMENSION) {
+  if (!validateDimension(bitmap)) {
     bitmap.close();
     return { valid: false, bitmap: null };
   }

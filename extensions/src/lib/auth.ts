@@ -33,7 +33,7 @@ function generateState(): string {
     .replace(/=/g, "");
 }
 
-function buildAuthUrl(codeChallenge: string): string {
+export function buildAuthUrl(codeChallenge: string): string {
   const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL;
   const clientId = import.meta.env.VITE_KINDE_CLIENT_ID;
   const redirectUri = getRedirectUri();
@@ -65,7 +65,7 @@ export function decodeJwtPayload(token: string): Record<string, unknown> {
   }
 }
 
-async function exchangeCodeForTokens(
+export async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
 ): Promise<{ auth: BookleafAuth; idToken: string | null }> {
