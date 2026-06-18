@@ -1,6 +1,15 @@
 import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
+import { resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
+
+const isProductionBuild =
+  import.meta.env.MODE === "chrome-production" || import.meta.env.MODE === "firefox-production";
+
+if (!isProductionBuild) {
+  browser.action.setBadgeText({ text: "DEV" });
+  browser.action.setBadgeBackgroundColor({ color: "#d97706" });
+}
 
 browser.runtime.onInstalled.addListener(async () => {
   await browser.contextMenus.removeAll();
@@ -35,10 +44,32 @@ async function fetchImageBlob(
   return { blob, mimeType };
 }
 
+async function resolveImageBlob(
+  srcUrl: string,
+): Promise<{ blob: Blob; mimeType: string; bitmap: ImageBitmap | null }> {
+  const candidateUrl = resolveHighResUrl(srcUrl);
+  if (candidateUrl) {
+    try {
+      const response = await fetch(candidateUrl);
+      const blob = await response.blob();
+      const validation = await validateCandidate(response, blob);
+      if (validation.valid) {
+        return { blob, mimeType: blob.type || "image/jpeg", bitmap: validation.bitmap };
+      }
+    } catch {
+      // candidate fetch/validation failed — fall through to the original srcUrl
+    }
+  }
+
+  const fallback = await fetchImageBlob(srcUrl);
+  return { ...fallback, bitmap: null };
+}
+
 async function generateThumbnail(
   blob: Blob,
+  existingBitmap?: ImageBitmap | null,
 ): Promise<{ blob: Blob; width: number; height: number }> {
-  const bitmap = await createImageBitmap(blob);
+  const bitmap = existingBitmap ?? (await createImageBitmap(blob));
 
   const { width, height } = bitmap;
   const scale = Math.min(1, 600 / Math.max(width, height));
@@ -161,13 +192,15 @@ async function handleSave({
   let thumbnailBlob: Blob | null = null;
 
   try {
-    const fetched = await fetchImageBlob(srcUrl);
+    const fetched = await resolveImageBlob(srcUrl);
 
     let dimensions: { width: number; height: number } | undefined;
     if (typeof OffscreenCanvas !== "undefined") {
-      const thumbnail = await generateThumbnail(fetched.blob);
+      const thumbnail = await generateThumbnail(fetched.blob, fetched.bitmap);
       thumbnailBlob = thumbnail.blob;
       dimensions = { width: thumbnail.width, height: thumbnail.height };
+    } else {
+      fetched.bitmap?.close();
     }
 
     imageId = await saveImage({
