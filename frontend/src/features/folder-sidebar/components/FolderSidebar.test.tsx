@@ -69,12 +69,12 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-function renderSidebar() {
+function renderSidebar(props: Partial<{ mobileOpen: boolean; onMobileClose: () => void }> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <FolderSidebar view={{ type: 'trash' }} />
+        <FolderSidebar view={{ type: 'trash' }} {...props} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -207,6 +207,53 @@ describe('FolderSidebar folder icons', () => {
     await waitFor(() => {
       expect(updateFolder).toHaveBeenCalledWith(expect.any(Function), '1', { icon: 'star' })
     })
+  })
+})
+
+describe('FolderSidebar mobile drawer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+  })
+
+  it('is off-canvas by default and slides in when mobileOpen is true', async () => {
+    const { rerender } = renderSidebar({ mobileOpen: false })
+    const aside = await screen.findByRole('complementary')
+    const classesWhenClosed = aside.className.split(/\s+/)
+    expect(classesWhenClosed).toContain('-translate-x-full')
+    expect(classesWhenClosed).not.toContain('translate-x-0')
+    expect(classesWhenClosed).toContain('sm:translate-x-0')
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <FolderSidebar view={{ type: 'trash' }} mobileOpen />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const classesWhenOpen = aside.className.split(/\s+/)
+    expect(classesWhenOpen).toContain('translate-x-0')
+    expect(classesWhenOpen).not.toContain('-translate-x-full')
+  })
+
+  it('calls onMobileClose when a navigation entry (All) is selected', async () => {
+    const onMobileClose = vi.fn()
+    renderSidebar({ mobileOpen: true, onMobileClose })
+
+    await userEvent.click(screen.getByText('All'))
+
+    expect(onMobileClose).toHaveBeenCalled()
+  })
+
+  it('calls onMobileClose when a folder entry is selected', async () => {
+    const onMobileClose = vi.fn()
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+    renderSidebar({ mobileOpen: true, onMobileClose })
+
+    await userEvent.click(await screen.findByText('Folder 1'))
+
+    expect(onMobileClose).toHaveBeenCalled()
   })
 })
 

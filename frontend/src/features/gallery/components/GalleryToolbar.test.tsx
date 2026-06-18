@@ -103,6 +103,18 @@ describe('GalleryToolbar sort control', () => {
   })
 })
 
+describe('GalleryToolbar mobile visibility', () => {
+  it('hides the sort control and upload actions container below sm', () => {
+    renderToolbar({ type: 'folder', id: 'folder-1' })
+
+    const sortTrigger = screen.getByRole('button', { name: /sort/i })
+    expect(sortTrigger.parentElement?.className).toMatch(/hidden sm:flex/)
+
+    const uploadActionsContainer = screen.getByText('Image').closest('div')
+    expect(uploadActionsContainer?.className).toMatch(/hidden sm:flex/)
+  })
+})
+
 describe('GalleryToolbar filter control', () => {
   it('hides the Filters button in Trash', () => {
     renderToolbar({ type: 'trash' })

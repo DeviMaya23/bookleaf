@@ -123,6 +123,23 @@ describe('ProfileMenu', () => {
     expect(mockLogout).toHaveBeenCalledOnce()
   })
 
+  it('hides the Settings item below sm but keeps Sign out visible', async () => {
+    mockGetUserProfile.mockResolvedValue({
+      id: 'kp_5',
+      givenName: 'Jane',
+      familyName: 'Doe',
+      email: 'jane@example.com',
+      picture: null,
+    })
+
+    renderProfileMenu()
+
+    await waitFor(() => screen.getByText('JD'))
+
+    expect(screen.getByText('Settings').className).toMatch(/hidden sm:flex/)
+    expect(screen.getByText('Sign out').className).not.toMatch(/hidden sm:flex/)
+  })
+
   it('opens the SettingsModal when Settings is clicked', async () => {
     mockGetUserProfile.mockResolvedValue({
       id: 'kp_4',

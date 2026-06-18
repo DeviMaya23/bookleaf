@@ -87,35 +87,37 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
                 className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
               />
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                aria-label="Sort"
-                className={cn(buttonVariants({ variant: sortActive ? 'secondary' : 'outline', size: 'icon' }))}
-              >
-                <ArrowUpDown className="w-3.5 h-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuRadioGroup
-                  value={sortBy}
-                  onValueChange={(value) => handleSortFieldChange(value as SortBy)}
+            <div className="hidden sm:flex">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  aria-label="Sort"
+                  className={cn(buttonVariants({ variant: sortActive ? 'secondary' : 'outline', size: 'icon' }))}
                 >
-                  {sortFieldOptions.map((field) => (
-                    <DropdownMenuRadioItem key={field} value={field}>
-                      {SORT_FIELD_LABELS[field]}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-                {sortBy !== 'manual' && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem closeOnClick={false} onClick={handleSortDirToggle}>
-                      {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-                      {DIR_LABELS[sortBy][sortDir ?? FIELD_DEFAULT_DIRECTION[sortBy]]}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <ArrowUpDown className="w-3.5 h-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-48">
+                  <DropdownMenuRadioGroup
+                    value={sortBy}
+                    onValueChange={(value) => handleSortFieldChange(value as SortBy)}
+                  >
+                    {sortFieldOptions.map((field) => (
+                      <DropdownMenuRadioItem key={field} value={field}>
+                        {SORT_FIELD_LABELS[field]}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                  {sortBy !== 'manual' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem closeOnClick={false} onClick={handleSortDirToggle}>
+                        {sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+                        {DIR_LABELS[sortBy][sortDir ?? FIELD_DEFAULT_DIRECTION[sortBy]]}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           {view.type !== 'trash' && (
             <DropdownMenu>
@@ -212,7 +214,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
             </DropdownMenu>
           )}
         </div>
-        <div className="flex">{uploadActions}</div>
+        <div className="hidden sm:flex">{uploadActions}</div>
       </div>
       {activeFilterChips.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">

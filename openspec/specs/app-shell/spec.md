@@ -1,8 +1,8 @@
 ### Requirement: Two-panel application shell
-The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width, except while focus mode is active, in which case the left sidebar SHALL NOT be rendered and the main content area SHALL fill the full viewport width.
+The system SHALL render a persistent two-panel layout consisting of a fixed left sidebar (240 px wide) and a fluid right content area that fills the remaining viewport width, except while focus mode is active, in which case the left sidebar SHALL NOT be rendered and the main content area SHALL fill the full viewport width. Below the `sm` breakpoint, the left sidebar SHALL instead be hidden off-canvas by default (see `fe-mobile-shell`) and the main content area SHALL fill the full viewport width regardless of focus mode state.
 
 #### Scenario: Layout renders on load
-- **WHEN** the application root is mounted
+- **WHEN** the application root is mounted at or above the `sm` breakpoint
 - **THEN** the sidebar and main content area are both visible on screen simultaneously
 
 #### Scenario: Sidebar does not scroll with content
@@ -10,9 +10,13 @@ The system SHALL render a persistent two-panel layout consisting of a fixed left
 - **THEN** the sidebar remains fixed in place and does not move
 
 #### Scenario: Sidebar is hidden while focus mode is active
-- **WHEN** focus mode is active
+- **WHEN** focus mode is active at or above the `sm` breakpoint
 - **THEN** the left sidebar is not rendered
 - **AND** the main content area fills the full viewport width
+
+#### Scenario: Main content fills the viewport below the breakpoint
+- **WHEN** the viewport width is below the `sm` breakpoint
+- **THEN** the main content area fills the full viewport width, whether or not the sidebar drawer is open
 
 ### Requirement: Folder list in sidebar
 The system SHALL fetch the folder list from `GET /folders` and display it in the sidebar as a nested tree below a "FOLDERS" section label. The sidebar SHALL show three pinned system entries above the section label: **All**, **Unsorted**, and **Trash** (de-emphasized). A horizontal divider and section label SHALL separate the system entries from the user folder tree. An icon button adjacent to the "FOLDERS" section label SHALL always be available to create a new folder. The full-width "+ New folder" affordance in the footer area SHALL be displayed only when the user's folder list is empty.

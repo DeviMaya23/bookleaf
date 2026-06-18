@@ -5,6 +5,7 @@ import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useDndContext } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import { PlusIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
@@ -32,9 +33,11 @@ type NameDialogState =
 interface FolderSidebarProps {
   view: AppView
   onFolderSelect?: () => void
+  mobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
-export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarProps) {
+export default function FolderSidebar({ view, onFolderSelect, mobileOpen, onMobileClose }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
   const navigate = useNavigate()
   const { active } = useDndContext()
@@ -71,6 +74,7 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
     const isActive = view.type === 'folder' && view.id === folder.id
     if (!isActive) onFolderSelect?.()
     navigate(`/app/folders/${folder.id}`)
+    onMobileClose?.()
   }
 
   function handleNameDialogSubmit(name: string) {
@@ -97,7 +101,12 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
   const visibleTree = trimmedFolderFilter ? filterFolderTree(tree, trimmedFolderFilter) : tree
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-[240px] flex flex-col border-r bg-background">
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 w-[240px] flex flex-col border-r bg-background z-30 transform transition-transform duration-200 sm:translate-x-0',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+      )}
+    >
       <div className="p-4 pb-3">
         <span className="text-sm font-semibold tracking-tight font-serif">Bookleaf</span>
       </div>
@@ -109,7 +118,7 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
               ? 'bg-accent text-accent-foreground font-medium'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
           }`}
-          onClick={() => navigate('/app')}
+          onClick={() => { navigate('/app'); onMobileClose?.() }}
         >
           {iconsEnabled && <AllIcon className="w-3.5 h-3.5 shrink-0" />}
           All
@@ -118,9 +127,9 @@ export default function FolderSidebar({ view, onFolderSelect }: FolderSidebarPro
           active={view.type === 'unsorted'}
           activeDragType={activeDragType}
           iconsEnabled={iconsEnabled}
-          onClick={() => navigate('/app/unsorted')}
+          onClick={() => { navigate('/app/unsorted'); onMobileClose?.() }}
         />
-        <TrashEntry active={view.type === 'trash'} iconsEnabled={iconsEnabled} onClick={() => navigate('/app/trash')} />
+        <TrashEntry active={view.type === 'trash'} iconsEnabled={iconsEnabled} onClick={() => { navigate('/app/trash'); onMobileClose?.() }} />
 
         <div className="pt-2 pb-1">
           <div className="border-t mb-2" />

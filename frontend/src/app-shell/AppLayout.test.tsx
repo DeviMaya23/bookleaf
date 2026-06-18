@@ -247,6 +247,55 @@ describe('AppLayout focus mode', () => {
   })
 })
 
+describe('AppLayout mobile responsiveness', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  it('wraps the focus toggle in a hidden sm:flex container', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    const toggle = screen.getByRole('button', { name: /focus mode/i })
+    expect(toggle.parentElement?.className).toMatch(/hidden sm:flex/)
+  })
+
+  it('gives main the responsive margin classes instead of an unconditional ml-[240px]', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    const main = document.querySelector('main')!
+    expect(main.className).toMatch(/ml-0 sm:ml-\[240px\]/)
+  })
+
+  it('opens the drawer backdrop via the mobile top bar hamburger and closes it on backdrop tap', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    expect(screen.queryByTestId('mobile-drawer-backdrop')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByTestId('mobile-drawer-backdrop')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('mobile-drawer-backdrop'))
+    expect(screen.queryByTestId('mobile-drawer-backdrop')).not.toBeInTheDocument()
+  })
+
+  it('does not render the mobile top bar while focus mode is active', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    expect(screen.getByRole('button', { name: 'Open menu' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }))
+
+    expect(screen.queryByRole('button', { name: 'Open menu' })).not.toBeInTheDocument()
+  })
+})
+
 describe('AppLayout cross-feature integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()

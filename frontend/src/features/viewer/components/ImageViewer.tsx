@@ -43,15 +43,17 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
   return (
     <div className="flex flex-col w-full h-full">
       <div className="flex items-center h-11 px-2 gap-2 flex-shrink-0 border-b">
-        <Toggle
-          aria-label="Focus mode"
-          aria-pressed={focusMode}
-          pressed={focusMode}
-          onPressedChange={() => onToggleFocusMode()}
-          className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
-        >
-          <Focus className="w-3.5 h-3.5" />
-        </Toggle>
+        <div className="hidden sm:flex">
+          <Toggle
+            aria-label="Focus mode"
+            aria-pressed={focusMode}
+            pressed={focusMode}
+            onPressedChange={() => onToggleFocusMode()}
+            className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+          >
+            <Focus className="w-3.5 h-3.5" />
+          </Toggle>
+        </div>
         <button onClick={onClose} aria-label="Back" className="p-1.5 rounded hover:bg-muted transition-colors">
           <ChevronLeft className="w-5 h-5" />
         </button>

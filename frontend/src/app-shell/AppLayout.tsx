@@ -22,6 +22,8 @@ import ImageViewer from '@/features/viewer/components/ImageViewer'
 import UploadModal from '@/features/upload/components/UploadModal'
 import BatchUploadModal from '@/features/upload/components/BatchUploadModal'
 import RightPanel from '@/features/right-panel/components/RightPanel'
+import MobileTopBar from './components/MobileTopBar'
+import FloatingUploadButton from './components/FloatingUploadButton'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import { useMaintenanceActive } from '@/lib/maintenanceStore'
@@ -45,6 +47,7 @@ export default function AppLayout() {
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
   const [folderPanelOpen, setFolderPanelOpen] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
   const [isAutoUploading, setIsAutoUploading] = useState(false)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
@@ -166,13 +169,28 @@ export default function AppLayout() {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex h-screen">
         {!focusMode && (
-          <FolderSidebar
-            view={view}
-            onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
-          />
+          <>
+            <MobileTopBar onMenuClick={() => setMobileDrawerOpen(true)} />
+            {mobileDrawerOpen && (
+              <div
+                data-testid="mobile-drawer-backdrop"
+                className="sm:hidden fixed inset-0 z-[25] bg-black/35"
+                onClick={() => setMobileDrawerOpen(false)}
+              />
+            )}
+            <FolderSidebar
+              view={view}
+              onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
+              mobileOpen={mobileDrawerOpen}
+              onMobileClose={() => setMobileDrawerOpen(false)}
+            />
+          </>
         )}
         <main
-          className={cn('flex-1 h-screen min-w-0 relative', focusMode ? 'ml-0' : 'ml-[240px]')}
+          className={cn(
+            'flex-1 h-screen min-w-0 relative pt-12 sm:pt-0',
+            focusMode ? 'ml-0' : 'ml-0 sm:ml-[240px]',
+          )}
           onDragOver={handleMainDragOver}
           onDragLeave={handleMainDragLeave}
           onDrop={handleMainDrop}
@@ -199,15 +217,17 @@ export default function AppLayout() {
                   view={view}
                   controls={gallery}
                   focusToggle={
-                    <Toggle
-                      aria-label="Focus mode"
-                      aria-pressed={focusMode}
-                      pressed={focusMode}
-                      onPressedChange={setFocusMode}
-                      className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
-                    >
-                      <Focus className="w-3.5 h-3.5" />
-                    </Toggle>
+                    <div className="hidden sm:flex">
+                      <Toggle
+                        aria-label="Focus mode"
+                        aria-pressed={focusMode}
+                        pressed={focusMode}
+                        onPressedChange={setFocusMode}
+                        className="aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+                      >
+                        <Focus className="w-3.5 h-3.5" />
+                      </Toggle>
+                    </div>
                   }
                   uploadActions={
                     <>
@@ -268,6 +288,7 @@ export default function AppLayout() {
             onClose={() => setFolderPanelOpen(false)}
           />
         ) : null}
+        <FloatingUploadButton onClick={() => setUploadOpen(true)} />
         <UploadModal
           open={uploadOpen}
           onOpenChange={(open) => {

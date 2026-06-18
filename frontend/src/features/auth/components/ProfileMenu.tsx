@@ -42,7 +42,7 @@ export default function ProfileMenu() {
           {profile?.email && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground truncate">{profile.email}</div>
           )}
-          <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="cursor-pointer">
+          <DropdownMenuItem onClick={() => setSettingsOpen(true)} className="hidden sm:flex cursor-pointer">
             Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
