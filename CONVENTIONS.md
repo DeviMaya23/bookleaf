@@ -411,3 +411,58 @@ The handler's job is: parse request → extract auth → call usecase → map er
 All extension code MUST use `browser.*` from `webextension-polyfill` 
 instead of raw `chrome.*` APIs. If no polyfill equivalent exists, 
 flag it before proceeding.
+
+## Browser Extension Testing
+
+### Philosophy
+
+`extensions/` has no usecase/repository/handler folder split, so the backend's
+layer-based test classification doesn't map directly. The underlying criterion
+still applies — test logic that lives exclusively in your code; don't test
+pass-through; don't unit-test thin adapters over external systems — but the
+sorting key is the function's I/O shape, not which folder it's in.
+
+### Classification
+
+| Shape | Example | Unit test? |
+|---|---|---|
+| Pure logic (no I/O) | `resolveHighResUrl`, `decodeJwtPayload`, `validateResponseShape`, `validateDimension` | Yes |
+| Thin browser-adapter (pure passthrough to a browser/fetch API, nothing to assert) | `storage.ts` getters/setters (`getAuth`, `setDarkMode`, etc.) | No |
+| Orchestrator (branches, assembles a result, or maps/catches errors around adapters or pure logic) | `resolveImageBlob`, `saveImage`, `handleSave`, `login`/`exchangeCodeForTokens` | Yes, with the I/O boundary mocked |
+| Native-browser-API-bound (only logic is wrapping a browser primitive with no test-environment equivalent) | `generateThumbnail` (`OffscreenCanvas`), the `createImageBitmap` call inside `validateCandidate` | No |
+
+When a function mixes a native-browser-API call with branching logic worth
+testing (e.g. the original `validateCandidate`), split the branching logic out
+into its own pure function and leave a thin, untested orchestrator that owns
+only the native call. See `validateResponseShape`/`validateDimension`/
+`validateCandidate` in `highResFetch.ts` for the pattern.
+
+### Test doubles
+
+Always use value-return spies (`vi.fn().mockResolvedValue(...)` /
+`vi.mocked(x).mockReturnValue(...)`). Fakes are not used in `extensions/` —
+nothing here reads pre-existing state from a dependency to decide what to
+write the way a backend usecase does against a repository, so there is no
+case where a fake's pre-state/post-state setup buys anything over a spy.
+
+### Test setup
+
+- Test runner is vitest, configured in `extensions/vitest.config.ts`
+  (`environment: "node"`), kept separate from the build's `vite.config.ts` so
+  `vite-plugin-web-extension`'s manifest transform never runs during `npm test`.
+- `webextension-polyfill` is mocked per test file via `vi.mock("webextension-polyfill", ...)`
+  backed by the shared `createBrowserMock()` helper in `extensions/src/test/browserMock.ts`.
+  This is required even for modules that don't call `browser.*` directly in the
+  function under test, if importing the module triggers listener registration
+  at load time (e.g. `background/index.ts`).
+- Test files are colocated next to the unit they cover (`thing.ts` +
+  `thing.test.ts`), matching the Frontend "Test Colocation" convention.
+
+### Out of scope (for now)
+
+- `popup/App.tsx` — has orchestration logic (`handleLogin`, `handleLogout`,
+  `handleToggleDark`) but no hook extraction, so it isn't unit-testable without
+  a structural change. Revisit once there's a decision on applying the
+  frontend's hook-extraction-for-testability pattern here.
+- `content/index.ts` — DOM-only toast rendering, no branching logic worth
+  asserting.
