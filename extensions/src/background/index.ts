@@ -2,7 +2,7 @@ import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
-import { resolveLinkPermalink } from "../lib/linkPermalinkRules";
+import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
 import { linkOnlyCardUrlPatterns } from "../lib/cardDomResolveRules";
 
 const isProductionBuild =
@@ -36,12 +36,25 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
   resolvedContextByTab.set(sender.tab.id, msg.resolved);
 });
 
+function resolveTitle(
+  info: browser.Menus.OnClickData,
+  tab: browser.Tabs.Tab | undefined,
+  resolved: Partial<{ srcUrl: string; title: string }> | undefined,
+): string {
+  const handle = info.linkUrl ? extractTwitterHandle(info.linkUrl) : null;
+  if (handle) {
+    return resolved?.title ? `@${handle}: ${resolved.title.slice(0, 100)}...` : `@${handle}`;
+  }
+  return tab?.title ?? info.pageUrl ?? "Untitled";
+}
+
 export function handleContextMenuClick(
   info: browser.Menus.OnClickData,
   tab: browser.Tabs.Tab | undefined,
 ): void {
   const pageUrl = info.pageUrl;
-  const title = tab?.title ?? pageUrl ?? "Untitled";
+  const resolved = tab?.id !== undefined ? resolvedContextByTab.get(tab.id) : undefined;
+  const title = resolveTitle(info, tab, resolved);
 
   if (info.menuItemId === "save-to-bookleaf") {
     const srcUrl = info.srcUrl;
@@ -53,7 +66,6 @@ export function handleContextMenuClick(
   }
 
   if (info.menuItemId === "save-to-bookleaf-link") {
-    const resolved = tab?.id !== undefined ? resolvedContextByTab.get(tab.id) : undefined;
     if (!resolved?.srcUrl) {
       void sendToast(tab?.id, "error", "Couldn't save image.", "Check your connection and try again.");
       return;
