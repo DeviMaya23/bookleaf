@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveHighResUrl, validateDimension, validateResponseShape } from "./highResFetch";
+import { resolveHighResReferrer, resolveHighResUrl, validateDimension, validateResponseShape } from "./highResFetch";
 
 describe("resolveHighResUrl", () => {
   it("returns the transformed URL when a rule matches", () => {
@@ -14,6 +14,24 @@ describe("resolveHighResUrl", () => {
 
   it("returns null for an invalid URL", () => {
     expect(resolveHighResUrl("not a url")).toBeNull();
+  });
+});
+
+describe("resolveHighResReferrer", () => {
+  it("returns the Pinterest rule's referrer for a matching srcUrl", () => {
+    expect(resolveHighResReferrer("https://i.pinimg.com/236x/aa/bb/cc/img.jpg")).toBe(
+      "https://www.pinterest.com/",
+    );
+  });
+
+  it("returns undefined for a rule with no referrer", () => {
+    expect(
+      resolveHighResReferrer("https://pbs.twimg.com/media/XXXXX?format=jpg&name=small"),
+    ).toBeUndefined();
+  });
+
+  it("returns undefined when no rule matches", () => {
+    expect(resolveHighResReferrer("https://example.com/image.jpg")).toBeUndefined();
   });
 });
 

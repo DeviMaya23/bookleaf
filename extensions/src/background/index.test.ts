@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { apiFetch } from "../lib/api";
-import { resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
+import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
 import { addRecentSave, getAuth } from "../lib/storage";
 
 vi.mock("webextension-polyfill", async () => {
@@ -11,11 +11,20 @@ vi.mock("webextension-polyfill", async () => {
 vi.mock("../lib/api", () => ({ apiFetch: vi.fn() }));
 vi.mock("../lib/highResFetch", () => ({
   resolveHighResUrl: vi.fn(),
+  resolveHighResReferrer: vi.fn(),
   validateCandidate: vi.fn(),
 }));
 vi.mock("../lib/storage", () => ({ getAuth: vi.fn(), addRecentSave: vi.fn() }));
 
-import { blobToDataUrl, handleSave, isTokenValid, resolveImageBlob, saveImage } from "./index";
+import {
+  blobToDataUrl,
+  handleContextMenuClick,
+  handleSave,
+  isTokenValid,
+  resolveImageBlob,
+  resolvedContextByTab,
+  saveImage,
+} from "./index";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -207,5 +216,112 @@ describe("handleSave", () => {
       expect.objectContaining({ variant: "error", title: "Couldn't save image." }),
     );
     expect(addRecentSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleContextMenuClick", () => {
+  const tab = { id: 1, title: "t" } as browser.Tabs.Tab;
+
+  beforeEach(() => {
+    resolvedContextByTab.clear();
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(resolveHighResUrl).mockReturnValue(null);
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Blob([new Uint8Array([1])]), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      }),
+    );
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+  });
+
+  it("overrides source_url with linkUrl for image-context when a permalink rule matches", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://pbs.twimg.com/media/img.jpg",
+        pageUrl: "https://x.com/username",
+        linkUrl: "https://x.com/username/status/123456789",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://x.com/username/status/123456789"'),
+      }),
+    );
+  });
+
+  it("keeps pageUrl as source_url for image-context when linkUrl matches no rule", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://example.com/img.jpg",
+        pageUrl: "https://example.com/page",
+        linkUrl: "https://example.com/unrelated",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://example.com/page"'),
+      }),
+    );
+  });
+
+  it("uses the resolved srcUrl and linkUrl as source_url for link-context", async () => {
+    resolvedContextByTab.set(1, { srcUrl: "https://i.pinimg.com/originals/img.jpg" });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf-link",
+        pageUrl: "https://www.pinterest.com/feed",
+        linkUrl: "https://www.pinterest.com/pin/123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(fetch).toHaveBeenCalledWith("https://i.pinimg.com/originals/img.jpg");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://www.pinterest.com/pin/123"'),
+      }),
+    );
+  });
+
+  it("fails gracefully with no upload when no resolved srcUrl exists for link-context", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf-link",
+        pageUrl: "https://www.pinterest.com/feed",
+        linkUrl: "https://www.pinterest.com/pin/123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() =>
+      expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ variant: "error", title: "Couldn't save image." }),
+      ),
+    );
+
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });
