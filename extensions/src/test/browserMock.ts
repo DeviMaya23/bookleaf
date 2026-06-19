@@ -37,6 +37,9 @@ export function createBrowserMock() {
       onInstalled: {
         addListener: vi.fn(),
       },
+      onMessage: {
+        addListener: vi.fn(),
+      },
     },
   };
 }

@@ -16,6 +16,19 @@ export function resolveHighResUrl(srcUrl: string): string | null {
   return null;
 }
 
+export function resolveHighResReferrer(srcUrl: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(srcUrl);
+  } catch {
+    return undefined;
+  }
+  for (const rule of rules) {
+    if (rule.matches(url)) return rule.referrer;
+  }
+  return undefined;
+}
+
 export type CandidateValidation =
   | { valid: true; bitmap: ImageBitmap | null }
   | { valid: false; bitmap: null };

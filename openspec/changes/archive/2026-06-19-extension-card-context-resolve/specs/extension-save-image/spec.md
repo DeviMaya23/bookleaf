@@ -1,10 +1,4 @@
-# Spec: Extension Save Image
-
-## Purpose
-
-Defines the requirements for the "Save to Bookleaf" browser extension feature, which allows users to save images from any webpage directly to their Bookleaf library via a right-click context menu.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Context menu registration
 
@@ -117,47 +111,3 @@ If `OffscreenCanvas` is not available, the thumbnail PUT is skipped, no decode o
 
 - **WHEN** the user right-clicks an `<img>` element whose `info.linkUrl` is absent, or present but not matching any registered link permalink rule
 - **THEN** `source_url` is set to `info.pageUrl`, exactly as before this change
-
-### Requirement: Save failure notification
-
-If any step in the save flow fails (image fetch error, API error, presigned PUT failure), the extension SHALL send an error toast to the active tab with title "Couldn't save image." and body "Check your connection and try again." No retry is attempted automatically. If `sendMessage` rejects (e.g., tab navigated away), the error SHALL be silently swallowed.
-
-#### Scenario: Image fetch failure shows in-page error toast
-
-- **WHEN** the background SW fetch of the image URL returns a non-OK response or throws
-- **THEN** an in-page toast with title "Couldn't save image." and body "Check your connection and try again." is shown
-- **AND** no upload is initiated
-
-#### Scenario: Upload API failure shows in-page error toast
-
-- **WHEN** any step of the 4-step upload sequence returns a non-2xx response
-- **THEN** an in-page toast with title "Couldn't save image." and body "Check your connection and try again." is shown
-
-#### Scenario: sendMessage rejection is silently ignored
-
-- **WHEN** `browser.tabs.sendMessage` rejects because the tab navigated away
-- **THEN** no unhandled error is thrown in the background service worker
-
-### Requirement: Save failure notification covers fallback fetch failures
-
-If fetching `info.srcUrl` (whether as the sole fetch when no rule matched, or as the fallback after an invalid/failed high-res candidate) returns a non-OK response or throws, the extension SHALL send an error toast to the active tab with title "Couldn't save image." and body "Check your connection and try again.", per the existing Save failure notification requirement.
-
-#### Scenario: Fallback fetch failure shows in-page error toast
-
-- **WHEN** a high-res candidate fails validation and the subsequent fallback fetch of `info.srcUrl` also returns a non-OK response or throws
-- **THEN** an in-page toast with title "Couldn't save image." and body "Check your connection and try again." is shown
-- **AND** no upload is initiated
-
-### Requirement: API client helper
-
-The extension SHALL expose an `apiFetch(path, options?)` function in `src/lib/api.ts` that:
-- Reads the access token from `chrome.storage.local` via `getAuth()`
-- Attaches `Authorization: Bearer <accessToken>` to every request
-- Prepends `VITE_API_BASE_URL` to the path
-- Returns the raw `Response`
-
-#### Scenario: apiFetch attaches auth header
-
-- **WHEN** `apiFetch('/images', { method: 'POST', body })` is called with a valid stored token
-- **THEN** the outgoing request includes `Authorization: Bearer <accessToken>`
-- **AND** the request is sent to `${VITE_API_BASE_URL}/images`

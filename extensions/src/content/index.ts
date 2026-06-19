@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { resolveCardImageSrc, shouldResolveCardDom } from "../lib/cardDomResolveRules";
 
 type ToastVariant = "success" | "error";
 
@@ -128,3 +129,15 @@ browser.runtime.onMessage.addListener((message: unknown) => {
   if (msg.type !== "toast") return;
   showToast(msg.variant, msg.title, msg.body);
 });
+
+document.addEventListener(
+  "contextmenu",
+  (event) => {
+    if (!shouldResolveCardDom(window.location.href)) return;
+    if (!(event.target instanceof Element)) return;
+    const srcUrl = resolveCardImageSrc(event.target);
+    if (!srcUrl) return;
+    browser.runtime.sendMessage({ resolved: { srcUrl } });
+  },
+  { capture: true },
+);

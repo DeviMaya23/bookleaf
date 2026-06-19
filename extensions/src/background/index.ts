@@ -1,7 +1,9 @@
 import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
 import { apiFetch } from "../lib/api";
-import { resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
+import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
+import { resolveLinkPermalink } from "../lib/linkPermalinkRules";
+import { linkOnlyCardUrlPatterns } from "../lib/cardDomResolveRules";
 
 const isProductionBuild =
   import.meta.env.MODE === "chrome-production" || import.meta.env.MODE === "firefox-production";
@@ -18,16 +20,49 @@ browser.runtime.onInstalled.addListener(async () => {
     title: "Save to Bookleaf",
     contexts: ["image"],
   });
+  browser.contextMenus.create({
+    id: "save-to-bookleaf-link",
+    title: "Save to Bookleaf",
+    contexts: ["link"],
+    targetUrlPatterns: linkOnlyCardUrlPatterns,
+  });
 });
 
-browser.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== "save-to-bookleaf") return;
-  const srcUrl = info.srcUrl;
+export const resolvedContextByTab = new Map<number, Partial<{ srcUrl: string; title: string }>>();
+
+browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
+  const msg = message as { resolved?: Partial<{ srcUrl: string; title: string }> };
+  if (!msg.resolved || sender.tab?.id === undefined) return;
+  resolvedContextByTab.set(sender.tab.id, msg.resolved);
+});
+
+export function handleContextMenuClick(
+  info: browser.Menus.OnClickData,
+  tab: browser.Tabs.Tab | undefined,
+): void {
   const pageUrl = info.pageUrl;
   const title = tab?.title ?? pageUrl ?? "Untitled";
-  if (!srcUrl) return;
-  handleSave({ srcUrl, pageUrl: pageUrl ?? "", title, tabId: tab?.id });
-});
+
+  if (info.menuItemId === "save-to-bookleaf") {
+    const srcUrl = info.srcUrl;
+    if (!srcUrl) return;
+    const sourceUrl =
+      info.linkUrl && resolveLinkPermalink(info.linkUrl) ? info.linkUrl : pageUrl ?? "";
+    handleSave({ srcUrl, pageUrl: sourceUrl, title, tabId: tab?.id });
+    return;
+  }
+
+  if (info.menuItemId === "save-to-bookleaf-link") {
+    const resolved = tab?.id !== undefined ? resolvedContextByTab.get(tab.id) : undefined;
+    if (!resolved?.srcUrl) {
+      void sendToast(tab?.id, "error", "Couldn't save image.", "Check your connection and try again.");
+      return;
+    }
+    handleSave({ srcUrl: resolved.srcUrl, pageUrl: info.linkUrl ?? "", title, tabId: tab?.id });
+  }
+}
+
+browser.contextMenus.onClicked.addListener(handleContextMenuClick);
 
 export function isTokenValid(auth: BookleafAuth | null): auth is BookleafAuth {
   if (!auth) return false;
@@ -50,7 +85,8 @@ export async function resolveImageBlob(
   const candidateUrl = resolveHighResUrl(srcUrl);
   if (candidateUrl) {
     try {
-      const response = await fetch(candidateUrl);
+      const referrer = resolveHighResReferrer(srcUrl);
+      const response = referrer ? await fetch(candidateUrl, { referrer }) : await fetch(candidateUrl);
       const blob = await response.blob();
       const validation = await validateCandidate(response, blob);
       if (validation.valid) {

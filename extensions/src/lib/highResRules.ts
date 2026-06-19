@@ -2,6 +2,8 @@ export type HighResRule = {
   id: string;
   matches: (url: URL) => boolean;
   transform: (url: URL) => string | null;
+  /** Referrer to send when fetching the transformed candidate URL, for CDNs that reject referrerless requests. */
+  referrer?: string;
 };
 
 const TWITTER_MEDIA_PATH = /\/media\//;
@@ -41,6 +43,8 @@ const pinterestRule: HighResRule = {
     newUrl.pathname = newUrl.pathname.replace(PINTEREST_SIZE_SEGMENT, "/originals/");
     return newUrl.toString();
   },
+  // i.pinimg.com rejects /originals/ requests with no Referer (403); pinterest.com satisfies its hotlink check.
+  referrer: "https://www.pinterest.com/",
 };
 
 export const rules: HighResRule[] = [twitterRule, pinterestRule];
