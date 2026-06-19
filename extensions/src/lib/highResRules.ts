@@ -47,4 +47,29 @@ const pinterestRule: HighResRule = {
   referrer: "https://www.pinterest.com/",
 };
 
-export const rules: HighResRule[] = [twitterRule, pinterestRule];
+const IMGUR_THUMBNAIL_PATH = /^\/([a-zA-Z0-9]+)_[a-z]\.(webp|jpe?g|png|gif)$/;
+
+const imgurRule: HighResRule = {
+  id: "imgur-thumbnail",
+  matches: (url) => url.hostname === "i.imgur.com" && IMGUR_THUMBNAIL_PATH.test(url.pathname),
+  transform: (url) => {
+    const match = url.pathname.match(IMGUR_THUMBNAIL_PATH);
+    if (!match) return null;
+    return `https://i.imgur.com/${match[1]}.jpg`;
+  },
+};
+
+const facebookRule: HighResRule = {
+  id: "facebook-ctp",
+  matches: (url) =>
+    (url.hostname === "fbcdn.net" || url.hostname.endsWith(".fbcdn.net")) &&
+    url.searchParams.has("ctp"),
+  transform: (url) => {
+    if (!url.searchParams.has("ctp")) return null;
+    const newUrl = new URL(url.toString());
+    newUrl.searchParams.delete("ctp");
+    return newUrl.toString();
+  },
+};
+
+export const rules: HighResRule[] = [twitterRule, pinterestRule, imgurRule, facebookRule];
