@@ -45,6 +45,7 @@ function resolveTitle(
   if (handle) {
     return resolved?.title ? `@${handle}: ${resolved.title.slice(0, 100)}...` : `@${handle}`;
   }
+  if (resolved?.title) return resolved.title;
   return tab?.title ?? info.pageUrl ?? "Untitled";
 }
 
