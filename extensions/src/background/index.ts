@@ -30,8 +30,30 @@ browser.runtime.onInstalled.addListener(async () => {
 
 export const resolvedContextByTab = new Map<number, Partial<{ srcUrl: string; title: string }>>();
 
+interface DragSaveMessage {
+  type: "drag-save";
+  srcUrl: string;
+  title?: string;
+  linkUrl?: string;
+}
+
+export function handleDragSaveMessage(
+  msg: DragSaveMessage,
+  tab: browser.Tabs.Tab | undefined,
+): void {
+  const pageUrl = msg.linkUrl && resolveLinkPermalink(msg.linkUrl) ? msg.linkUrl : tab?.url ?? "";
+  const title = msg.title ?? tab?.title ?? "Untitled";
+  handleSave({ srcUrl: msg.srcUrl, pageUrl, title, tabId: tab?.id });
+}
+
 browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
-  const msg = message as { resolved?: Partial<{ srcUrl: string; title: string }> };
+  const msg = message as { type?: string; resolved?: Partial<{ srcUrl: string; title: string }> };
+
+  if (msg.type === "drag-save") {
+    handleDragSaveMessage(message as DragSaveMessage, sender.tab);
+    return;
+  }
+
   if (!msg.resolved || sender.tab?.id === undefined) return;
   resolvedContextByTab.set(sender.tab.id, msg.resolved);
 });

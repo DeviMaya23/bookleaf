@@ -19,6 +19,7 @@ vi.mock("../lib/storage", () => ({ getAuth: vi.fn(), addRecentSave: vi.fn() }));
 import {
   blobToDataUrl,
   handleContextMenuClick,
+  handleDragSaveMessage,
   handleSave,
   isTokenValid,
   resolveImageBlob,
@@ -546,6 +547,97 @@ describe("handleContextMenuClick", () => {
       "/images",
       expect.objectContaining({
         body: expect.stringContaining('"title":"t"'),
+      }),
+    );
+  });
+});
+
+describe("handleDragSaveMessage", () => {
+  const tab = { id: 1, title: "Tab Title", url: "https://example.com/page" } as browser.Tabs.Tab;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(resolveHighResUrl).mockReturnValue(null);
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Blob([new Uint8Array([1])]), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      }),
+    );
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+  });
+
+  it("uses linkUrl as pageUrl when it matches a permalink rule", async () => {
+    handleDragSaveMessage(
+      {
+        type: "drag-save",
+        srcUrl: "https://pbs.twimg.com/media/img.jpg",
+        linkUrl: "https://x.com/username/status/123456789",
+      },
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://x.com/username/status/123456789"'),
+      }),
+    );
+  });
+
+  it("falls back to the tab's URL as pageUrl when linkUrl matches no permalink rule", async () => {
+    handleDragSaveMessage(
+      {
+        type: "drag-save",
+        srcUrl: "https://example.com/img.jpg",
+        linkUrl: "https://example.com/unrelated",
+      },
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://example.com/page"'),
+      }),
+    );
+  });
+
+  it("falls back to the tab's title when no title was captured", async () => {
+    handleDragSaveMessage({ type: "drag-save", srcUrl: "https://example.com/img.jpg" }, tab);
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"Tab Title"'),
+      }),
+    );
+  });
+
+  it("invokes handleSave with the captured srcUrl, title, and tabId", async () => {
+    handleDragSaveMessage(
+      { type: "drag-save", srcUrl: "https://example.com/img.jpg", title: "Captured Title" },
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(fetch).toHaveBeenCalledWith("https://example.com/img.jpg");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"Captured Title"'),
       }),
     );
   });

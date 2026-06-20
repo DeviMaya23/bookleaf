@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { resolveCardImageSrc, shouldResolveCardDom } from "./cardDomResolveRules";
+import { linkOnlyCardUrlPatterns, resolveCardImageSrc, shouldResolveCardDom } from "./cardDomResolveRules";
 
 function mockElement(closestLink: { querySelector: (selector: string) => unknown } | null): Element {
   return {
     closest: () => closestLink,
   } as unknown as Element;
+}
+
+function matchesAnyPattern(url: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    const regex = new RegExp(
+      `^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`,
+    );
+    return regex.test(url);
+  });
 }
 
 describe("resolveCardImageSrc", () => {
@@ -49,5 +58,28 @@ describe("shouldResolveCardDom", () => {
 
   it("does not match an unregistered site", () => {
     expect(shouldResolveCardDom("https://example.com")).toBe(false);
+  });
+});
+
+describe("linkOnlyCardUrlPatterns", () => {
+  it("matches an Instagram post permalink", () => {
+    expect(
+      matchesAnyPattern("https://www.instagram.com/p/DRIL7h5DgO4/", linkOnlyCardUrlPatterns),
+    ).toBe(true);
+  });
+
+  it("matches an Instagram post linked from a user's profile page", () => {
+    expect(
+      matchesAnyPattern(
+        "https://www.instagram.com/bouquetsbypricila_/p/DU06CzGDnhs/",
+        linkOnlyCardUrlPatterns,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches a Pinterest pin", () => {
+    expect(matchesAnyPattern("https://www.pinterest.com/pin/123/", linkOnlyCardUrlPatterns)).toBe(
+      true,
+    );
   });
 });
