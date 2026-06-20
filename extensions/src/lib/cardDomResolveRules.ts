@@ -28,6 +28,7 @@ export function shouldResolveCardDom(pageUrl: string): boolean {
 export const linkOnlyCardUrlPatterns: string[] = [
   "*://*.pinterest.com/pin/*",
   "*://*.instagram.com/p/*",
+  "*://*.instagram.com/*/p/*",
 ];
 
 export function resolveCardImageSrc(target: Element): string | null {
