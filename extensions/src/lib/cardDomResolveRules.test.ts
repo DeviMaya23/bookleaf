@@ -39,6 +39,14 @@ describe("shouldResolveCardDom", () => {
     expect(shouldResolveCardDom("https://id.pinterest.com/pin/123")).toBe(true);
   });
 
+  it("matches an Instagram page URL", () => {
+    expect(shouldResolveCardDom("https://www.instagram.com/p/Cxxxxx/")).toBe(true);
+  });
+
+  it("matches an Instagram locale subdomain", () => {
+    expect(shouldResolveCardDom("https://id.instagram.com/p/Cxxxxx/")).toBe(true);
+  });
+
   it("does not match an unregistered site", () => {
     expect(shouldResolveCardDom("https://example.com")).toBe(false);
   });
