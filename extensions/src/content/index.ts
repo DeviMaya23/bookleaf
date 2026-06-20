@@ -1,6 +1,8 @@
 import browser from "webextension-polyfill";
 import { resolveCardImageSrc, shouldResolveCardDom } from "../lib/cardDomResolveRules";
 import { isTwitterUrl, resolveTweetText } from "../lib/tweetTextResolveRule";
+import { isImgurUrl, isInstagramUrl, resolveAltText } from "../lib/altTextResolveRule";
+import { isFacebookUrl, resolveFacebookAltText } from "../lib/facebookAltResolveRule";
 
 type ToastVariant = "success" | "error";
 
@@ -148,7 +150,24 @@ document.addEventListener(
       if (title) resolved.title = title;
     }
 
-    if (!shouldResolveCardDom(window.location.href) && !isTwitterUrl(window.location.href)) return;
+    if (isImgurUrl(window.location.href) || isInstagramUrl(window.location.href)) {
+      const title = resolveAltText(event.target);
+      if (title) resolved.title = title;
+    }
+
+    if (isFacebookUrl(window.location.href)) {
+      const title = resolveFacebookAltText(event.target);
+      if (title) resolved.title = title;
+    }
+
+    if (
+      !shouldResolveCardDom(window.location.href) &&
+      !isTwitterUrl(window.location.href) &&
+      !isImgurUrl(window.location.href) &&
+      !isInstagramUrl(window.location.href) &&
+      !isFacebookUrl(window.location.href)
+    )
+      return;
     browser.runtime.sendMessage({ resolved });
   },
   { capture: true },

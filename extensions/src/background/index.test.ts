@@ -408,4 +408,145 @@ describe("handleContextMenuClick", () => {
       }),
     );
   });
+
+  it("uses the resolved alt text verbatim for an Imgur save", async () => {
+    resolvedContextByTab.set(1, { title: "a cute cat" });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://i.imgur.com/abc123.jpg",
+        pageUrl: "https://imgur.com/gallery/abc123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"a cute cat"'),
+      }),
+    );
+  });
+
+  it("falls back to tab.title when no resolved title exists for an Imgur save", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://i.imgur.com/abc123.jpg",
+        pageUrl: "https://imgur.com/gallery/abc123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"t"'),
+      }),
+    );
+  });
+
+  it("uses the resolved alt text verbatim for an Instagram save with full caption text", async () => {
+    resolvedContextByTab.set(1, { title: "A beautiful sunset over the mountains" });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://instagram.com/p/abc123/media.jpg",
+        pageUrl: "https://www.instagram.com/p/abc123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"A beautiful sunset over the mountains"'),
+      }),
+    );
+  });
+
+  it("uses the resolved alt text verbatim for an Instagram save with the generated 'Photo by' form", async () => {
+    resolvedContextByTab.set(1, { title: "Photo by username on January 1, 2024." });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://instagram.com/p/abc123/media.jpg",
+        pageUrl: "https://www.instagram.com/p/abc123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"Photo by username on January 1, 2024."'),
+      }),
+    );
+  });
+
+  it("falls back to tab.title when no resolved title exists for an Instagram save", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://instagram.com/p/abc123/media.jpg",
+        pageUrl: "https://www.instagram.com/p/abc123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"t"'),
+      }),
+    );
+  });
+
+  it("uses the resolved alt/aria-label text verbatim for a Facebook save", async () => {
+    resolvedContextByTab.set(1, { title: "May be an image of gelato and text" });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://scontent.facebook.com/abc123.jpg",
+        pageUrl: "https://www.facebook.com/username/posts/123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"May be an image of gelato and text"'),
+      }),
+    );
+  });
+
+  it("falls back to tab.title when no resolved title exists for a Facebook save", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://scontent.facebook.com/abc123.jpg",
+        pageUrl: "https://www.facebook.com/username/posts/123",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"t"'),
+      }),
+    );
+  });
 });
