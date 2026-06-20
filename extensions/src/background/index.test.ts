@@ -324,4 +324,88 @@ describe("handleContextMenuClick", () => {
 
     expect(apiFetch).not.toHaveBeenCalled();
   });
+
+  it("uses '@handle: tweet text...' as title when tweet text was resolved", async () => {
+    resolvedContextByTab.set(1, { title: "a".repeat(150) });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://pbs.twimg.com/media/img.jpg",
+        pageUrl: "https://x.com/home",
+        linkUrl: "https://x.com/username/status/123456789",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining(`"title":"@username: ${"a".repeat(100)}..."`),
+      }),
+    );
+  });
+
+  it("appends '...' even when the resolved tweet text is under 100 characters", async () => {
+    resolvedContextByTab.set(1, { title: "short tweet" });
+
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://pbs.twimg.com/media/img.jpg",
+        pageUrl: "https://x.com/home",
+        linkUrl: "https://x.com/username/status/123456789",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"@username: short tweet..."'),
+      }),
+    );
+  });
+
+  it("uses '@handle' alone as title when no tweet text was resolved", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://pbs.twimg.com/media/img.jpg",
+        pageUrl: "https://x.com/home",
+        linkUrl: "https://x.com/username/status/123456789",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"@username"'),
+      }),
+    );
+  });
+
+  it("uses tab.title for non-Twitter saves, unaffected by this change", async () => {
+    handleContextMenuClick(
+      {
+        menuItemId: "save-to-bookleaf",
+        srcUrl: "https://example.com/img.jpg",
+        pageUrl: "https://example.com/page",
+        linkUrl: "https://example.com/unrelated",
+      } as browser.Menus.OnClickData,
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"t"'),
+      }),
+    );
+  });
 });

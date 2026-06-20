@@ -30,3 +30,14 @@ export function resolveLinkPermalink(linkUrl: string): boolean {
   }
   return rules.some((rule) => rule.matches(url));
 }
+
+export function extractTwitterHandle(linkUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(linkUrl);
+  } catch {
+    return null;
+  }
+  if (!twitterRule.matches(url)) return null;
+  return url.pathname.split("/").find((segment) => segment.length > 0) ?? null;
+}

@@ -1,29 +1,4 @@
-# Spec: Extension Card Context Resolve
-
-## Purpose
-
-Defines the site-specific rules and resolution mechanisms used to determine the effective `srcUrl` and `source_url` for a right-clicked card on card-based feed/grid UIs (e.g. Twitter/X, Facebook, Pinterest), as part of the "Save to Bookleaf" extension save flow defined in `extension-save-image`.
-
-## Requirements
-
-### Requirement: Link permalink rule table
-
-The extension SHALL maintain a table of site-specific link permalink rules, each consisting of an `id` and a `matches(url: URL): boolean` predicate. These rules SHALL be checked against `info.linkUrl` in the context-menu click handler to decide whether to override `source_url`, per the Authenticated save flow requirement in `extension-save-image`.
-
-#### Scenario: Twitter status permalink matches
-
-- **WHEN** the rule table is checked against `https://x.com/username/status/123456789/photo/1`
-- **THEN** the Twitter permalink rule matches
-
-#### Scenario: Facebook post permalink matches
-
-- **WHEN** the rule table is checked against a Facebook post permalink URL
-- **THEN** the Facebook permalink rule matches
-
-#### Scenario: Unrecognized linkUrl matches no rule
-
-- **WHEN** the rule table is checked against a URL from a site with no registered permalink rule
-- **THEN** no rule matches
+## MODIFIED Requirements
 
 ### Requirement: Card-level DOM resolution via content script
 
@@ -38,11 +13,6 @@ The background service worker SHALL store the most recently resolved context per
 #### Scenario: Pinterest card image is resolved on right-click
 
 - **WHEN** the user right-clicks a Pinterest grid card whose click target is not an `<img>`, and the card's link wrapper contains a descendant `<img>`
-- **THEN** the content script sends a resolved context containing that `<img>`'s `src` as `srcUrl` to the background, before the user selects a context menu item
-
-#### Scenario: Instagram grid card image is resolved on right-click
-
-- **WHEN** the user right-clicks an Instagram profile/grid post thumbnail whose click target is the enclosing `<a>` post link rather than the `<img>`, and that link wraps a descendant `<img>`
 - **THEN** the content script sends a resolved context containing that `<img>`'s `src` as `srcUrl` to the background, before the user selects a context menu item
 
 #### Scenario: No image found in the card is not resolved
@@ -70,6 +40,8 @@ The background service worker SHALL key stored resolved contexts by `tabId` and 
 
 - **WHEN** the content script resolves context for one right-click in a tab, and then a second right-click in the same tab resolves a different context before "Save to Bookleaf" is clicked
 - **THEN** the click handler uses the second (most recent) resolved context, not the first
+
+## ADDED Requirements
 
 ### Requirement: Tweet text DOM-resolution rule
 

@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { resolveCardImageSrc, shouldResolveCardDom } from "../lib/cardDomResolveRules";
+import { isTwitterUrl, resolveTweetText } from "../lib/tweetTextResolveRule";
 
 type ToastVariant = "success" | "error";
 
@@ -133,11 +134,22 @@ browser.runtime.onMessage.addListener((message: unknown) => {
 document.addEventListener(
   "contextmenu",
   (event) => {
-    if (!shouldResolveCardDom(window.location.href)) return;
     if (!(event.target instanceof Element)) return;
-    const srcUrl = resolveCardImageSrc(event.target);
-    if (!srcUrl) return;
-    browser.runtime.sendMessage({ resolved: { srcUrl } });
+
+    const resolved: Partial<{ srcUrl: string; title: string }> = {};
+
+    if (shouldResolveCardDom(window.location.href)) {
+      const srcUrl = resolveCardImageSrc(event.target);
+      if (srcUrl) resolved.srcUrl = srcUrl;
+    }
+
+    if (isTwitterUrl(window.location.href)) {
+      const title = resolveTweetText(event.target);
+      if (title) resolved.title = title;
+    }
+
+    if (!shouldResolveCardDom(window.location.href) && !isTwitterUrl(window.location.href)) return;
+    browser.runtime.sendMessage({ resolved });
   },
   { capture: true },
 );
