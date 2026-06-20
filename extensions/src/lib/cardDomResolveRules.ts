@@ -8,7 +8,12 @@ const pinterestRule: CardDomResolveRule = {
   matches: (url) => url.hostname === "pinterest.com" || url.hostname.endsWith(".pinterest.com"),
 };
 
-export const rules: CardDomResolveRule[] = [pinterestRule];
+const instagramRule: CardDomResolveRule = {
+  id: "instagram-card",
+  matches: (url) => url.hostname === "instagram.com" || url.hostname.endsWith(".instagram.com"),
+};
+
+export const rules: CardDomResolveRule[] = [pinterestRule, instagramRule];
 
 export function shouldResolveCardDom(pageUrl: string): boolean {
   let url: URL;
@@ -20,7 +25,10 @@ export function shouldResolveCardDom(pageUrl: string): boolean {
   return rules.some((rule) => rule.matches(url));
 }
 
-export const linkOnlyCardUrlPatterns: string[] = ["*://*.pinterest.com/pin/*"];
+export const linkOnlyCardUrlPatterns: string[] = [
+  "*://*.pinterest.com/pin/*",
+  "*://*.instagram.com/p/*",
+];
 
 export function resolveCardImageSrc(target: Element): string | null {
   const link = target.closest("a");
