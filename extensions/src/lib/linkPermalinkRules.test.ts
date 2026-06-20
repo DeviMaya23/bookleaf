@@ -10,6 +10,24 @@ describe("resolveLinkPermalink", () => {
     expect(resolveLinkPermalink("https://www.facebook.com/someuser/posts/123456789")).toBe(true);
   });
 
+  it("matches a Pinterest pin permalink", () => {
+    expect(resolveLinkPermalink("https://www.pinterest.com/pin/123456789/")).toBe(true);
+  });
+
+  it("matches a Pinterest pin permalink on a locale subdomain", () => {
+    expect(resolveLinkPermalink("https://id.pinterest.com/pin/123456789/")).toBe(true);
+  });
+
+  it("matches an Instagram post permalink", () => {
+    expect(resolveLinkPermalink("https://www.instagram.com/p/DRIL7h5DgO4/")).toBe(true);
+  });
+
+  it("matches an Instagram post permalink linked from a user's profile page", () => {
+    expect(
+      resolveLinkPermalink("https://www.instagram.com/bouquetsbypricila_/p/DU06CzGDnhs/"),
+    ).toBe(true);
+  });
+
   it("does not match a URL from an unregistered site", () => {
     expect(resolveLinkPermalink("https://example.com/some/page")).toBe(false);
   });

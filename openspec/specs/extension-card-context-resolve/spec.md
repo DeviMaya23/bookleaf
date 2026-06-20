@@ -20,6 +20,16 @@ The extension SHALL maintain a table of site-specific link permalink rules, each
 - **WHEN** the rule table is checked against a Facebook post permalink URL
 - **THEN** the Facebook permalink rule matches
 
+#### Scenario: Pinterest pin permalink matches
+
+- **WHEN** the rule table is checked against a Pinterest pin permalink URL (e.g. `https://www.pinterest.com/pin/123456789/`), including on a locale subdomain (e.g. `id.pinterest.com`)
+- **THEN** the Pinterest permalink rule matches
+
+#### Scenario: Instagram post permalink matches
+
+- **WHEN** the rule table is checked against an Instagram post permalink URL, whether reached directly (`https://www.instagram.com/p/<id>/`) or via a username-prefixed link from a profile page (`https://www.instagram.com/<username>/p/<id>/`)
+- **THEN** the Instagram permalink rule matches
+
 #### Scenario: Unrecognized linkUrl matches no rule
 
 - **WHEN** the rule table is checked against a URL from a site with no registered permalink rule

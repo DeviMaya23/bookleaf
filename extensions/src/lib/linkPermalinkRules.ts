@@ -19,7 +19,29 @@ const facebookRule: LinkPermalinkRule = {
   matches: (url) => FACEBOOK_HOSTNAMES.has(url.hostname) && FACEBOOK_POST_PATH.test(url.pathname),
 };
 
-export const rules: LinkPermalinkRule[] = [twitterRule, facebookRule];
+function isPinterestHostname(hostname: string): boolean {
+  return hostname === "pinterest.com" || hostname.endsWith(".pinterest.com");
+}
+
+const PINTEREST_PIN_PATH = /\/pin\/\d+/;
+
+const pinterestRule: LinkPermalinkRule = {
+  id: "pinterest-pin-permalink",
+  matches: (url) => isPinterestHostname(url.hostname) && PINTEREST_PIN_PATH.test(url.pathname),
+};
+
+function isInstagramHostname(hostname: string): boolean {
+  return hostname === "instagram.com" || hostname.endsWith(".instagram.com");
+}
+
+const INSTAGRAM_POST_PATH = /\/p\/[^/]+/;
+
+const instagramRule: LinkPermalinkRule = {
+  id: "instagram-post-permalink",
+  matches: (url) => isInstagramHostname(url.hostname) && INSTAGRAM_POST_PATH.test(url.pathname),
+};
+
+export const rules: LinkPermalinkRule[] = [twitterRule, facebookRule, pinterestRule, instagramRule];
 
 export function resolveLinkPermalink(linkUrl: string): boolean {
   let url: URL;
