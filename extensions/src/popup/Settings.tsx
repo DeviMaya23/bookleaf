@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
+import { Moon, Sun } from "lucide-react";
 import { getDragEnabled, setDragEnabled } from "../lib/storage";
-import { MoonIcon, SunIcon, type Colors } from "./App";
+import type { Colors } from "./App";
 
 const SNIP_COMMAND_NAME = "snip-capture";
 const CHROME_SHORTCUTS_URL = "chrome://extensions/shortcuts";
@@ -134,7 +135,7 @@ export default function Settings({
             color: c.textSec,
           }}
         >
-          {isDark ? <SunIcon /> : <MoonIcon />}
+          {isDark ? <Sun size={14} /> : <Moon size={14} />}
         </button>
       </div>
 
