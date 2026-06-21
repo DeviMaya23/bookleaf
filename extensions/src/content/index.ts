@@ -3,7 +3,8 @@ import { resolveCardImageSrc, shouldResolveCardDom } from "../lib/cardDomResolve
 import { isTwitterUrl, resolveTweetText } from "../lib/tweetTextResolveRule";
 import { isImgurUrl, isInstagramUrl, resolveAltText } from "../lib/altTextResolveRule";
 import { isFacebookUrl, resolveFacebookAltText } from "../lib/facebookAltResolveRule";
-import { resolveDragImageSrc } from "../lib/dragImageResolveRule";
+import { resolveDragSaveContext, type DragSaveContext } from "../lib/dragSaveContext";
+import { getDragEnabled } from "../lib/storage";
 
 type ToastVariant = "success" | "error";
 
@@ -369,12 +370,6 @@ document.addEventListener(
   { capture: true },
 );
 
-interface DragSaveContext {
-  srcUrl: string;
-  title?: string;
-  linkUrl?: string;
-}
-
 function isBookleafAppUrl(pageUrl: string): boolean {
   const appUrl = import.meta.env.VITE_APP_URL;
   if (!appUrl) return false;
@@ -387,14 +382,6 @@ function isBookleafAppUrl(pageUrl: string): boolean {
 
 let dragContext: DragSaveContext | null = null;
 let dropZone: HTMLElement | null = null;
-
-function resolveDragTitle(target: Element): string | undefined {
-  const pageUrl = window.location.href;
-  if (isTwitterUrl(pageUrl)) return resolveTweetText(target) ?? undefined;
-  if (isImgurUrl(pageUrl) || isInstagramUrl(pageUrl)) return resolveAltText(target) ?? undefined;
-  if (isFacebookUrl(pageUrl)) return resolveFacebookAltText(target) ?? undefined;
-  return undefined;
-}
 
 function removeDropZone(): void {
   dropZone?.remove();
@@ -448,19 +435,15 @@ document.addEventListener(
     const pageUrl = window.location.href;
     if (isBookleafAppUrl(pageUrl)) return;
 
-    const srcUrl = resolveDragImageSrc(event.target, pageUrl);
-    if (!srcUrl) {
-      dragContext = null;
-      return;
-    }
+    const target = event.target;
+    const clientX = event.clientX;
+    const clientY = event.clientY;
 
-    dragContext = {
-      srcUrl,
-      title: resolveDragTitle(event.target),
-      linkUrl: event.target.closest("a")?.href,
-    };
-
-    renderDropZone(event.clientX, event.clientY);
+    void getDragEnabled().then((dragEnabled) => {
+      const context = resolveDragSaveContext(target, pageUrl, dragEnabled);
+      dragContext = context;
+      if (context) renderDropZone(clientX, clientY);
+    });
   },
   { capture: true },
 );

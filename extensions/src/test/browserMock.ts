@@ -27,11 +27,15 @@ export function createBrowserMock() {
       sendMessage: vi.fn(async () => undefined),
       query: vi.fn(async () => []),
       captureVisibleTab: vi.fn(async () => "data:image/png;base64,"),
+      create: vi.fn(),
     },
     commands: {
       onCommand: {
         addListener: vi.fn(),
       },
+      getAll: vi.fn(async () => []),
+      update: vi.fn(async () => undefined),
+      openShortcutSettings: vi.fn(async () => undefined),
     },
     contextMenus: {
       removeAll: vi.fn(async () => undefined),

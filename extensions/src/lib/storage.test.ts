@@ -5,7 +5,7 @@ vi.mock("webextension-polyfill", async () => {
   return { default: createBrowserMock() };
 });
 
-import { addRecentSave, getRecentSaves, type RecentSave } from "./storage";
+import { addRecentSave, getDragEnabled, getRecentSaves, setDragEnabled, type RecentSave } from "./storage";
 
 function makeSave(imageId: string): RecentSave {
   return { imageId, title: imageId, dataUrl: "data:image/jpeg;base64,", savedAt: Date.now() };
@@ -22,5 +22,22 @@ describe("addRecentSave", () => {
     const saves = await getRecentSaves();
     expect(saves).toHaveLength(5);
     expect(saves[0].imageId).toBe("newest");
+  });
+});
+
+describe("getDragEnabled/setDragEnabled", () => {
+  it("returns true when no value has ever been stored", async () => {
+    expect(await getDragEnabled()).toBe(true);
+  });
+
+  it("returns the last-set value after setDragEnabled(false)", async () => {
+    await setDragEnabled(false);
+    expect(await getDragEnabled()).toBe(false);
+  });
+
+  it("returns the last-set value after setDragEnabled(true)", async () => {
+    await setDragEnabled(false);
+    await setDragEnabled(true);
+    expect(await getDragEnabled()).toBe(true);
   });
 });

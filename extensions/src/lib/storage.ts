@@ -16,6 +16,7 @@ export interface RecentSave {
 const STORAGE_KEY = "bookleaf_auth";
 const RECENT_SAVES_KEY = "bookleaf_recent_saves";
 const DARK_MODE_KEY = "bookleaf_dark_mode";
+const DRAG_ENABLED_KEY = "bookleaf_drag_enabled";
 const USERNAME_KEY = "bookleaf_username";
 const AVATAR_KEY = "bookleaf_avatar";
 
@@ -52,6 +53,15 @@ export async function getDarkMode(): Promise<boolean> {
 
 export async function setDarkMode(value: boolean): Promise<void> {
   await browser.storage.local.set({ [DARK_MODE_KEY]: value });
+}
+
+export async function getDragEnabled(): Promise<boolean> {
+  const result = await browser.storage.local.get(DRAG_ENABLED_KEY);
+  return (result[DRAG_ENABLED_KEY] as boolean) ?? true;
+}
+
+export async function setDragEnabled(value: boolean): Promise<void> {
+  await browser.storage.local.set({ [DRAG_ENABLED_KEY]: value });
 }
 
 export async function getUsername(): Promise<string | null> {
