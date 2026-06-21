@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
-import { Moon, Sun } from "lucide-react";
 import { getDragEnabled, setDragEnabled } from "../lib/storage";
 import type { Colors } from "./App";
 
@@ -16,6 +15,50 @@ export async function openFirefoxShortcutSettings(): Promise<void> {
 
 export async function openChromeShortcutSettings(): Promise<void> {
   await browser.tabs.create({ url: CHROME_SHORTCUTS_URL });
+}
+
+function Switch({
+  c,
+  checked,
+  onChange,
+  title,
+}: {
+  c: Colors;
+  checked: boolean;
+  onChange: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      title={title}
+      style={{
+        width: 32,
+        height: 20,
+        borderRadius: 10,
+        border: "none",
+        padding: 2,
+        cursor: "pointer",
+        background: checked ? c.accent : c.border,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: checked ? "flex-end" : "flex-start",
+        transition: "background 0.15s",
+      }}
+    >
+      <span
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          background: c.bg,
+          transition: "transform 0.15s",
+        }}
+      />
+    </button>
+  );
 }
 
 export default function Settings({
@@ -119,24 +162,12 @@ export default function Settings({
         }}
       >
         <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Dark mode</span>
-        <button
-          onClick={onToggleDark}
+        <Switch
+          c={c}
+          checked={isDark}
+          onChange={onToggleDark}
           title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "none",
-            cursor: "pointer",
-            background: "transparent",
-            color: c.textSec,
-          }}
-        >
-          {isDark ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
+        />
       </div>
 
       {/* Drag-to-save row */}
@@ -151,20 +182,7 @@ export default function Settings({
         }}
       >
         <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Drag to save</span>
-        <button
-          onClick={handleToggleDrag}
-          style={{
-            fontSize: 12,
-            color: dragEnabled ? c.accent : c.textSec,
-            background: "transparent",
-            border: `1px solid ${c.border}`,
-            borderRadius: 6,
-            padding: "4px 9px",
-            cursor: "pointer",
-          }}
-        >
-          {dragEnabled ? "On" : "Off"}
-        </button>
+        <Switch c={c} checked={dragEnabled} onChange={handleToggleDrag} />
       </div>
 
       {/* Snip hotkey row */}
