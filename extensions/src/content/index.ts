@@ -88,21 +88,39 @@ style.textContent = `
   .drop-zone {
     position: fixed;
     z-index: 2147483647;
-    width: 96px;
-    height: 96px;
-    margin: -48px 0 0 -48px;
+    width: 150px;
+    height: 150px;
+    margin: -75px 0 0 -75px;
+    box-sizing: border-box;
+    padding: 8px;
+    border-radius: 8px;
+    background: #faf8f4;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+    pointer-events: auto;
+  }
+
+  .drop-zone-border {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    border: 2px dashed #6366f1;
-    border-radius: 12px;
-    background: rgba(99, 102, 241, 0.1);
-    color: #6366f1;
+    gap: 8px;
+    padding: 8px;
+    border: 2px dashed rgba(140, 132, 123, 0.3);
+    border-radius: 6px;
+    color: #8c847b;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
     text-align: center;
-    pointer-events: auto;
+  }
+
+  .drop-zone-icon {
+    width: 28px;
+    height: 28px;
   }
 `;
 
@@ -226,12 +244,29 @@ function removeDropZone(): void {
   dropZone = null;
 }
 
+const UPLOAD_CLOUD_ICON_SVG = `
+  <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 13v8" />
+    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+    <path d="m8 17 4-4 4 4" />
+  </svg>
+`;
+
 function renderDropZone(clientX: number, clientY: number): void {
   const zone = document.createElement("div");
   zone.className = "drop-zone";
-  zone.textContent = "Drop to save";
   zone.style.left = `${clientX}px`;
   zone.style.top = `${clientY}px`;
+
+  const border = document.createElement("div");
+  border.className = "drop-zone-border";
+  border.innerHTML = UPLOAD_CLOUD_ICON_SVG;
+
+  const label = document.createElement("span");
+  label.textContent = "Save to Bookleaf";
+  border.appendChild(label);
+
+  zone.appendChild(border);
 
   zone.addEventListener("dragover", (event) => {
     event.preventDefault();
