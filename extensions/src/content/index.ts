@@ -104,6 +104,31 @@ style.textContent = `
     text-align: center;
     pointer-events: auto;
   }
+
+  .snip-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    cursor: crosshair;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .snip-overlay img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+  }
+
+  .snip-rect {
+    position: absolute;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+    outline: 1px solid #ffffff;
+    pointer-events: none;
+  }
 `;
 
 shadow.appendChild(style);
@@ -148,11 +173,143 @@ function showToast(variant: ToastVariant, title: string, body: string): void {
   }, 4000);
 }
 
+interface SnipFrameMessage {
+  type: "snip-frame";
+  dataUrl: string;
+}
+
 browser.runtime.onMessage.addListener((message: unknown) => {
-  const msg = message as ToastMessage;
-  if (msg.type !== "toast") return;
-  showToast(msg.variant, msg.title, msg.body);
+  const msg = message as ToastMessage | SnipFrameMessage;
+  if (msg.type === "toast") {
+    showToast(msg.variant, msg.title, msg.body);
+    return;
+  }
+  if (msg.type === "snip-frame") {
+    renderSnipOverlay(msg.dataUrl);
+  }
 });
+
+let snipOverlay: HTMLElement | null = null;
+let snipImage: HTMLImageElement | null = null;
+let snipRect: HTMLElement | null = null;
+let snipStart: { x: number; y: number } | null = null;
+let snipDragging = false;
+
+function removeSnipOverlay(): void {
+  snipOverlay?.remove();
+  snipOverlay = null;
+  snipImage = null;
+  snipRect = null;
+  snipStart = null;
+  snipDragging = false;
+  document.removeEventListener("keydown", handleSnipKeydown, true);
+}
+
+function handleSnipKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Escape") return;
+  removeSnipOverlay();
+}
+
+function updateSnipRect(clientX: number, clientY: number): void {
+  if (!snipStart || !snipRect) return;
+  const left = Math.min(snipStart.x, clientX);
+  const top = Math.min(snipStart.y, clientY);
+  const width = Math.abs(clientX - snipStart.x);
+  const height = Math.abs(clientY - snipStart.y);
+  snipRect.style.left = `${left}px`;
+  snipRect.style.top = `${top}px`;
+  snipRect.style.width = `${width}px`;
+  snipRect.style.height = `${height}px`;
+}
+
+function handleSnipMouseDown(event: MouseEvent): void {
+  snipStart = { x: event.clientX, y: event.clientY };
+  snipDragging = true;
+  updateSnipRect(event.clientX, event.clientY);
+}
+
+function handleSnipMouseMove(event: MouseEvent): void {
+  if (!snipDragging) return;
+  updateSnipRect(event.clientX, event.clientY);
+}
+
+function handleSnipMouseUp(): void {
+  if (!snipDragging) return;
+  snipDragging = false;
+  void finalizeSnipSelection();
+}
+
+async function finalizeSnipSelection(): Promise<void> {
+  const image = snipImage;
+  const rect = snipRect;
+
+  if (image && rect) {
+    const bounds = rect.getBoundingClientRect();
+    if (bounds.width > 0 && bounds.height > 0) {
+      const scaleX = image.naturalWidth / window.innerWidth;
+      const scaleY = image.naturalHeight / window.innerHeight;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bounds.width * scaleX);
+      canvas.height = Math.round(bounds.height * scaleY);
+      const ctx = canvas.getContext("2d");
+
+      if (ctx) {
+        ctx.drawImage(
+          image,
+          bounds.left * scaleX,
+          bounds.top * scaleY,
+          bounds.width * scaleX,
+          bounds.height * scaleY,
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/png"),
+        );
+        if (blob) {
+          browser.runtime.sendMessage({ type: "snip-captured", blob, mimeType: "image/png" });
+        }
+      }
+    }
+  }
+
+  removeSnipOverlay();
+}
+
+function renderSnipOverlay(dataUrl: string): void {
+  removeSnipOverlay();
+
+  const overlay = document.createElement("div");
+  overlay.className = "snip-overlay";
+
+  const image = document.createElement("img");
+  image.src = dataUrl;
+
+  const rect = document.createElement("div");
+  rect.className = "snip-rect";
+  rect.style.left = "0px";
+  rect.style.top = "0px";
+  rect.style.width = "0px";
+  rect.style.height = "0px";
+
+  overlay.appendChild(image);
+  overlay.appendChild(rect);
+  shadow.appendChild(overlay);
+
+  snipOverlay = overlay;
+  snipImage = image;
+  snipRect = rect;
+  snipStart = null;
+  snipDragging = false;
+
+  overlay.addEventListener("mousedown", handleSnipMouseDown);
+  overlay.addEventListener("mousemove", handleSnipMouseMove);
+  overlay.addEventListener("mouseup", handleSnipMouseUp);
+  document.addEventListener("keydown", handleSnipKeydown, true);
+}
 
 document.addEventListener(
   "contextmenu",

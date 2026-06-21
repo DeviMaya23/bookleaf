@@ -18,10 +18,14 @@ vi.mock("../lib/storage", () => ({ getAuth: vi.fn(), addRecentSave: vi.fn() }));
 
 import {
   blobToDataUrl,
+  handleCapture,
   handleContextMenuClick,
   handleDragSaveMessage,
   handleSave,
+  handleSnipCapturedMessage,
+  handleSnipCommand,
   isTokenValid,
+  persistImage,
   resolveImageBlob,
   resolvedContextByTab,
   saveImage,
@@ -217,6 +221,189 @@ describe("handleSave", () => {
       expect.objectContaining({ variant: "error", title: "Couldn't save image." }),
     );
     expect(addRecentSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("persistImage", () => {
+  const baseArgs = {
+    blob: new Blob([new Uint8Array([1])]),
+    mimeType: "image/png",
+    title: "Snip",
+    pageUrl: "https://example.com/page",
+    tabId: 1,
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("sends a success toast and records the recent save when auth is valid and upload succeeds", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    await persistImage(baseArgs);
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variant: "success" }),
+    );
+    expect(addRecentSave).toHaveBeenCalledWith(
+      expect.objectContaining({ imageId: "img-1", title: "Snip" }),
+    );
+  });
+
+  it("sends a login-required toast and attempts no upload when there is no valid token", async () => {
+    vi.mocked(getAuth).mockResolvedValue(null);
+
+    await persistImage(baseArgs);
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variant: "error", title: "Bookleaf" }),
+    );
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("sends an error toast and skips the recent save when an upload step fails", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(apiFetch).mockResolvedValueOnce(new Response(null, { status: 500 }));
+
+    await persistImage(baseArgs);
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variant: "error", title: "Couldn't save image." }),
+    );
+    expect(addRecentSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleCapture", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+  });
+
+  it("delegates to persistImage with the given blob/mimeType/title/pageUrl, with no srcUrl fetch attempted", async () => {
+    const blob = new Blob([new Uint8Array([1])]);
+
+    await handleCapture({
+      blob,
+      mimeType: "image/png",
+      pageUrl: "https://example.com/page",
+      title: "Tab Title",
+      tabId: 1,
+    });
+
+    expect(fetch).not.toHaveBeenCalledWith("https://example.com/page");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://example.com/page"'),
+      }),
+    );
+    expect(addRecentSave).toHaveBeenCalledWith(expect.objectContaining({ title: "Tab Title" }));
+  });
+});
+
+describe("handleSnipCommand", () => {
+  it("captures the active tab and sends the frame to its content script", async () => {
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1 } as browser.Tabs.Tab]);
+    vi.mocked(browser.tabs.captureVisibleTab).mockResolvedValue("data:image/png;base64,abc");
+
+    await handleSnipCommand("snip-capture");
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(1, {
+      type: "snip-frame",
+      dataUrl: "data:image/png;base64,abc",
+    });
+  });
+
+  it("ignores commands other than snip-capture", async () => {
+    await handleSnipCommand("some-other-command");
+
+    expect(browser.tabs.captureVisibleTab).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when there is no active tab", async () => {
+    vi.mocked(browser.tabs.query).mockResolvedValue([]);
+
+    await handleSnipCommand("snip-capture");
+
+    expect(browser.tabs.captureVisibleTab).not.toHaveBeenCalled();
+  });
+
+  it("resolves cleanly when the content script can't be reached (e.g. a restricted page)", async () => {
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1 } as browser.Tabs.Tab]);
+    vi.mocked(browser.tabs.captureVisibleTab).mockResolvedValue("data:image/png;base64,abc");
+    vi.mocked(browser.tabs.sendMessage).mockRejectedValueOnce(
+      new Error("Receiving end does not exist."),
+    );
+
+    await expect(handleSnipCommand("snip-capture")).resolves.toBeUndefined();
+  });
+});
+
+describe("handleSnipCapturedMessage", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+  });
+
+  it("uses tab.url and tab.title unmodified, with no per-site resolution", async () => {
+    const tab = {
+      id: 1,
+      url: "https://x.com/username",
+      title: "A tweet, by someone",
+    } as browser.Tabs.Tab;
+
+    handleSnipCapturedMessage(
+      { type: "snip-captured", blob: new Blob([new Uint8Array([1])]), mimeType: "image/png" },
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"A tweet, by someone"'),
+      }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://x.com/username"'),
+      }),
+    );
   });
 });
 

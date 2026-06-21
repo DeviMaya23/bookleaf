@@ -46,17 +46,58 @@ export function handleDragSaveMessage(
   handleSave({ srcUrl: msg.srcUrl, pageUrl, title, tabId: tab?.id });
 }
 
+interface SnipCapturedMessage {
+  type: "snip-captured";
+  blob: Blob;
+  mimeType: string;
+}
+
+export function handleSnipCapturedMessage(
+  msg: SnipCapturedMessage,
+  tab: browser.Tabs.Tab | undefined,
+): void {
+  const pageUrl = tab?.url ?? "";
+  const title = tab?.title ?? "Untitled";
+  handleCapture({ blob: msg.blob, mimeType: msg.mimeType, pageUrl, title, tabId: tab?.id });
+}
+
 browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
-  const msg = message as { type?: string; resolved?: Partial<{ srcUrl: string; title: string }> };
+  const msg = message as {
+    type?: string;
+    resolved?: Partial<{ srcUrl: string; title: string }>;
+  };
 
   if (msg.type === "drag-save") {
     handleDragSaveMessage(message as DragSaveMessage, sender.tab);
     return;
   }
 
+  if (msg.type === "snip-captured") {
+    handleSnipCapturedMessage(message as SnipCapturedMessage, sender.tab);
+    return;
+  }
+
   if (!msg.resolved || sender.tab?.id === undefined) return;
   resolvedContextByTab.set(sender.tab.id, msg.resolved);
 });
+
+const SNIP_COMMAND = "snip-capture";
+
+export async function handleSnipCommand(command: string): Promise<void> {
+  if (command !== SNIP_COMMAND) return;
+
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) return;
+
+  try {
+    const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId);
+    await browser.tabs.sendMessage(tab.id, { type: "snip-frame", dataUrl });
+  } catch {
+    // content script may not be injected on this page (e.g. chrome://, PDF viewer) — no-op
+  }
+}
+
+browser.commands.onCommand.addListener(handleSnipCommand);
 
 function resolveTitle(
   info: browser.Menus.OnClickData,
@@ -241,15 +282,19 @@ export async function saveImage({
   return image_id;
 }
 
-export async function handleSave({
-  srcUrl,
-  pageUrl,
+export async function persistImage({
+  blob,
+  mimeType,
+  bitmap,
   title,
+  pageUrl,
   tabId,
 }: {
-  srcUrl: string;
-  pageUrl: string;
+  blob: Blob;
+  mimeType: string;
+  bitmap?: ImageBitmap | null;
   title: string;
+  pageUrl: string;
   tabId: number | undefined;
 }): Promise<void> {
   const auth = await getAuth();
@@ -263,20 +308,18 @@ export async function handleSave({
   let thumbnailBlob: Blob | null = null;
 
   try {
-    const fetched = await resolveImageBlob(srcUrl);
-
     let dimensions: { width: number; height: number } | undefined;
     if (typeof OffscreenCanvas !== "undefined") {
-      const thumbnail = await generateThumbnail(fetched.blob, fetched.bitmap);
+      const thumbnail = await generateThumbnail(blob, bitmap);
       thumbnailBlob = thumbnail.blob;
       dimensions = { width: thumbnail.width, height: thumbnail.height };
     } else {
-      fetched.bitmap?.close();
+      bitmap?.close();
     }
 
     imageId = await saveImage({
-      blob: fetched.blob,
-      mimeType: fetched.mimeType,
+      blob,
+      mimeType,
       title,
       pageUrl,
       accessToken: auth.accessToken,
@@ -294,6 +337,50 @@ export async function handleSave({
     const dataUrl = thumbnailBlob ? await blobToDataUrl(thumbnailBlob) : "";
     await addRecentSave({ imageId, title, dataUrl, savedAt: Date.now() });
   }
+}
+
+export async function handleSave({
+  srcUrl,
+  pageUrl,
+  title,
+  tabId,
+}: {
+  srcUrl: string;
+  pageUrl: string;
+  title: string;
+  tabId: number | undefined;
+}): Promise<void> {
+  const auth = await getAuth();
+  if (!isTokenValid(auth)) {
+    await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
+    return;
+  }
+
+  let fetched: { blob: Blob; mimeType: string; bitmap: ImageBitmap | null };
+  try {
+    fetched = await resolveImageBlob(srcUrl);
+  } catch {
+    await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
+    return;
+  }
+
+  await persistImage({ ...fetched, title, pageUrl, tabId });
+}
+
+export async function handleCapture({
+  blob,
+  mimeType,
+  pageUrl,
+  title,
+  tabId,
+}: {
+  blob: Blob;
+  mimeType: string;
+  pageUrl: string;
+  title: string;
+  tabId: number | undefined;
+}): Promise<void> {
+  await persistImage({ blob, mimeType, title, pageUrl, tabId });
 }
 
 async function sendToast(
