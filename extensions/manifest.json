@@ -3,12 +3,21 @@
   "name": "Bookleaf",
   "version": "0.1.0",
   "description": "Save images to Bookleaf from any webpage.",
-  "permissions": ["storage", "identity", "contextMenus"],
+  "permissions": ["storage", "identity", "contextMenus", "activeTab"],
   "icons": {
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
   "host_permissions": ["<all_urls>"],
+  "commands": {
+    "snip-capture": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Snip to Bookleaf"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
