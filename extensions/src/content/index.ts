@@ -197,14 +197,48 @@ interface SnipFrameMessage {
   dataUrl: string;
 }
 
+interface CaptureVideoFrameMessage {
+  type: "capture-video-frame";
+}
+
+let lastRightClickedVideo: HTMLVideoElement | null = null;
+
+async function captureVideoFrame(): Promise<void> {
+  const video = lastRightClickedVideo;
+  if (!video || video.videoWidth === 0) {
+    showToast("error", "Bookleaf", "Can't capture this video.");
+    return;
+  }
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not get 2d context");
+    ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("toBlob returned null");
+
+    browser.runtime.sendMessage({ type: "video-frame-captured", blob, mimeType: "image/png" });
+  } catch {
+    showToast("error", "Bookleaf", "Can't capture this video.");
+  }
+}
+
 browser.runtime.onMessage.addListener((message: unknown) => {
-  const msg = message as ToastMessage | SnipFrameMessage;
+  const msg = message as ToastMessage | SnipFrameMessage | CaptureVideoFrameMessage;
   if (msg.type === "toast") {
     showToast(msg.variant, msg.title, msg.body);
     return;
   }
   if (msg.type === "snip-frame") {
     renderSnipOverlay(msg.dataUrl);
+    return;
+  }
+  if (msg.type === "capture-video-frame") {
+    void captureVideoFrame();
   }
 });
 
@@ -334,6 +368,9 @@ document.addEventListener(
   "contextmenu",
   (event) => {
     if (!(event.target instanceof Element)) return;
+
+    lastRightClickedVideo =
+      event.target instanceof HTMLVideoElement ? event.target : event.target.querySelector("video");
 
     const resolved: Partial<{ srcUrl: string; title: string }> = {};
 
