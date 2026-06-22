@@ -5,12 +5,12 @@ import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "..
 import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
 import { linkOnlyCardUrlPatterns } from "../lib/cardDomResolveRules";
 
-const isProductionBuild =
-  import.meta.env.MODE === "chrome-production" || import.meta.env.MODE === "firefox-production";
+browser.action.setBadgeText({ text: "" });
 
-if (!isProductionBuild) {
-  browser.action.setBadgeText({ text: "DEV" });
-  browser.action.setBadgeBackgroundColor({ color: "#d97706" });
+let activeSaves = 0;
+
+function updateBadge(): void {
+  browser.action.setBadgeText({ text: activeSaves > 0 ? "•" : "" });
 }
 
 browser.runtime.onInstalled.addListener(async () => {
@@ -350,21 +350,28 @@ export async function handleSave({
   title: string;
   tabId: number | undefined;
 }): Promise<void> {
-  const auth = await getAuth();
-  if (!isTokenValid(auth)) {
-    await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
-    return;
-  }
-
-  let fetched: { blob: Blob; mimeType: string; bitmap: ImageBitmap | null };
+  activeSaves++;
+  updateBadge();
   try {
-    fetched = await resolveImageBlob(srcUrl);
-  } catch {
-    await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
-    return;
-  }
+    const auth = await getAuth();
+    if (!isTokenValid(auth)) {
+      await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
+      return;
+    }
 
-  await persistImage({ ...fetched, title, pageUrl, tabId });
+    let fetched: { blob: Blob; mimeType: string; bitmap: ImageBitmap | null };
+    try {
+      fetched = await resolveImageBlob(srcUrl);
+    } catch {
+      await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
+      return;
+    }
+
+    await persistImage({ ...fetched, title, pageUrl, tabId });
+  } finally {
+    activeSaves--;
+    updateBadge();
+  }
 }
 
 export async function handleCapture({
@@ -380,7 +387,14 @@ export async function handleCapture({
   title: string;
   tabId: number | undefined;
 }): Promise<void> {
-  await persistImage({ blob, mimeType, title, pageUrl, tabId });
+  activeSaves++;
+  updateBadge();
+  try {
+    await persistImage({ blob, mimeType, title, pageUrl, tabId });
+  } finally {
+    activeSaves--;
+    updateBadge();
+  }
 }
 
 async function sendToast(

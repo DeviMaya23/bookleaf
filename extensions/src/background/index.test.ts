@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
-import { addRecentSave, getAuth } from "../lib/storage";
+import { addRecentSave, getAuth, type BookleafAuth } from "../lib/storage";
 
 vi.mock("webextension-polyfill", async () => {
   const { createBrowserMock } = await import("../test/browserMock");
@@ -221,6 +221,135 @@ describe("handleSave", () => {
       expect.objectContaining({ variant: "error", title: "Couldn't save image." }),
     );
     expect(addRecentSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("badge", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(resolveHighResUrl).mockReturnValue(null);
+  });
+
+  it("shows the dot immediately on handleSave entry, before the auth check resolves, and clears it once the auth-failure path settles", async () => {
+    let resolveAuth!: (value: BookleafAuth | null) => void;
+    vi.mocked(getAuth).mockImplementationOnce(
+      () => new Promise((resolve) => { resolveAuth = resolve; }),
+    );
+
+    const promise = handleSave({ srcUrl: "https://example.com/img.jpg", pageUrl: "", title: "t", tabId: 1 });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "•" });
+
+    resolveAuth(null);
+    await promise;
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+
+  it("clears the badge after handleSave's full success path", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(new Blob([new Uint8Array([1])]), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      }),
+    );
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    await handleSave({ srcUrl: "https://example.com/img.jpg", pageUrl: "", title: "t", tabId: 1 });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+
+  it("clears the badge after handleSave fails on the image fetch", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockRejectedValue(new Error("network error"));
+
+    await handleSave({ srcUrl: "https://example.com/img.jpg", pageUrl: "", title: "t", tabId: 1 });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+
+  it("shows the dot while handleCapture is in flight and clears it on success", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+
+    const promise = handleCapture({
+      blob: new Blob([new Uint8Array([1])]),
+      mimeType: "image/png",
+      pageUrl: "https://example.com",
+      title: "t",
+      tabId: 1,
+    });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "•" });
+
+    await promise;
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+
+  it("clears the badge after handleCapture fails on upload", async () => {
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(apiFetch).mockResolvedValueOnce(new Response(null, { status: 500 }));
+
+    await handleCapture({
+      blob: new Blob([new Uint8Array([1])]),
+      mimeType: "image/png",
+      pageUrl: "https://example.com",
+      title: "t",
+      tabId: 1,
+    });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+
+  it("keeps the badge shown while a second concurrent save remains in flight, and clears it only once both have finished", async () => {
+    let resolveAuth1!: (value: BookleafAuth | null) => void;
+    let resolveAuth2!: (value: BookleafAuth | null) => void;
+    vi.mocked(getAuth)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveAuth1 = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveAuth2 = resolve; }));
+
+    const p1 = handleSave({ srcUrl: "https://example.com/1.jpg", pageUrl: "", title: "t1", tabId: 1 });
+    const p2 = handleSave({ srcUrl: "https://example.com/2.jpg", pageUrl: "", title: "t2", tabId: 1 });
+
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "•" });
+
+    resolveAuth1(null);
+    await p1;
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "•" });
+
+    resolveAuth2(null);
+    await p2;
+    expect(browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: "" });
+  });
+});
+
+describe("badge cleared on module load", () => {
+  it("clears the badge on module evaluation", async () => {
+    vi.resetModules();
+    const freshBrowser = (await import("webextension-polyfill")).default;
+    await import("./index");
+
+    expect(freshBrowser.action.setBadgeText).toHaveBeenCalledWith({ text: "" });
   });
 });
 
