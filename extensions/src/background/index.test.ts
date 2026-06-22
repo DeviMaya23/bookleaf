@@ -24,6 +24,7 @@ import {
   handleSave,
   handleSnipCapturedMessage,
   handleSnipCommand,
+  handleVideoFrameCapturedMessage,
   isTokenValid,
   persistImage,
   resolveImageBlob,
@@ -536,6 +537,50 @@ describe("handleSnipCapturedMessage", () => {
   });
 });
 
+describe("handleVideoFrameCapturedMessage", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(getAuth).mockResolvedValue({ accessToken: "token", expiresAt: Date.now() + 10_000 });
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+  });
+
+  it("uses tab.url and tab.title unmodified, with no per-site resolution", async () => {
+    const tab = {
+      id: 1,
+      url: "https://example.com/watch",
+      title: "A video page",
+    } as browser.Tabs.Tab;
+
+    handleVideoFrameCapturedMessage(
+      { type: "video-frame-captured", blob: new Blob([new Uint8Array([1])]), mimeType: "image/png" },
+      tab,
+    );
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalled());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"title":"A video page"'),
+      }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/images",
+      expect.objectContaining({
+        body: expect.stringContaining('"source_url":"https://example.com/watch"'),
+      }),
+    );
+  });
+});
+
 describe("handleContextMenuClick", () => {
   const tab = { id: 1, title: "t" } as browser.Tabs.Tab;
 
@@ -621,6 +666,25 @@ describe("handleContextMenuClick", () => {
         body: expect.stringContaining('"source_url":"https://www.pinterest.com/pin/123"'),
       }),
     );
+  });
+
+  it("sends a capture-video-frame message to the tab for the video menu item", () => {
+    handleContextMenuClick(
+      { menuItemId: "save-video-frame-to-bookleaf", pageUrl: "https://example.com/page" } as browser.Menus.OnClickData,
+      tab,
+    );
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(1, { type: "capture-video-frame" });
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for the video menu item when the tab id is unknown", () => {
+    handleContextMenuClick(
+      { menuItemId: "save-video-frame-to-bookleaf", pageUrl: "https://example.com/page" } as browser.Menus.OnClickData,
+      undefined,
+    );
+
+    expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
   });
 
   it("fails gracefully with no upload when no resolved srcUrl exists for link-context", async () => {

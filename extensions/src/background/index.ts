@@ -26,6 +26,11 @@ browser.runtime.onInstalled.addListener(async () => {
     contexts: ["link"],
     targetUrlPatterns: linkOnlyCardUrlPatterns,
   });
+  browser.contextMenus.create({
+    id: "save-video-frame-to-bookleaf",
+    title: "Save video frame to Bookleaf",
+    contexts: ["video"],
+  });
 });
 
 export const resolvedContextByTab = new Map<number, Partial<{ srcUrl: string; title: string }>>();
@@ -61,6 +66,21 @@ export function handleSnipCapturedMessage(
   handleCapture({ blob: msg.blob, mimeType: msg.mimeType, pageUrl, title, tabId: tab?.id });
 }
 
+interface VideoFrameCapturedMessage {
+  type: "video-frame-captured";
+  blob: Blob;
+  mimeType: string;
+}
+
+export function handleVideoFrameCapturedMessage(
+  msg: VideoFrameCapturedMessage,
+  tab: browser.Tabs.Tab | undefined,
+): void {
+  const pageUrl = tab?.url ?? "";
+  const title = tab?.title ?? "Untitled";
+  handleCapture({ blob: msg.blob, mimeType: msg.mimeType, pageUrl, title, tabId: tab?.id });
+}
+
 browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
   const msg = message as {
     type?: string;
@@ -74,6 +94,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
 
   if (msg.type === "snip-captured") {
     handleSnipCapturedMessage(message as SnipCapturedMessage, sender.tab);
+    return;
+  }
+
+  if (msg.type === "video-frame-captured") {
+    handleVideoFrameCapturedMessage(message as VideoFrameCapturedMessage, sender.tab);
     return;
   }
 
@@ -135,6 +160,12 @@ export function handleContextMenuClick(
       return;
     }
     handleSave({ srcUrl: resolved.srcUrl, pageUrl: info.linkUrl ?? "", title, tabId: tab?.id });
+    return;
+  }
+
+  if (info.menuItemId === "save-video-frame-to-bookleaf") {
+    if (tab?.id === undefined) return;
+    void browser.tabs.sendMessage(tab.id, { type: "capture-video-frame" });
   }
 }
 
