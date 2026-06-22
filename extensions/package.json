@@ -17,6 +17,9 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "lucide-react": "^1.14.0"
+  },
   "devDependencies": {
     "@types/chrome": "^0.1.42",
     "@types/react": "^19.2.14",

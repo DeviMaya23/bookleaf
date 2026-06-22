@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
+import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { login } from "../lib/auth";
 import {
   clearAuth,
@@ -51,45 +52,6 @@ const dark: Colors = {
   accent: "#efefef",
   thumbBorder: "rgba(255,255,255,0.07)",
 };
-
-export function MoonIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path
-        d="M11.8 8.4A5.2 5.2 0 0 1 5.6 2.2a5 5 0 1 0 6.2 6.2Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-export function SunIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="2.6" fill="currentColor" />
-      <path
-        d="M7 1.2V2.8M7 11.2V12.8M1.2 7H2.8M11.2 7H12.8M3.1 3.1L4.2 4.2M9.8 9.8L10.9 10.9M10.9 3.1L9.8 4.2M4.2 9.8L3.1 10.9"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function GearIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.25" />
-      <path
-        d="M7 1.4v1.5M7 11.1v1.5M2.3 7H.8M13.2 7h-1.5M3.4 3.4l-1-1M11.6 11.6l-1-1M10.6 3.4l1-1M2.4 11.6l1-1"
-        stroke="currentColor"
-        strokeWidth="1.25"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>("loading");
@@ -315,7 +277,7 @@ function LoggedIn({
             padding: 0,
           }}
         >
-          <GearIcon />
+          <SettingsIcon size={14} />
         </button>
       </div>
 
@@ -371,7 +333,7 @@ function LoggedIn({
             color: c.textSec,
           }}
         >
-          {isDark ? <SunIcon /> : <MoonIcon />}
+          {isDark ? <Sun size={14} /> : <Moon size={14} />}
         </button>
       </div>
 
