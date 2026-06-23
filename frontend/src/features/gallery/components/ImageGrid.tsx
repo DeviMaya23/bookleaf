@@ -18,6 +18,7 @@ import { useImageLifecycle } from '../hooks/useImageLifecycle'
 import { useManualReorder } from '../hooks/useManualReorder'
 import { useGalleryImages, EMPTY_FILTER } from '../hooks/useGalleryImages'
 import type { SortBy, SortDir } from '../hooks/useGalleryControls'
+import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
 
 
 export type LayoutMode = 'masonry'
@@ -38,9 +39,11 @@ interface ImageCardProps {
   onDeletePermanent?: (image: Image) => void
   onSelect: (image: Image) => void
   onDoubleClick?: (image: Image) => void
+  onViewDetails?: (image: Image) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect, onDoubleClick }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect, onDoubleClick, onViewDetails }: ImageCardProps) {
+  const isCoarsePointer = useIsCoarsePointer()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
     disabled: isTrash,
@@ -69,6 +72,12 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        {isCoarsePointer && (
+          <>
+            <ContextMenuItem onClick={() => onViewDetails?.(image)}>View details</ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         {isTrash ? (
           <>
             <ContextMenuItem onClick={() => onAction(image)}>Restore</ContextMenuItem>
@@ -106,10 +115,11 @@ interface ImageGridProps {
   onImageSelect: (image: Image) => void
   onImageDoubleClick?: (image: Image) => void
   onImageDeleted?: (id: string) => void
+  onViewDetails?: (image: Image) => void
   sortEndTrigger?: SortEndTrigger | null
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, onImageSelect, onImageDoubleClick, onImageDeleted, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger }: ImageGridProps) {
   const isTrash = view.type === 'trash'
   const isFolderView = view.type === 'folder'
 
@@ -164,6 +174,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
           onDeletePermanent={openDeleteConfirm}
           onSelect={onImageSelect}
           onDoubleClick={onImageDoubleClick}
+          onViewDetails={onViewDetails}
         />
       )}
     />

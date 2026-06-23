@@ -1,8 +1,4 @@
-## Purpose
-
-Lightweight full-screen image viewer for coarse-pointer (touch) devices, opened by a single tap on an image card in the gallery. Unlike the desktop image viewer (`fe-image-viewer`), the lightbox is a best-effort static viewing surface with no zoom, rotate, flip, or pan controls.
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Lightbox opens on single tap on coarse-pointer devices
 

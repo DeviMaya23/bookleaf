@@ -19,6 +19,7 @@ import ImageGrid from '@/features/gallery/components/ImageGrid'
 import GalleryToolbar from '@/features/gallery/components/GalleryToolbar'
 import { useGalleryControls } from '@/features/gallery/hooks/useGalleryControls'
 import ImageViewer from '@/features/viewer/components/ImageViewer'
+import ImageLightbox from '@/features/viewer/components/ImageLightbox'
 import UploadModal from '@/features/upload/components/UploadModal'
 import BatchUploadModal from '@/features/upload/components/BatchUploadModal'
 import RightPanel from '@/features/right-panel/components/RightPanel'
@@ -34,6 +35,7 @@ import type { Image } from '@/lib/images'
 import { getTags } from '@/lib/tags'
 import { useAppView } from './useAppView'
 import { useAppDragAndDrop } from './useAppDragAndDrop'
+import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
 
 export default function AppLayout() {
   const maintenanceActive = useMaintenanceActive()
@@ -52,6 +54,8 @@ export default function AppLayout() {
   const [isAutoUploading, setIsAutoUploading] = useState(false)
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
   const [viewerImage, setViewerImage] = useState<Image | null>(null)
+  const [lightboxImage, setLightboxImage] = useState<Image | null>(null)
+  const isCoarsePointer = useIsCoarsePointer()
 
   const folderId = view.type === 'folder' ? view.id : null
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
@@ -60,6 +64,7 @@ export default function AppLayout() {
     setViewerImage(null)
     setSelectedImage(null)
     setAutoFocusTitle(false)
+    setLightboxImage(null)
   }, [viewKey])
 
   useEffect(() => {
@@ -100,16 +105,34 @@ export default function AppLayout() {
 
   const { checkVision } = useVisionSuggestion()
 
+  const handleImageSelect = useCallback((img: Image) => {
+    if (isCoarsePointer) {
+      setLightboxImage(img)
+      return
+    }
+    setAutoFocusTitle(false)
+    setSelectedImage(img)
+    setFolderPanelOpen(false)
+  }, [isCoarsePointer])
+
+  const handleViewDetails = useCallback((img: Image) => {
+    setAutoFocusTitle(false)
+    setSelectedImage(img)
+    setFolderPanelOpen(false)
+  }, [])
+
   const handleImageDoubleClick = useCallback((img: Image) => {
+    if (isCoarsePointer) return
     setSelectedImage(img)
     setFolderPanelOpen(false)
     setViewerImage(img)
-  }, [])
+  }, [isCoarsePointer])
 
   const handleImageDeleted = useCallback((id: string) => {
     if (selectedImage?.id === id) { setSelectedImage(null); setAutoFocusTitle(false) }
     if (viewerImage?.id === id) setViewerImage(null)
-  }, [selectedImage, viewerImage])
+    if (lightboxImage?.id === id) setLightboxImage(null)
+  }, [selectedImage, viewerImage, lightboxImage])
 
   const handleMainDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
     if (e.dataTransfer.types.includes('Files')) {
@@ -203,7 +226,12 @@ export default function AppLayout() {
               </p>
             </div>
           )}
-          {viewerImage !== null ? (
+          {lightboxImage !== null ? (
+            <ImageLightbox
+              image={lightboxImage}
+              onClose={() => setLightboxImage(null)}
+            />
+          ) : viewerImage !== null ? (
             <ImageViewer
               image={viewerImage}
               onClose={() => setViewerImage(null)}
@@ -265,9 +293,10 @@ export default function AppLayout() {
                   filterTagIds={gallery.filterTagIds}
                   filterMimeTypes={gallery.filterMimeTypes}
                   filterFolderIds={gallery.filterFolderIds}
-                  onImageSelect={(img) => { setAutoFocusTitle(false); setSelectedImage(img); setFolderPanelOpen(false) }}
+                  onImageSelect={handleImageSelect}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}
+                  onViewDetails={handleViewDetails}
                   sortEndTrigger={sortEndTrigger}
                 />
               </div>
