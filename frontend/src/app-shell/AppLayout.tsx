@@ -121,6 +121,12 @@ export default function AppLayout() {
     setFolderPanelOpen(false)
   }, [])
 
+  const handleFolderViewDetails = useCallback(() => {
+    setFolderPanelOpen(true)
+    setSelectedImage(null)
+    setAutoFocusTitle(false)
+  }, [])
+
   const handleImageDoubleClick = useCallback((img: Image) => {
     if (isCoarsePointer) return
     setSelectedImage(img)
@@ -203,7 +209,12 @@ export default function AppLayout() {
             )}
             <FolderSidebar
               view={view}
-              onFolderSelect={() => { setFolderPanelOpen(true); setSelectedImage(null); setAutoFocusTitle(false) }}
+              onFolderSelect={() => {
+                if (!isCoarsePointer) setFolderPanelOpen(true)
+                setSelectedImage(null)
+                setAutoFocusTitle(false)
+              }}
+              onFolderViewDetails={handleFolderViewDetails}
               mobileOpen={mobileDrawerOpen}
               onMobileClose={() => setMobileDrawerOpen(false)}
             />

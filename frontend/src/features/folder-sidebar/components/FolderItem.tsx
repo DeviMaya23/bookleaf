@@ -8,6 +8,7 @@ import {
   ContextMenuSub,
   ContextMenuSubTrigger,
   ContextMenuSubContent,
+  ContextMenuSeparator,
 } from '@/components/ui/context-menu'
 import { getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
@@ -15,6 +16,7 @@ import type { AppView } from '@/lib/view'
 import type { FolderNode } from '../lib/folderTree'
 import { FOLDER_ICONS } from '../lib/folderIcons'
 import FolderIconView from './FolderIconView'
+import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
 
 interface FolderItemProps {
   folder: FolderNode
@@ -29,13 +31,15 @@ interface FolderItemProps {
   onDelete: (folder: Folder) => void
   onNewSubfolder: (folder: Folder) => void
   onChangeIcon: (folder: Folder, icon: string) => void
+  onViewDetails?: (folder: Folder) => void
 }
 
 export default function FolderItem({
   folder, depth, view, folders,
   activeDragType, activeDragFolderId, iconsEnabled,
-  onSelect, onRename, onDelete, onNewSubfolder, onChangeIcon,
+  onSelect, onRename, onDelete, onNewSubfolder, onChangeIcon, onViewDetails,
 }: FolderItemProps) {
+  const isCoarsePointer = useIsCoarsePointer()
   const [open, setOpen] = useState(depth === 0)
   const hasChildren = folder.children.length > 0
   const isActive = view.type === 'folder' && view.id === folder.id
@@ -98,6 +102,12 @@ export default function FolderItem({
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {isCoarsePointer && (
+            <>
+              <ContextMenuItem onClick={() => onViewDetails?.(folder)}>View details</ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
           <ContextMenuItem onClick={() => onNewSubfolder(folder)}>
             New subfolder
           </ContextMenuItem>
@@ -141,6 +151,7 @@ export default function FolderItem({
               onDelete={onDelete}
               onNewSubfolder={onNewSubfolder}
               onChangeIcon={onChangeIcon}
+              onViewDetails={onViewDetails}
             />
           ))}
         </div>
