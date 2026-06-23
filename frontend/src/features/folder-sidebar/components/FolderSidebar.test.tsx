@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { getFolderSubtreeIds, getFolders, createFolder, updateFolder } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import { getMe } from '@/features/auth/lib/me'
@@ -69,7 +69,7 @@ vi.mock('@/components/ui/context-menu', async () => {
   }
 })
 
-function renderSidebar(props: Partial<{ mobileOpen: boolean; onMobileClose: () => void }> = {}) {
+function renderSidebar(props: Partial<{ mobileOpen: boolean; onMobileClose: () => void; onFolderViewDetails: () => void }> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
@@ -78,6 +78,20 @@ function renderSidebar(props: Partial<{ mobileOpen: boolean; onMobileClose: () =
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
 }
 
 function makeFolder(id: string, parentId: string | null = null): Folder {
@@ -254,6 +268,86 @@ describe('FolderSidebar mobile drawer', () => {
     await userEvent.click(await screen.findByText('Folder 1'))
 
     expect(onMobileClose).toHaveBeenCalled()
+  })
+})
+
+describe('FolderSidebar — onViewDetails threading', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('threads onFolderViewDetails through to a root folder\'s "View details" item', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+    const onFolderViewDetails = vi.fn()
+
+    renderSidebar({ onFolderViewDetails })
+
+    await screen.findByText('Folder 1')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
+
+    expect(onFolderViewDetails).toHaveBeenCalled()
+  })
+
+  it('threads onFolderViewDetails through to a nested child folder\'s "View details" item', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('parent'), makeFolder('child', 'parent')])
+    const onFolderViewDetails = vi.fn()
+
+    renderSidebar({ onFolderViewDetails })
+
+    await screen.findByText('Folder child')
+    const viewDetailsItems = screen.getAllByRole('menuitem', { name: 'View details' })
+    await userEvent.click(viewDetailsItems[1])
+
+    expect(onFolderViewDetails).toHaveBeenCalled()
+  })
+
+  it('navigates to a non-active folder when "View details" is selected', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/app']}>
+          <FolderSidebar view={{ type: 'all' }} />
+          <Routes>
+            <Route path="/app/folders/:id" element={<div data-testid="folder-route" />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Folder 1')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
+
+    expect(await screen.findByTestId('folder-route')).toBeInTheDocument()
+  })
+
+  it('does not navigate when "View details" is selected on the already-active folder', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
+    const onFolderViewDetails = vi.fn()
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/app/folders/1']}>
+          <FolderSidebar view={{ type: 'folder', id: '1' }} onFolderViewDetails={onFolderViewDetails} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Folder 1')
+    await userEvent.click(screen.getByRole('menuitem', { name: 'View details' }))
+
+    expect(onFolderViewDetails).toHaveBeenCalled()
   })
 })
 

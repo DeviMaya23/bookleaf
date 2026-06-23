@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import RightPanel from './RightPanel'
 import type { Image } from '@/lib/images'
 
@@ -59,6 +59,20 @@ function renderPanel(image: Image, onClose = vi.fn()) {
   )
 }
 
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
 describe('RightPanel — success scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -77,6 +91,47 @@ describe('RightPanel — success scenario', () => {
     renderPanel(makeImage())
 
     expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
+  })
+})
+
+describe('RightPanel — pointer-capability shell', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(updateImage).mockResolvedValue(makeImage())
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('renders the sidebar shell on a fine-pointer device', () => {
+    mockPointer(false)
+
+    renderPanel(makeImage())
+
+    expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
+    expect(screen.queryByTestId('mobile-drawer-shell-backdrop')).not.toBeInTheDocument()
+  })
+
+  it('renders the drawer shell on a coarse-pointer device', () => {
+    mockPointer(true)
+
+    renderPanel(makeImage())
+
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    expect(screen.getByTestId('mobile-drawer-shell-backdrop')).toBeInTheDocument()
+  })
+
+  it('renders the same content component in both shells', () => {
+    mockPointer(true)
+    renderPanel(makeImage())
+    expect(screen.getByDisplayValue('Sunset photo')).toBeInTheDocument()
+
+    mockPointer(false)
+    renderPanel(makeImage())
+    expect(screen.getAllByDisplayValue('Sunset photo').length).toBeGreaterThan(0)
   })
 })
 

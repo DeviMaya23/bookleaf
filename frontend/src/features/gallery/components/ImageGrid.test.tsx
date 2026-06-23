@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { DndContext } from '@dnd-kit/core'
 import { SortableContext } from '@dnd-kit/sortable'
 import ImageGrid from './ImageGrid'
@@ -303,6 +303,92 @@ describe('ImageGrid trash view — permanent delete', () => {
     await userEvent.click(cancelButton)
 
     expect(hardDeleteImage).not.toHaveBeenCalled()
+  })
+})
+
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
+describe('ImageGrid — View details context menu item', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('shows "View details" in the context menu on a coarse-pointer device', async () => {
+    mockPointer(true)
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('menuitem', { name: /view details/i })).toBeInTheDocument()
+  })
+
+  it('does not show "View details" in the context menu on a fine-pointer device', async () => {
+    mockPointer(false)
+    vi.mocked(getImages).mockResolvedValue({ images: [makeImage()], next_cursor: null })
+
+    renderImageGrid()
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('menuitem', { name: /view details/i })).not.toBeInTheDocument()
+  })
+
+  it('calls onViewDetails with the correct image when selected', async () => {
+    mockPointer(true)
+    const image = makeImage()
+    const onViewDetails = vi.fn()
+    vi.mocked(getImages).mockResolvedValue({ images: [image], next_cursor: null })
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <DndContext sensors={[]}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <ImageGrid
+              view={{ type: 'unsorted' }}
+              searchTerm=""
+              debouncedSearchTerm=""
+              sortBy="manual"
+              sortDir={undefined}
+              onImageSelect={vi.fn()}
+              onViewDetails={onViewDetails}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </DndContext>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Test image')).toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('menuitem', { name: /view details/i }))
+
+    expect(onViewDetails).toHaveBeenCalledWith(image)
   })
 })
 

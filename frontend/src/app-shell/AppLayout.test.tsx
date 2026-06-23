@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import AppLayout from './AppLayout'
 import { getFolders } from '@/lib/folders'
 import { getTags } from '@/lib/tags'
@@ -73,9 +73,10 @@ vi.mock('@/components/ui/scroll-area', async () => {
 })
 
 vi.mock('@/features/folder-sidebar/components/FolderSidebar', () => ({
-  default: ({ onFolderSelect }: { onFolderSelect?: () => void }) => (
+  default: ({ onFolderSelect, onFolderViewDetails }: { onFolderSelect?: () => void; onFolderViewDetails?: () => void }) => (
     <div data-testid="folder-sidebar">
       <button onClick={onFolderSelect}>Select folder</button>
+      <button onClick={() => onFolderViewDetails?.()}>View folder details</button>
     </div>
   ),
 }))
@@ -327,6 +328,80 @@ describe('AppLayout cross-feature integration', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete image' }))
 
     expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+})
+
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
+describe('AppLayout folder selection — pointer-capability gating', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('selecting a folder still opens the right panel on a fine-pointer device', async () => {
+    mockPointer(false)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+  })
+
+  it('selecting a folder does not open the right panel on a coarse-pointer device', async () => {
+    mockPointer(true)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('"View folder details" opens the right panel on a coarse-pointer device', async () => {
+    mockPointer(true)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'View folder details' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+  })
+
+  it('an already-open panel updates to the newly selected folder on a coarse-pointer device without closing', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation'), makeFolder('folder-2', 'Work')])
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'View folder details' }))
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveTextContent('Vacation'))
+
+    await userEvent.click(screen.getByRole('link', { name: 'Folder 2' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveTextContent('Work'))
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument()
   })
 })
 
