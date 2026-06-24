@@ -5,16 +5,19 @@ import type { Folder } from '@/lib/folders'
 import type { Tag } from '@/lib/tags'
 import type { AppView } from '@/lib/view'
 
-export type SortBy = 'manual' | 'created_at' | 'title'
+export type SortBy = 'manual' | 'created_at' | 'title' | 'deleted_at'
 export type SortDir = 'asc' | 'desc'
 
-export const FIELD_DEFAULT_DIRECTION: Record<'created_at' | 'title', SortDir> = {
+export const FIELD_DEFAULT_DIRECTION: Record<'created_at' | 'title' | 'deleted_at', SortDir> = {
   created_at: 'desc',
   title: 'asc',
+  deleted_at: 'desc',
 }
 
-export function defaultSortForViewType(isFolder: boolean): { sortBy: SortBy; sortDir: SortDir | undefined } {
-  return isFolder ? { sortBy: 'manual', sortDir: undefined } : { sortBy: 'created_at', sortDir: 'desc' }
+export function defaultSortForViewType(viewType: AppView['type']): { sortBy: SortBy; sortDir: SortDir | undefined } {
+  if (viewType === 'folder') return { sortBy: 'manual', sortDir: undefined }
+  if (viewType === 'trash') return { sortBy: 'deleted_at', sortDir: 'desc' }
+  return { sortBy: 'created_at', sortDir: 'desc' }
 }
 
 export type FilterSection = 'tags' | 'mimeTypes' | 'folders'
@@ -41,16 +44,20 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
 
   const [searchTerm, setSearchTerm] = useState('')
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
-  const [sortBy, setSortBy] = useState<SortBy>(() => defaultSortForViewType(view.type === 'folder').sortBy)
-  const [sortDir, setSortDir] = useState<SortDir | undefined>(() => defaultSortForViewType(view.type === 'folder').sortDir)
+  const [sortBy, setSortBy] = useState<SortBy>(() => defaultSortForViewType(view.type).sortBy)
+  const [sortDir, setSortDir] = useState<SortDir | undefined>(() => defaultSortForViewType(view.type).sortDir)
   const [filterTagIds, setFilterTagIds] = useState<string[]>([])
   const [filterMimeTypes, setFilterMimeTypes] = useState<string[]>([])
   const [filterFolderIds, setFilterFolderIds] = useState<string[]>([])
   const [filterTagSearch, setFilterTagSearch] = useState('')
   const [filterFolderSearch, setFilterFolderSearch] = useState('')
 
-  const viewDefaultSort = defaultSortForViewType(view.type === 'folder')
-  const sortFieldOptions: SortBy[] = view.type === 'folder' ? ['manual', 'created_at', 'title'] : ['created_at', 'title']
+  const viewDefaultSort = defaultSortForViewType(view.type)
+  const sortFieldOptions: SortBy[] = view.type === 'folder'
+    ? ['manual', 'created_at', 'title']
+    : view.type === 'trash'
+      ? ['deleted_at', 'title']
+      : ['created_at', 'title']
   const sortActive = sortBy !== viewDefaultSort.sortBy
     || (sortBy !== 'manual' && sortDir !== FIELD_DEFAULT_DIRECTION[sortBy])
   const filterSections = filterSectionsForViewType(view.type)
@@ -66,10 +73,10 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
   }, [viewKey])
 
   useEffect(() => {
-    const def = defaultSortForViewType(viewKey.startsWith('folder:'))
+    const def = defaultSortForViewType(view.type)
     setSortBy(def.sortBy)
     setSortDir(def.sortDir)
-  }, [viewKey])
+  }, [viewKey, view.type])
 
   const handleSortFieldChange = useCallback((value: SortBy) => {
     setSortBy(value)

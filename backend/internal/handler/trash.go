@@ -81,10 +81,34 @@ func (h *TrashHandler) ListTrashed(c echo.Context) error {
 		name = &trimmed
 	}
 
+	sortParam := strings.TrimSpace(c.QueryParam("sort"))
+	if sortParam != "" && sortParam != "created_at" && sortParam != "title" && sortParam != "deleted_at" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid sort field")
+	}
+	if sortParam == "" {
+		// default sort is by deleted_at desc
+		sortParam = "deleted_at"
+	}
+	sortField := &sortParam
+
+	var direction *string
+	if dirParam := strings.TrimSpace(c.QueryParam("direction")); dirParam != "" {
+		if dirParam != "asc" && dirParam != "desc" {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid direction")
+		}
+		direction = &dirParam
+	} else {
+		dispatch := usecase.ResolveSort(sortField, nil)
+		defDir := dispatch.DefaultDirection
+		direction = &defDir
+	}
+
 	result, err := h.trashUsecase.ListTrashed(ctx, userID, usecase.ListTrashedParams{
-		Name:   name,
-		Cursor: cursor,
-		Limit:  limit,
+		Name:      name,
+		Sort:      sortField,
+		Direction: direction,
+		Cursor:    cursor,
+		Limit:     limit,
 	})
 	if err != nil {
 		span.RecordError(err)

@@ -397,21 +397,29 @@ func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
+	dispatch := usecase.ResolveSort(sortField, direction)
 
 	query := r.db.WithContext(ctx).
 		Unscoped().
 		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
-		Order("deleted_at ASC, id ASC").
+		Order(dispatch.OrderClause).
 		Limit(limit + 1)
 
 	if name != nil && *name != "" {
 		query = query.Where("images.title ILIKE ?", "%"+*name+"%")
 	}
 
-	if cursor != nil && cursor.DeletedAt != nil {
-		query = query.Where("(deleted_at, id) > (?, ?)", cursor.DeletedAt, cursor.ID)
+	if cursor != nil {
+		switch {
+		case dispatch.Column == "title" && cursor.Title != nil:
+			query = query.Where(fmt.Sprintf("(images.title, images.id) %s (?, ?)", dispatch.WhereOperator), *cursor.Title, cursor.ID)
+		case dispatch.Column == "deleted_at" && cursor.DeletedAt != nil:
+			query = query.Where(fmt.Sprintf("(images.deleted_at, images.id) %s (?, ?)", dispatch.WhereOperator), *cursor.DeletedAt, cursor.ID)
+		default:
+			query = query.Where(fmt.Sprintf("(images.created_at, images.id) %s (?, ?)", dispatch.WhereOperator), cursor.CreatedAt, cursor.ID)
+		}
 	}
 
 	if err := query.Find(&images).Error; err != nil {

@@ -7,7 +7,7 @@ import type { SortBy, SortDir } from './useGalleryControls'
 
 export const EMPTY_FILTER: string[] = []
 
-export function sortParamsFor(sortBy: SortBy, sortDir: SortDir | undefined): { sort?: 'created_at' | 'title'; direction?: SortDir } {
+export function sortParamsFor(sortBy: SortBy, sortDir: SortDir | undefined): { sort?: 'created_at' | 'title' | 'deleted_at'; direction?: SortDir } {
   if (sortBy === 'manual') return {}
   return { sort: sortBy, direction: sortDir }
 }
@@ -36,10 +36,12 @@ export function fetcherFor({ view, getToken, debouncedSearch, sortBy, sortDir, f
   const { sort, direction } = sortParamsFor(sortBy, sortDir)
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
-      case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort, direction, filterTagIds, filterMimeTypes, filterFolderIds)
-      case 'unsorted': return getImages(getToken, pageParam, debouncedSearch, sort, direction, filterTagIds, filterMimeTypes)
-      case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch)
-      case 'folder': return getFolderImages(getToken, view.id, sort, direction)
+      // sortBy never resolves to 'deleted_at' for these views (sortFieldOptions excludes it).
+      case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes, filterFolderIds)
+      case 'unsorted': return getImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes)
+      // sortBy never resolves to 'created_at' for Trash (sortFieldOptions excludes it).
+      case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch, sort as 'deleted_at' | 'title' | undefined, direction)
+      case 'folder': return getFolderImages(getToken, view.id, sort as 'created_at' | 'title' | undefined, direction)
     }
   }
 }
