@@ -16,11 +16,17 @@ import (
 // --- test doubles ---
 
 type mockTrashRepository struct {
-	image           *domain.Image
-	images          []*domain.Image
-	err             error
-	hardDeleteCalls int
-	lastListName    *string
+	image              *domain.Image
+	images             []*domain.Image
+	err                error
+	hardDeleteCalls    int
+	lastListName       *string
+	filterOwnedCalls   int
+	lastFilterOwnedIDs []uuid.UUID
+	filterOwnedResult  []uuid.UUID
+	softDeleteFailIDs  map[uuid.UUID]struct{}
+	softDeleteCalls    int
+	lastSoftDeleteIDs  []uuid.UUID
 }
 
 func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
@@ -29,7 +35,12 @@ func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) 
 func (m *mockTrashRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
 	return m.image, m.err
 }
-func (m *mockTrashRepository) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTrashRepository) SoftDelete(_ context.Context, id uuid.UUID, _ string) error {
+	m.softDeleteCalls++
+	m.lastSoftDeleteIDs = append(m.lastSoftDeleteIDs, id)
+	if _, fail := m.softDeleteFailIDs[id]; fail {
+		return gorm.ErrRecordNotFound
+	}
 	return m.err
 }
 func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
@@ -48,6 +59,14 @@ func (m *mockTrashRepository) ListExpiredTrash(_ context.Context, _ time.Time) (
 func (m *mockTrashRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
 	m.hardDeleteCalls++
 	return m.err
+}
+func (m *mockTrashRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ string) ([]uuid.UUID, error) {
+	m.filterOwnedCalls++
+	m.lastFilterOwnedIDs = ids
+	if m.filterOwnedResult != nil {
+		return m.filterOwnedResult, m.err
+	}
+	return ids, m.err
 }
 
 type mockJobEnqueuer struct {
@@ -230,4 +249,60 @@ func TestTrashUsecase_ProcessR2Delete_StorageError(t *testing.T) {
 	err := uc.ProcessR2Delete(context.Background(), "users/u1/images/a.jpg", nil)
 
 	require.Error(t, err)
+}
+
+// --- BulkTrash ---
+
+func TestTrashUsecase_BulkTrash_AllSucceed(t *testing.T) {
+	imageIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
+	repo := &mockTrashRepository{filterOwnedResult: imageIDs}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	count, err := uc.BulkTrash(context.Background(), "u1", imageIDs)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, count)
+	assert.Equal(t, 3, repo.softDeleteCalls)
+}
+
+func TestTrashUsecase_BulkTrash_AlreadyTrashedExcludedOthersSucceed(t *testing.T) {
+	alreadyTrashed := uuid.New()
+	valid := uuid.New()
+	repo := &mockTrashRepository{
+		filterOwnedResult: []uuid.UUID{alreadyTrashed, valid},
+		softDeleteFailIDs: map[uuid.UUID]struct{}{alreadyTrashed: {}},
+	}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	count, err := uc.BulkTrash(context.Background(), "u1", []uuid.UUID{alreadyTrashed, valid})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	assert.Equal(t, 2, repo.softDeleteCalls)
+}
+
+func TestTrashUsecase_BulkTrash_UnownedImageExcludedOthersSucceed(t *testing.T) {
+	owned := uuid.New()
+	unowned := uuid.New()
+	repo := &mockTrashRepository{filterOwnedResult: []uuid.UUID{owned}}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	count, err := uc.BulkTrash(context.Background(), "u1", []uuid.UUID{owned, unowned})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	assert.Equal(t, 1, repo.softDeleteCalls)
+	assert.Equal(t, []uuid.UUID{owned}, repo.lastSoftDeleteIDs)
+}
+
+func TestTrashUsecase_BulkTrash_AllInvalidReturnsZeroNoError(t *testing.T) {
+	imageIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	repo := &mockTrashRepository{filterOwnedResult: []uuid.UUID{}}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	count, err := uc.BulkTrash(context.Background(), "u1", imageIDs)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+	assert.Equal(t, 0, repo.softDeleteCalls)
 }

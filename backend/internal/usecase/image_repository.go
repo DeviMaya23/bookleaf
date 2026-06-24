@@ -24,6 +24,11 @@ type ImageRepository interface {
 	Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)
 	// SetImageFolder assigns or removes a folder membership. folderID nil removes the row; non-nil upserts it.
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
+	// AddImageToFolder idempotently inserts an image_folders row for (imageID, folderID), appending a
+	// fracdex position after the current max for the folder. No-op if the row already exists.
+	AddImageToFolder(ctx context.Context, imageID, folderID uuid.UUID) error
+	// FilterOwnedImageIDs returns the subset of ids that exist (non-deleted) and belong to userID.
+	FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID string) ([]uuid.UUID, error)
 	// SyncImageFolders diffs current memberships against folderIDs and applies deletes/inserts in a transaction.
 	SyncImageFolders(ctx context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error
 	// MoveImageFolder atomically removes image from fromFolderID and adds to toFolderID.

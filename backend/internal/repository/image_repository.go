@@ -10,6 +10,7 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"roci.dev/fracdex"
 )
 
@@ -132,6 +133,50 @@ func (r *imageRepository) SetImageFolder(ctx context.Context, imageID uuid.UUID,
 		return fmt.Errorf("insert image folder: %w", err)
 	}
 	return nil
+}
+
+func (r *imageRepository) AddImageToFolder(ctx context.Context, imageID, folderID uuid.UUID) error {
+	var maxPos string
+	r.db.WithContext(ctx).
+		Model(&domain.ImageFolder{}).
+		Where("folder_id = ?", folderID).
+		Select("COALESCE(MAX(position), '')").
+		Scan(&maxPos)
+	position, err := fracdex.KeyBetween(maxPos, "")
+	if err != nil {
+		return fmt.Errorf("generate position key: %w", err)
+	}
+
+	row := domain.ImageFolder{
+		ImageID:  imageID,
+		FolderID: folderID,
+		Position: position,
+	}
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "image_id"}, {Name: "folder_id"}},
+			DoNothing: true,
+		}).
+		Create(&row).Error; err != nil {
+		return fmt.Errorf("insert image folder: %w", err)
+	}
+	return nil
+}
+
+func (r *imageRepository) FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID string) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var owned []uuid.UUID
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("id IN (?) AND user_id = ?", ids, userID).
+		Pluck("id", &owned).Error; err != nil {
+		return nil, fmt.Errorf("filter owned image ids: %w", err)
+	}
+
+	return owned, nil
 }
 
 func (r *imageRepository) SyncImageFolders(ctx context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error {

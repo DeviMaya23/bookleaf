@@ -21,6 +21,7 @@ type TrashUsecase interface {
 	Restore(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageItem, error)
 	DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error
 	EmptyTrash(ctx context.Context, userID string) error
+	BulkTrash(ctx context.Context, userID string, imageIDs []uuid.UUID) (int, error)
 }
 
 type TrashHandler struct {
@@ -156,6 +157,39 @@ func (h *TrashHandler) DeleteFromTrash(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+type bulkTrashRequest struct {
+	ImageIDs []string `json:"image_ids"`
+}
+
+func (h *TrashHandler) BulkTrash(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkTrash")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req bulkTrashRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	imageIDs, err := parseUUIDStrings(req.ImageIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	count, err := h.trashUsecase.BulkTrash(ctx, userID, imageIDs)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to bulk trash images")
+	}
+
+	return c.JSON(http.StatusOK, bulkOperationResponse{SucceededCount: count})
 }
 
 func (h *TrashHandler) EmptyTrash(c echo.Context) error {

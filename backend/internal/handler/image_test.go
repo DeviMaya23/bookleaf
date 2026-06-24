@@ -24,24 +24,29 @@ import (
 // --- mock ---
 
 type mockImageUsecase struct {
-	downloadURL              string
-	imageDetail              *usecase.ImageDetail
-	imageItem                *usecase.ImageItem
-	listImagesResult         *usecase.ListImagesResult
-	listFolderImagesResult   []usecase.ImageItem
-	listFolderImagesErr      error
-	err                      error
-	moveImageFolderErr       error
-	lastUpdateParams         usecase.UpdateImageParams
-	lastListImagesParams     usecase.ListImagesParams
-	lastListFolderImagesID   uuid.UUID
-	lastListFolderSort       *string
-	lastListFolderDirection  *string
-	lastMoveImageID          uuid.UUID
-	lastMoveUserID           string
-	lastMoveFromFolderID     *uuid.UUID
-	lastMoveToFolderID       *uuid.UUID
-	moveImageFolderCalls     int
+	downloadURL             string
+	imageDetail             *usecase.ImageDetail
+	imageItem               *usecase.ImageItem
+	listImagesResult        *usecase.ListImagesResult
+	listFolderImagesResult  []usecase.ImageItem
+	listFolderImagesErr     error
+	err                     error
+	moveImageFolderErr      error
+	lastUpdateParams        usecase.UpdateImageParams
+	lastListImagesParams    usecase.ListImagesParams
+	lastListFolderImagesID  uuid.UUID
+	lastListFolderSort      *string
+	lastListFolderDirection *string
+	lastMoveImageID         uuid.UUID
+	lastMoveUserID          string
+	lastMoveFromFolderID    *uuid.UUID
+	lastMoveToFolderID      *uuid.UUID
+	moveImageFolderCalls    int
+	bulkAddToFolderResult   int
+	bulkAddToFolderErr      error
+	lastBulkAddToFolderUser string
+	lastBulkAddToFolderIDs  []uuid.UUID
+	lastBulkAddToFolderID   uuid.UUID
 }
 
 func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ string, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error) {
@@ -92,6 +97,13 @@ func (m *mockImageUsecase) MoveImageFolder(_ context.Context, imageID uuid.UUID,
 
 func (m *mockImageUsecase) UpdateImagePosition(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ string) error {
 	return m.err
+}
+
+func (m *mockImageUsecase) BulkAddToFolder(_ context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
+	m.lastBulkAddToFolderUser = userID
+	m.lastBulkAddToFolderIDs = imageIDs
+	m.lastBulkAddToFolderID = folderID
+	return m.bulkAddToFolderResult, m.bulkAddToFolderErr
 }
 
 func strPtr(s string) *string { return &s }
@@ -321,7 +333,6 @@ func TestImageHandler_ListImages_BlankNameTreatedAsAbsent(t *testing.T) {
 		})
 	}
 }
-
 
 // --- ListFolderImages ---
 
@@ -911,105 +922,146 @@ func TestImageHandler_UpdateImagePosition(t *testing.T) {
 	}
 }
 
-
-
 func TestImageHandler_ListImages_SortAndDirection(t *testing.T) {
-tests := []struct {
-name              string
-queryParams       string
-expectedStatus    int
-wantErrStatus     int
-expectedSort      *string
-expectedDirection *string
-}{
-{
-name:              "valid sort and direction",
-queryParams:       "?sort=title&direction=desc",
-expectedStatus:    http.StatusOK,
-expectedSort:      strPtr("title"),
-expectedDirection: strPtr("desc"),
-},
-{
-name:              "valid sort created_at with direction",
-queryParams:       "?sort=created_at&direction=asc",
-expectedStatus:    http.StatusOK,
-expectedSort:      strPtr("created_at"),
-expectedDirection: strPtr("asc"),
-},
-{
-name:              "invalid sort returns 400",
-queryParams:       "?sort=invalid",
-wantErrStatus:     http.StatusBadRequest,
-},
-{
-name:              "invalid direction returns 400",
-queryParams:       "?sort=title&direction=invalid",
-wantErrStatus:     http.StatusBadRequest,
-},
-{
-name:              "direction without sort is accepted but ignored for sorting param",
-queryParams:       "?direction=asc",
-expectedStatus:    http.StatusOK,
-expectedSort:      nil,
-expectedDirection: nil,
-},
-{
-name:              "sort without direction resolves default direction (title -> asc)",
-queryParams:       "?sort=title",
-expectedStatus:    http.StatusOK,
-expectedSort:      strPtr("title"),
-expectedDirection: strPtr("asc"),
-},
-{
-name:              "sort without direction resolves default direction (created_at -> desc)",
-queryParams:       "?sort=created_at",
-expectedStatus:    http.StatusOK,
-expectedSort:      strPtr("created_at"),
-expectedDirection: strPtr("desc"),
-},
-{
-name:              "omitting both preserves existing behavior (nil values)",
-queryParams:       "",
-expectedStatus:    http.StatusOK,
-expectedSort:      nil,
-expectedDirection: nil,
-},
+	tests := []struct {
+		name              string
+		queryParams       string
+		expectedStatus    int
+		wantErrStatus     int
+		expectedSort      *string
+		expectedDirection *string
+	}{
+		{
+			name:              "valid sort and direction",
+			queryParams:       "?sort=title&direction=desc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "valid sort created_at with direction",
+			queryParams:       "?sort=created_at&direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:          "invalid sort returns 400",
+			queryParams:   "?sort=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "invalid direction returns 400",
+			queryParams:   "?sort=title&direction=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:              "direction without sort is accepted but ignored for sorting param",
+			queryParams:       "?direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      nil,
+			expectedDirection: nil,
+		},
+		{
+			name:              "sort without direction resolves default direction (title -> asc)",
+			queryParams:       "?sort=title",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (created_at -> desc)",
+			queryParams:       "?sort=created_at",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "omitting both preserves existing behavior (nil values)",
+			queryParams:       "",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      nil,
+			expectedDirection: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUsecase := &mockImageUsecase{
+				listImagesResult: &usecase.ListImagesResult{
+					Images: []usecase.ImageItem{},
+				},
+			}
+			h := NewImageHandler(mockUsecase, observability.NewTelemetry(nil, nil, nil))
+
+			c, rec := newEchoContext(t, http.MethodGet, "/images"+tt.queryParams, "")
+
+			err := h.ListImages(c)
+
+			if tt.wantErrStatus > 0 {
+				assertHTTPError(t, err, tt.wantErrStatus)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedStatus, rec.Code)
+
+				params := mockUsecase.lastListImagesParams
+				if tt.expectedSort != nil {
+					require.NotNil(t, params.Sort)
+					assert.Equal(t, *tt.expectedSort, *params.Sort)
+				} else {
+					assert.Nil(t, params.Sort)
+				}
+
+				if tt.expectedDirection != nil {
+					require.NotNil(t, params.Direction)
+					assert.Equal(t, *tt.expectedDirection, *params.Direction)
+				} else {
+					assert.Nil(t, params.Direction)
+				}
+			}
+		})
+	}
 }
 
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-mockUsecase := &mockImageUsecase{
-listImagesResult: &usecase.ListImagesResult{
-Images: []usecase.ImageItem{},
-},
-}
-h := NewImageHandler(mockUsecase, observability.NewTelemetry(nil, nil, nil))
+// --- BulkAddToFolder ---
 
-c, rec := newEchoContext(t, http.MethodGet, "/images"+tt.queryParams, "")
+func TestImageHandler_BulkAddToFolder_ValidRequestReturnsCount(t *testing.T) {
+	folderID := uuid.New()
+	imageID := uuid.New()
+	uc := &mockImageUsecase{bulkAddToFolderResult: 1}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q], "folder_id": %q}`, imageID, folderID)
+	c, rec := newEchoContext(t, http.MethodPost, "/images/bulk/add-to-folder", body)
 
-err := h.ListImages(c)
+	err := h.BulkAddToFolder(c)
 
-if tt.wantErrStatus > 0 {
-assertHTTPError(t, err, tt.wantErrStatus)
-} else {
-require.NoError(t, err)
-assert.Equal(t, tt.expectedStatus, rec.Code)
-
-params := mockUsecase.lastListImagesParams
-if tt.expectedSort != nil {
-require.NotNil(t, params.Sort)
-assert.Equal(t, *tt.expectedSort, *params.Sort)
-} else {
-assert.Nil(t, params.Sort)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, float64(1), resp["succeeded_count"])
+	assert.Equal(t, folderID, uc.lastBulkAddToFolderID)
+	assert.Equal(t, []uuid.UUID{imageID}, uc.lastBulkAddToFolderIDs)
 }
 
-if tt.expectedDirection != nil {
-require.NotNil(t, params.Direction)
-assert.Equal(t, *tt.expectedDirection, *params.Direction)
-} else {
-assert.Nil(t, params.Direction)
+func TestImageHandler_BulkAddToFolder_MalformedImageIDReturns400(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": ["not-a-uuid"], "folder_id": %q}`, uuid.New())
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/add-to-folder", body)
+
+	err := h.BulkAddToFolder(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
 }
-}
-})
-}
+
+func TestImageHandler_BulkAddToFolder_FolderNotFoundReturns404(t *testing.T) {
+	uc := &mockImageUsecase{bulkAddToFolderErr: gorm.ErrRecordNotFound}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q], "folder_id": %q}`, uuid.New(), uuid.New())
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/add-to-folder", body)
+
+	err := h.BulkAddToFolder(c)
+
+	assertHTTPError(t, err, http.StatusNotFound)
 }

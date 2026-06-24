@@ -1,0 +1,23 @@
+meta {
+  name: Bulk Add Images to Folder
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/images/bulk/add-to-folder
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "image_ids": ["a215aa2e-05b1-4937-a255-156305886338", "7ded2961-e769-495a-820d-05a1bffe3248"],
+    "folder_id": "f3e20650-125d-4e89-b9d0-12a67bb4a8aa"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

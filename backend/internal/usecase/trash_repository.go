@@ -17,4 +17,6 @@ type TrashRepository interface {
 	ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error)
 	ListExpiredTrash(ctx context.Context, olderThan time.Time) ([]*domain.Image, error)
 	HardDelete(ctx context.Context, id uuid.UUID, userID string) error
+	// FilterOwnedImageIDs returns the subset of ids that exist (non-deleted) and belong to userID.
+	FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID string) ([]uuid.UUID, error)
 }
