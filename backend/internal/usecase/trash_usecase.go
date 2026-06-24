@@ -78,7 +78,7 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 		name = params.Name
 	}
 
-	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, name, params.Cursor, limit)
+	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, name, params.Sort, params.Direction, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -89,8 +89,19 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 	if len(rawImages) > limit {
 		rawImages = rawImages[:limit]
 		last := rawImages[limit-1]
-		deletedAt := last.DeletedAt.Time
-		nextCursor = &ImageCursor{DeletedAt: &deletedAt, ID: last.ID}
+
+		dispatch := ResolveSort(params.Sort, params.Direction)
+		var title *string
+		var deletedAt *time.Time
+		switch dispatch.Column {
+		case "title":
+			title = &last.Title
+		case "deleted_at":
+			t := last.DeletedAt.Time
+			deletedAt = &t
+		}
+
+		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, Title: title, DeletedAt: deletedAt, ID: last.ID}
 	}
 
 	items := make([]ImageItem, len(rawImages))

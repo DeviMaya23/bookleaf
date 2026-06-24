@@ -85,6 +85,33 @@ func TestResolveSort(t *testing.T) {
 			expectedOperator: ">",
 			expectedDefDir:   "asc",
 		},
+		{
+			name:             "deleted_at descending",
+			sortField:        strPtr("deleted_at"),
+			direction:        strPtr("desc"),
+			expectedCol:      "deleted_at",
+			expectedClause:   "deleted_at DESC, id DESC",
+			expectedOperator: "<",
+			expectedDefDir:   "desc",
+		},
+		{
+			name:             "deleted_at ascending",
+			sortField:        strPtr("deleted_at"),
+			direction:        strPtr("asc"),
+			expectedCol:      "deleted_at",
+			expectedClause:   "deleted_at ASC, id ASC",
+			expectedOperator: ">",
+			expectedDefDir:   "desc",
+		},
+		{
+			name:             "deleted_at with no direction defaults to desc",
+			sortField:        strPtr("deleted_at"),
+			direction:        nil,
+			expectedCol:      "deleted_at",
+			expectedClause:   "deleted_at DESC, id DESC",
+			expectedOperator: "<",
+			expectedDefDir:   "desc",
+		},
 	}
 
 	for _, tt := range tests {

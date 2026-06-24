@@ -185,6 +185,133 @@ func TestTrashHandler_ListTrashed_BlankNameTreatedAsAbsent(t *testing.T) {
 	}
 }
 
+func TestTrashHandler_ListTrashed_SortAndDirection(t *testing.T) {
+	tests := []struct {
+		name              string
+		queryParams       string
+		expectedStatus    int
+		wantErrStatus     int
+		expectedSort      *string
+		expectedDirection *string
+	}{
+		{
+			name:              "valid sort and direction",
+			queryParams:       "?sort=title&direction=desc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "valid sort created_at with direction",
+			queryParams:       "?sort=created_at&direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "valid sort deleted_at with direction",
+			queryParams:       "?sort=deleted_at&direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "direction without sort applies to the default deleted_at field",
+			queryParams:       "?direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (title -> asc)",
+			queryParams:       "?sort=title",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (created_at -> desc)",
+			queryParams:       "?sort=created_at",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (deleted_at -> desc)",
+			queryParams:       "?sort=deleted_at",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "omitting both defaults sort to deleted_at descending",
+			queryParams:       "",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("desc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockTrashUsecase{}
+			h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodGet, "/images/trash"+tt.queryParams, "")
+
+			err := h.ListTrashed(c)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+
+			params := uc.lastListTrashedParams
+			if tt.expectedSort != nil {
+				require.NotNil(t, params.Sort)
+				assert.Equal(t, *tt.expectedSort, *params.Sort)
+			} else {
+				assert.Nil(t, params.Sort)
+			}
+
+			if tt.expectedDirection != nil {
+				require.NotNil(t, params.Direction)
+				assert.Equal(t, *tt.expectedDirection, *params.Direction)
+			} else {
+				assert.Nil(t, params.Direction)
+			}
+		})
+	}
+}
+
+func TestTrashHandler_ListTrashed_InvalidSortOrDirection(t *testing.T) {
+	tests := []struct {
+		name          string
+		queryParams   string
+		wantErrStatus int
+	}{
+		{
+			name:          "invalid sort returns 400",
+			queryParams:   "?sort=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "invalid direction returns 400",
+			queryParams:   "?sort=title&direction=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockTrashUsecase{}
+			h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newEchoContext(t, http.MethodGet, "/images/trash"+tt.queryParams, "")
+
+			err := h.ListTrashed(c)
+
+			assertHTTPError(t, err, tt.wantErrStatus)
+		})
+	}
+}
+
 func TestTrashHandler_ListTrashed_GenericError(t *testing.T) {
 	h := NewTrashHandler(&mockTrashUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/images/trash", "")

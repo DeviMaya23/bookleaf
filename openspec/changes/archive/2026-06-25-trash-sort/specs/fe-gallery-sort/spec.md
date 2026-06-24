@@ -1,29 +1,25 @@
-# fe-gallery-sort
+## MODIFIED Requirements
 
-## Purpose
+### Requirement: Direction toggle is shown only for orderable (non-Manual) sort fields
 
-TBD — covers the gallery's sort control: the toolbar UI for choosing a sort field and direction, per-view field options and defaults, the Manual sort framing for folder views, the active-sort indicator, and threading the selected sort through to the image list query.
+The sort panel SHALL display a direction toggle (`↑`/`↓`, with field-specific labels — e.g. "Oldest first"/"Newest first" for `Date added`, "Oldest deleted first"/"Newest deleted first" for `Date deleted`, "A → Z"/"Z → A" for `Name`) whenever the selected sort field is `Date added`, `Date deleted`, or `Name`. The toggle SHALL be omitted entirely — not shown-but-disabled — when `Manual` is selected, since direction has no meaning for a manually-ordered list.
 
-## Requirements
+#### Scenario: Direction toggle visible for Date added or Name
 
-### Requirement: Sort control in gallery toolbar
+- **WHEN** the user selects `Date added` or `Name` as the sort field
+- **THEN** a direction toggle appears showing the field-appropriate label for the current direction
+- **AND** clicking it flips the direction and updates the label and the active query
 
-The system SHALL display a sort icon button in the gallery toolbar (`AppLayout.tsx`'s toolbar row, alongside the search input — per Option A of the "Filter & Sort" design handoff) that opens a panel for choosing a sort field and direction. The control SHALL be built from this codebase's existing `DropdownMenu`/`DropdownMenuTrigger`/`DropdownMenuContent` and `DropdownMenuRadioGroup`/`DropdownMenuRadioItem` primitives (the same family already used for the upload split-button), not a bespoke floating-panel implementation. Below the `sm` breakpoint, the sort icon button SHALL NOT be rendered.
+#### Scenario: Direction toggle visible for Date deleted in the Trash view
 
-#### Scenario: Sort button opens the sort panel
+- **WHEN** the user selects `Date deleted` as the sort field while viewing Trash
+- **THEN** a direction toggle appears showing "Oldest deleted first"/"Newest deleted first" for the current direction
+- **AND** clicking it flips the direction and updates the label and the active query
 
-- **WHEN** the user clicks the sort icon button in the toolbar at or above the `sm` breakpoint
-- **THEN** a panel opens showing sort field options as a radio group, plus a direction toggle (when applicable)
+#### Scenario: Direction toggle hidden for Manual
 
-#### Scenario: Sort panel closes on selection or outside click
-
-- **WHEN** the user selects a sort field, toggles direction, or clicks outside the panel
-- **THEN** the panel closes (or remains open per the underlying `DropdownMenu` primitive's standard interaction — selection does not require a separate "apply" step)
-
-#### Scenario: Sort button is hidden below the breakpoint
-
-- **WHEN** the viewport width is below the `sm` breakpoint
-- **THEN** the sort icon button is not rendered in the gallery toolbar
+- **WHEN** the user selects `Manual` as the sort field
+- **THEN** no direction toggle is shown in the panel
 
 ### Requirement: Sort field options differ by view type
 
@@ -49,37 +45,6 @@ The sort panel's radio list SHALL show different options depending on the active
 
 - **WHEN** the user opens the sort panel while viewing Trash
 - **THEN** the radio list shows only `Date deleted` and `Name` — `Date added` is not offered
-
-### Requirement: Manual sort reproduces today's default ordering by sending no sort parameters
-
-Selecting `Manual` SHALL cause the image list request to omit `sort` and `direction` entirely — reproducing exactly the request shape used before this change existed. The backend then applies its existing default (`image_folders.position ASC` for folder views). `Manual` is a frontend-only framing of "no explicit sort requested," not a value sent to or recognized by the backend.
-
-#### Scenario: Selecting Manual omits sort parameters from the request
-
-- **WHEN** the user selects `Manual` in a folder view
-- **THEN** `GET /images/in-folder/<id>` is called with no `sort` or `direction` query parameters
-- **AND** images are displayed in `image_folders.position ASC` order, matching pre-change behavior
-
-### Requirement: Direction toggle is shown only for orderable (non-Manual) sort fields
-
-The sort panel SHALL display a direction toggle (`↑`/`↓`, with field-specific labels — e.g. "Oldest first"/"Newest first" for `Date added`, "Oldest deleted first"/"Newest deleted first" for `Date deleted`, "A → Z"/"Z → A" for `Name`) whenever the selected sort field is `Date added`, `Date deleted`, or `Name`. The toggle SHALL be omitted entirely — not shown-but-disabled — when `Manual` is selected, since direction has no meaning for a manually-ordered list.
-
-#### Scenario: Direction toggle visible for Date added or Name
-
-- **WHEN** the user selects `Date added` or `Name` as the sort field
-- **THEN** a direction toggle appears showing the field-appropriate label for the current direction
-- **AND** clicking it flips the direction and updates the label and the active query
-
-#### Scenario: Direction toggle visible for Date deleted in the Trash view
-
-- **WHEN** the user selects `Date deleted` as the sort field while viewing Trash
-- **THEN** a direction toggle appears showing "Oldest deleted first"/"Newest deleted first" for the current direction
-- **AND** clicking it flips the direction and updates the label and the active query
-
-#### Scenario: Direction toggle hidden for Manual
-
-- **WHEN** the user selects `Manual` as the sort field
-- **THEN** no direction toggle is shown in the panel
 
 ### Requirement: Sort selection resets to the view's default when switching views
 
@@ -112,20 +77,6 @@ The All/Unsorted defaults reproduce that pre-change ordering exactly. Trash's de
 - **WHEN** the user navigates to the Trash view from any other view
 - **THEN** the sort control shows `Date deleted` / "Newest first" as selected
 - **AND** `GET /images/trash` is called with `sort=deleted_at&direction=desc`
-
-### Requirement: Sort trigger shows an active indicator when a non-default sort is selected
-
-The sort icon button SHALL visually distinguish itself when the active sort differs from the current view's default (i.e. the user has made an explicit, non-default choice), using this codebase's existing button-variant styling rather than introducing a new badge/indicator pattern. "Active" is computed as: the selected field differs from the view's default field, OR (the field is not `Manual` AND the selected direction differs from that field's default direction).
-
-#### Scenario: Trigger appears active when a non-default sort is selected
-
-- **WHEN** the user selects `Name` while viewing a folder (whose default is `Manual`)
-- **THEN** the sort icon button renders in its active visual state
-
-#### Scenario: Trigger appears inactive when the view's default sort is selected
-
-- **WHEN** the active sort matches the current view's default (e.g. `Manual` in a folder, or `Date added`/`desc` in All)
-- **THEN** the sort icon button renders in its normal (inactive) visual state
 
 ### Requirement: Selected sort is threaded through to the image list query
 

@@ -91,6 +91,14 @@ describe('GalleryToolbar sort control', () => {
     expect(screen.getByText('A → Z')).toBeInTheDocument()
   })
 
+  it('offers Date deleted (not Date added) as the Trash sort field, with deleted_at-specific direction labels', () => {
+    renderToolbar({ type: 'trash' })
+    expect(grid()).toHaveAttribute('data-sort-by', 'deleted_at')
+    expect(screen.queryByRole('menuitemradio', { name: 'Date added' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Date deleted' })).toBeInTheDocument()
+    expect(screen.getByText('Newest deleted first')).toBeInTheDocument()
+  })
+
   it('shows the sort trigger as active only when the selection differs from the view default', async () => {
     renderToolbar({ type: 'folder', id: 'folder-1' })
 

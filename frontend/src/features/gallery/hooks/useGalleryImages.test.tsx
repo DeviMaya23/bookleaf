@@ -85,13 +85,22 @@ describe('fetcherFor', () => {
     expect(getImages).toHaveBeenCalledWith(getToken, 'cursor-1', 'foo', undefined, undefined, ['tag-1'], EMPTY_FILTER)
   })
 
-  it('calls getTrashedImages with only the search term for the Trash view', async () => {
+  it('calls getTrashedImages with the search term, sort, and direction for the Trash view', async () => {
     vi.mocked(getTrashedImages).mockResolvedValue({ images: [], next_cursor: null })
 
     const fetcher = fetcherFor({ view: { type: 'trash' }, getToken, debouncedSearch: 'foo', sortBy: 'title', sortDir: 'asc', filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER })
     await fetcher({ pageParam: undefined })
 
-    expect(getTrashedImages).toHaveBeenCalledWith(getToken, undefined, 'foo')
+    expect(getTrashedImages).toHaveBeenCalledWith(getToken, undefined, 'foo', 'title', 'asc')
+  })
+
+  it('calls getTrashedImages with deleted_at/desc for the Trash view default sort', async () => {
+    vi.mocked(getTrashedImages).mockResolvedValue({ images: [], next_cursor: null })
+
+    const fetcher = fetcherFor({ view: { type: 'trash' }, getToken, debouncedSearch: '', sortBy: 'deleted_at', sortDir: 'desc', filterTagIds: EMPTY_FILTER, filterMimeTypes: EMPTY_FILTER, filterFolderIds: EMPTY_FILTER })
+    await fetcher({ pageParam: undefined })
+
+    expect(getTrashedImages).toHaveBeenCalledWith(getToken, undefined, '', 'deleted_at', 'desc')
   })
 
   it('calls getFolderImages with the folder id, sort, and direction for the Folder view', async () => {

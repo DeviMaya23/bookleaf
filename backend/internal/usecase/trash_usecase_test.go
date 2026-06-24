@@ -21,6 +21,8 @@ type mockTrashRepository struct {
 	err                error
 	hardDeleteCalls    int
 	lastListName       *string
+	lastListSort       *string
+	lastListDirection  *string
 	filterOwnedCalls   int
 	lastFilterOwnedIDs []uuid.UUID
 	filterOwnedResult  []uuid.UUID
@@ -46,8 +48,10 @@ func (m *mockTrashRepository) SoftDelete(_ context.Context, id uuid.UUID, _ stri
 func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, name *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastListName = name
+	m.lastListSort = sortField
+	m.lastListDirection = direction
 	return m.images, m.err
 }
 func (m *mockTrashRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
@@ -118,6 +122,39 @@ func TestTrashUsecase_ListTrashed_SkipsBlankName(t *testing.T) {
 			assert.Nil(t, repo.lastListName)
 		})
 	}
+}
+
+func TestTrashUsecase_ListTrashed_PassesSortAndDirection(t *testing.T) {
+	sortVal := "title"
+	dirVal := "asc"
+
+	repo := &mockTrashRepository{images: []*domain.Image{}}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{
+		Sort:      &sortVal,
+		Direction: &dirVal,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, repo.lastListSort)
+	assert.Equal(t, "title", *repo.lastListSort)
+	require.NotNil(t, repo.lastListDirection)
+	assert.Equal(t, "asc", *repo.lastListDirection)
+}
+
+func TestTrashUsecase_ListTrashed_PassesNilSortAndDirection(t *testing.T) {
+	repo := &mockTrashRepository{images: []*domain.Image{}}
+	uc := newTrashUsecase(repo, &mockStorageService{}, &mockJobEnqueuer{})
+
+	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{
+		Sort:      nil,
+		Direction: nil,
+	})
+
+	require.NoError(t, err)
+	assert.Nil(t, repo.lastListSort)
+	assert.Nil(t, repo.lastListDirection)
 }
 
 // --- EmptyTrash ---

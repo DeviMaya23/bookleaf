@@ -95,10 +95,12 @@ export async function getAllImages(
   return res.json()
 }
 
-export async function getTrashedImages(getToken: GetToken, cursor?: string, name?: string): Promise<ImagesPage> {
+export async function getTrashedImages(getToken: GetToken, cursor?: string, name?: string, sort?: 'deleted_at' | 'title', direction?: 'asc' | 'desc'): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
   if (name) params.set('name', name)
+  if (sort) params.set('sort', sort)
+  if (direction) params.set('direction', direction)
   const res = await apiFetch(`/images/trash?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch trashed images')
   return res.json()

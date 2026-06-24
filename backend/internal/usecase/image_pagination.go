@@ -34,9 +34,11 @@ type ListImagesResult struct {
 }
 
 type ListTrashedParams struct {
-	Name   *string
-	Cursor *ImageCursor
-	Limit  int
+	Name      *string
+	Sort      *string
+	Direction *string
+	Cursor    *ImageCursor
+	Limit     int
 }
 
 type ListTrashedResult struct {
@@ -97,6 +99,15 @@ func ResolveSort(sortField *string, direction *string) SortDispatchResult {
 			return SortDispatchResult{Column: "title", OrderClause: "title ASC, id ASC", WhereOperator: ">", DefaultDirection: "asc"}
 		}
 		return SortDispatchResult{Column: "title", OrderClause: "title DESC, id DESC", WhereOperator: "<", DefaultDirection: "asc"}
+	case "deleted_at":
+		// Trash-only field (GET /images/trash); GET /images never passes this.
+		if dir == "" {
+			dir = "desc"
+		}
+		if dir == "asc" {
+			return SortDispatchResult{Column: "deleted_at", OrderClause: "deleted_at ASC, id ASC", WhereOperator: ">", DefaultDirection: "desc"}
+		}
+		return SortDispatchResult{Column: "deleted_at", OrderClause: "deleted_at DESC, id DESC", WhereOperator: "<", DefaultDirection: "desc"}
 	default:
 		// Default to created_at DESC
 		if dir == "" {

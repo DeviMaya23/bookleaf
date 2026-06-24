@@ -28,11 +28,13 @@ const SORT_FIELD_LABELS: Record<SortBy, string> = {
   manual: 'Manual',
   created_at: 'Date added',
   title: 'Name',
+  deleted_at: 'Date deleted',
 }
 
-const DIR_LABELS: Record<'created_at' | 'title', Record<SortDir, string>> = {
+const DIR_LABELS: Record<'created_at' | 'title' | 'deleted_at', Record<SortDir, string>> = {
   created_at: { asc: 'Oldest first', desc: 'Newest first' },
   title: { asc: 'A → Z', desc: 'Z → A' },
+  deleted_at: { asc: 'Oldest deleted first', desc: 'Newest deleted first' },
 }
 
 interface GalleryToolbarProps {
