@@ -1178,3 +1178,148 @@ func TestImageRepository_ListByFolder_PreloadsTagsAndImageFolders(t *testing.T) 
 	require.Len(t, images[0].ImageFolders, 1)
 	assert.Equal(t, folder.ID, images[0].ImageFolders[0].FolderID)
 }
+
+func TestImageRepository_AddImageToFolder_InsertsWhenAbsent(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_addtofolder_insert")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "addtofolder"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	err = repo.AddImageToFolder(context.Background(), img.ID, folder.ID)
+	require.NoError(t, err)
+
+	found, err := repo.GetByID(context.Background(), img.ID, user.ID)
+	require.NoError(t, err)
+	require.Len(t, found.ImageFolders, 1)
+	assert.Equal(t, folder.ID, found.ImageFolders[0].FolderID)
+}
+
+func TestImageRepository_AddImageToFolder_NoopWhenAlreadyPresent(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_addtofolder_noop")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "addtofolder-noop"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	img, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+
+	require.NoError(t, repo.AddImageToFolder(context.Background(), img.ID, folder.ID))
+	originalPosition := mustGetImageFolderPosition(t, repo, img.ID, user.ID, folder.ID)
+
+	err = repo.AddImageToFolder(context.Background(), img.ID, folder.ID)
+	require.NoError(t, err)
+
+	found, err := repo.GetByID(context.Background(), img.ID, user.ID)
+	require.NoError(t, err)
+	require.Len(t, found.ImageFolders, 1)
+	assert.Equal(t, originalPosition, found.ImageFolders[0].Position)
+}
+
+func TestImageRepository_AddImageToFolder_AppendsAfterExistingMax(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_addtofolder_append")
+	require.NoError(t, err)
+
+	folderRepo := NewFolderRepository(tx)
+	folder, err := folderRepo.Create(context.Background(), &domain.Folder{UserID: user.ID, Name: "addtofolder-append"})
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	first, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.AddImageToFolder(context.Background(), first.ID, folder.ID))
+	firstPosition := mustGetImageFolderPosition(t, repo, first.ID, user.ID, folder.ID)
+
+	second, err := repo.Create(context.Background(), newTestImage(user.ID))
+	require.NoError(t, err)
+	require.NoError(t, repo.AddImageToFolder(context.Background(), second.ID, folder.ID))
+	secondPosition := mustGetImageFolderPosition(t, repo, second.ID, user.ID, folder.ID)
+
+	assert.Greater(t, secondPosition, firstPosition)
+}
+
+func mustGetImageFolderPosition(t *testing.T, repo *imageRepository, imageID uuid.UUID, userID string, folderID uuid.UUID) string {
+	t.Helper()
+	found, err := repo.GetByID(context.Background(), imageID, userID)
+	require.NoError(t, err)
+	for _, f := range found.ImageFolders {
+		if f.FolderID == folderID {
+			return f.Position
+		}
+	}
+	t.Fatalf("image %s not found in folder %s", imageID, folderID)
+	return ""
+}
+
+func TestImageRepository_FilterOwnedImageIDs_ReturnsOnlyOwnedAndExisting(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_filterowned_owner")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_filterowned_other")
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	owned, err := repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+	unowned, err := repo.Create(context.Background(), newTestImage(other.ID))
+	require.NoError(t, err)
+	nonExistent := uuid.New()
+
+	result, err := repo.FilterOwnedImageIDs(context.Background(), []uuid.UUID{owned.ID, unowned.ID, nonExistent}, owner.ID)
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []uuid.UUID{owned.ID}, result)
+}
+
+func TestImageRepository_FilterOwnedImageIDs_EmptyInput(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_filterowned_empty")
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+
+	result, err := repo.FilterOwnedImageIDs(context.Background(), nil, user.ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestImageRepository_FilterOwnedImageIDs_AllUnowned(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+
+	userRepo := NewUserRepository(tx)
+	user, err := userRepo.GetOrCreate(context.Background(), "kp_filterowned_allunowned")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_filterowned_allunowned_other")
+	require.NoError(t, err)
+
+	repo := NewImageRepository(tx)
+	unowned, err := repo.Create(context.Background(), newTestImage(other.ID))
+	require.NoError(t, err)
+
+	result, err := repo.FilterOwnedImageIDs(context.Background(), []uuid.UUID{unowned.ID}, user.ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}

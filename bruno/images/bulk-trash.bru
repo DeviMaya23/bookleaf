@@ -1,0 +1,22 @@
+meta {
+  name: Bulk Trash Images
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/images/bulk/trash
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "image_ids": ["a215aa2e-05b1-4937-a255-156305886338", "7ded2961-e769-495a-820d-05a1bffe3248"]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

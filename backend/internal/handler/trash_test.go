@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -25,6 +26,10 @@ type mockTrashUsecase struct {
 	listTrashedResult     *usecase.ListTrashedResult
 	err                   error
 	lastListTrashedParams usecase.ListTrashedParams
+	bulkTrashResult       int
+	bulkTrashErr          error
+	lastBulkTrashUser     string
+	lastBulkTrashIDs      []uuid.UUID
 }
 
 func (m *mockTrashUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
@@ -52,6 +57,12 @@ func (m *mockTrashUsecase) DeleteFromTrash(_ context.Context, _ uuid.UUID, _ str
 
 func (m *mockTrashUsecase) EmptyTrash(_ context.Context, _ string) error {
 	return m.err
+}
+
+func (m *mockTrashUsecase) BulkTrash(_ context.Context, userID string, imageIDs []uuid.UUID) (int, error) {
+	m.lastBulkTrashUser = userID
+	m.lastBulkTrashIDs = imageIDs
+	return m.bulkTrashResult, m.bulkTrashErr
 }
 
 // --- SoftDelete ---
@@ -349,4 +360,33 @@ func TestTrashHandler_EmptyTrash_Error(t *testing.T) {
 	err := h.EmptyTrash(c)
 
 	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+// --- BulkTrash ---
+
+func TestTrashHandler_BulkTrash_ValidRequestReturnsCount(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockTrashUsecase{bulkTrashResult: 1}
+	h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q]}`, imageID)
+	c, rec := newEchoContext(t, http.MethodPost, "/images/bulk/trash", body)
+
+	err := h.BulkTrash(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, float64(1), resp["succeeded_count"])
+	assert.Equal(t, []uuid.UUID{imageID}, uc.lastBulkTrashIDs)
+}
+
+func TestTrashHandler_BulkTrash_MalformedImageIDReturns400(t *testing.T) {
+	h := NewTrashHandler(&mockTrashUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	body := `{"image_ids": ["not-a-uuid"]}`
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/trash", body)
+
+	err := h.BulkTrash(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
 }

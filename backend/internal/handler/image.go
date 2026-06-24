@@ -26,6 +26,7 @@ type ImageUsecase interface {
 	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateImageParams) (*usecase.ImageItem, error)
 	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error)
 	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
+	BulkAddToFolder(ctx context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error)
 }
 
 type ImageHandler struct {
@@ -44,6 +45,15 @@ type updateImageRequest struct {
 type moveImageFolderRequest struct {
 	FromFolderID json.RawMessage `json:"from_folder_id"`
 	ToFolderID   json.RawMessage `json:"to_folder_id"`
+}
+
+type bulkAddToFolderRequest struct {
+	ImageIDs []string `json:"image_ids"`
+	FolderID string   `json:"folder_id"`
+}
+
+type bulkOperationResponse struct {
+	SucceededCount int `json:"succeeded_count"`
 }
 
 type imageResponse struct {
@@ -496,6 +506,56 @@ func (h *ImageHandler) UpdateImagePosition(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *ImageHandler) BulkAddToFolder(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkAddToFolder")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req bulkAddToFolderRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	folderID, err := uuid.Parse(req.FolderID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder_id")
+	}
+
+	imageIDs, err := parseUUIDStrings(req.ImageIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	count, err := h.imageUsecase.BulkAddToFolder(ctx, userID, imageIDs, folderID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to bulk add images to folder")
+	}
+
+	return c.JSON(http.StatusOK, bulkOperationResponse{SucceededCount: count})
+}
+
+// parseUUIDStrings parses a slice of UUID strings, returning an error if any entry is malformed.
+func parseUUIDStrings(raw []string) ([]uuid.UUID, error) {
+	ids := make([]uuid.UUID, 0, len(raw))
+	for _, s := range raw {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
 func parsePaginationParams(c echo.Context) (limit int, cursor *usecase.ImageCursor, err error) {

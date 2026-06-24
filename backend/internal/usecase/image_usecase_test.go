@@ -21,38 +21,44 @@ import (
 // --- test doubles ---
 
 type mockImageRepository struct {
-	image                *domain.Image
-	images               []*domain.Image
-	err                  error
-	createdImage         *domain.Image
-	updateFields         map[string]any
-	lastUpdateID         uuid.UUID
-	lastUpdateBy         string
-	setFolderCalls       int
-	setFolderImageID     uuid.UUID
-	setFolderFolderID    *uuid.UUID
-	syncFolderCalls      int
-	lastSyncImageID      uuid.UUID
-	lastSyncFolderIDs    []uuid.UUID
-	moveFolderCalls      int
-	lastMoveImageID      uuid.UUID
-	lastMoveFromFolderID *uuid.UUID
-	lastMoveToFolderID   *uuid.UUID
-	updateAILabelsCalls  int
-	lastAILabels         json.RawMessage
-	lastListName         *string
-	lastListSort         *string
-	lastListDirection    *string
-	lastListUnfiled      bool
-	lastListFolderIDs    []uuid.UUID
-	lastListTagIDs       []uuid.UUID
-	lastListMIMETypes    []string
-	listByFolderCalls    int
-	lastListByFolderID   uuid.UUID
-	listByFolderImages   []*domain.Image
-	findDuplicatesResult []*domain.Image
-	findDuplicatesErr    error
-	findDuplicatesCalls  int
+	image                 *domain.Image
+	images                []*domain.Image
+	err                   error
+	createdImage          *domain.Image
+	updateFields          map[string]any
+	lastUpdateID          uuid.UUID
+	lastUpdateBy          string
+	setFolderCalls        int
+	setFolderImageID      uuid.UUID
+	setFolderFolderID     *uuid.UUID
+	syncFolderCalls       int
+	lastSyncImageID       uuid.UUID
+	lastSyncFolderIDs     []uuid.UUID
+	moveFolderCalls       int
+	lastMoveImageID       uuid.UUID
+	lastMoveFromFolderID  *uuid.UUID
+	lastMoveToFolderID    *uuid.UUID
+	updateAILabelsCalls   int
+	lastAILabels          json.RawMessage
+	lastListName          *string
+	lastListSort          *string
+	lastListDirection     *string
+	lastListUnfiled       bool
+	lastListFolderIDs     []uuid.UUID
+	lastListTagIDs        []uuid.UUID
+	lastListMIMETypes     []string
+	listByFolderCalls     int
+	lastListByFolderID    uuid.UUID
+	listByFolderImages    []*domain.Image
+	findDuplicatesResult  []*domain.Image
+	findDuplicatesErr     error
+	findDuplicatesCalls   int
+	addToFolderCalls      int
+	lastAddToFolderImage  uuid.UUID
+	lastAddToFolderFolder uuid.UUID
+	filterOwnedCalls      int
+	lastFilterOwnedIDs    []uuid.UUID
+	filterOwnedResult     []uuid.UUID
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
@@ -130,6 +136,20 @@ func (m *mockImageRepository) ListUnhashed(_ context.Context, _ int) ([]*domain.
 }
 func (m *mockImageRepository) UpdatePHash(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
+}
+func (m *mockImageRepository) AddImageToFolder(_ context.Context, imageID, folderID uuid.UUID) error {
+	m.addToFolderCalls++
+	m.lastAddToFolderImage = imageID
+	m.lastAddToFolderFolder = folderID
+	return m.err
+}
+func (m *mockImageRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ string) ([]uuid.UUID, error) {
+	m.filterOwnedCalls++
+	m.lastFilterOwnedIDs = ids
+	if m.filterOwnedResult != nil {
+		return m.filterOwnedResult, m.err
+	}
+	return ids, m.err
 }
 
 type mockStorageService struct {
@@ -590,7 +610,6 @@ func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
 	assert.Equal(t, to, *repo.lastMoveToFolderID)
 }
 
-
 func TestImageUsecase_ListImages_PassesSortAndDirection(t *testing.T) {
 	sortVal := "title"
 	dirVal := "asc"
@@ -622,4 +641,64 @@ func TestImageUsecase_ListImages_PassesNilSortAndDirection(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, repo.lastListSort)
 	assert.Nil(t, repo.lastListDirection)
+}
+
+// --- BulkAddToFolder ---
+
+func TestImageUsecase_BulkAddToFolder_AllSucceed(t *testing.T) {
+	folderID := uuid.New()
+	imageIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	repo := &mockImageRepository{filterOwnedResult: imageIDs}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
+
+	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", imageIDs, folderID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+	assert.Equal(t, 2, repo.addToFolderCalls)
+}
+
+func TestImageUsecase_BulkAddToFolder_FolderNotFoundOrUnowned(t *testing.T) {
+	folderID := uuid.New()
+	imageIDs := []uuid.UUID{uuid.New()}
+	repo := &mockImageRepository{filterOwnedResult: imageIDs}
+	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
+
+	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", imageIDs, folderID)
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	assert.Equal(t, 0, count)
+	assert.Equal(t, 0, repo.addToFolderCalls)
+	assert.Equal(t, 0, repo.filterOwnedCalls)
+}
+
+func TestImageUsecase_BulkAddToFolder_UnownedImageExcludedOthersSucceed(t *testing.T) {
+	folderID := uuid.New()
+	owned := uuid.New()
+	unowned := uuid.New()
+	repo := &mockImageRepository{filterOwnedResult: []uuid.UUID{owned}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
+
+	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", []uuid.UUID{owned, unowned}, folderID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+	assert.Equal(t, 1, repo.addToFolderCalls)
+	assert.Equal(t, owned, repo.lastAddToFolderImage)
+}
+
+func TestImageUsecase_BulkAddToFolder_AlreadyInFolderCountsAsSuccess(t *testing.T) {
+	folderID := uuid.New()
+	imageID := uuid.New()
+	repo := &mockImageRepository{filterOwnedResult: []uuid.UUID{imageID}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
+
+	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", []uuid.UUID{imageID}, folderID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 }

@@ -336,6 +336,63 @@ func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUI
 	return nil
 }
 
+func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkAddToFolder")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	if _, err := u.folderRepo.GetByID(ctx, folderID, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, err
+	}
+
+	ownedIDs, err := u.imageRepo.FilterOwnedImageIDs(ctx, imageIDs, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, err
+	}
+
+	ownedSet := make(map[uuid.UUID]struct{}, len(ownedIDs))
+	for _, id := range ownedIDs {
+		ownedSet[id] = struct{}{}
+	}
+
+	succeeded := 0
+	for _, imageID := range imageIDs {
+		if _, ok := ownedSet[imageID]; !ok {
+			logger.Info("skipping unowned image in bulk add-to-folder",
+				zap.String("event", "image.bulk_add_to_folder.skipped"),
+				zap.String("image_id", imageID.String()),
+				zap.String("user_id", userID),
+			)
+			continue
+		}
+
+		if err := u.imageRepo.AddImageToFolder(ctx, imageID, folderID); err != nil {
+			logger.Warn("failed to add image to folder in bulk add-to-folder",
+				zap.String("event", "image.bulk_add_to_folder.failed"),
+				zap.String("image_id", imageID.String()),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+			continue
+		}
+		succeeded++
+	}
+
+	logger.Info("bulk add to folder complete",
+		zap.String("event", "image.bulk_add_to_folder.complete"),
+		zap.String("user_id", userID),
+		zap.String("folder_id", folderID.String()),
+		zap.Int("succeeded_count", succeeded),
+	)
+
+	return succeeded, nil
+}
+
 func downloadFileExtension(mimeType string) string {
 	switch mimeType {
 	case "image/jpeg":
