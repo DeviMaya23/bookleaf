@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -122,6 +123,47 @@ function renderImageGrid(
       </QueryClientProvider>
     </DndContext>,
   )
+}
+
+function SelectionHarness({ view, onSelectionChange }: { view: AppView; onSelectionChange: (ids: Set<string>, anchorId: string | null) => void }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [mainSelectedId, setMainSelectedId] = useState<string | null>(null)
+  return (
+    <ImageGrid
+      view={view}
+      searchTerm=""
+      debouncedSearchTerm=""
+      sortBy="manual"
+      sortDir={undefined}
+      onImageSelect={vi.fn()}
+      selectMode
+      selectedIds={selectedIds}
+      mainSelectedId={mainSelectedId}
+      onSelectionChange={(ids, anchorId) => {
+        setSelectedIds(ids)
+        setMainSelectedId(anchorId)
+        onSelectionChange(ids, anchorId)
+      }}
+    />
+  )
+}
+
+function renderSelectionGrid(view: AppView, onSelectionChange = vi.fn()) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return {
+    onSelectionChange,
+    ...render(
+      <DndContext sensors={[]}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <SelectionHarness view={view} onSelectionChange={onSelectionChange} />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </DndContext>,
+    ),
+  }
 }
 
 describe('ImageGrid', () => {
@@ -468,6 +510,143 @@ describe('ImageGrid layout', () => {
     } finally {
       globalThis.ResizeObserver = originalRO
     }
+  })
+})
+
+describe('ImageGrid selection mechanics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeFourImages() {
+    return [
+      makeImage({ id: 'a', title: 'Image A' }),
+      makeImage({ id: 'b', title: 'Image B' }),
+      makeImage({ id: 'c', title: 'Image C' }),
+      makeImage({ id: 'd', title: 'Image D' }),
+    ]
+  }
+
+  it('plain click adds an unselected image and moves the anchor', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: makeFourImages(), next_cursor: null })
+    const onSelectionChange = vi.fn()
+    renderSelectionGrid({ type: 'unsorted' }, onSelectionChange)
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(['a']), 'a')
+  })
+
+  it('plain click removes a selected image but still moves the anchor to it', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: makeFourImages(), next_cursor: null })
+    const onSelectionChange = vi.fn()
+    renderSelectionGrid({ type: 'unsorted' }, onSelectionChange)
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+    await userEvent.click(screen.getByTestId('image-card-a'))
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(), 'a')
+  })
+
+  it('shift-click replaces the selection with the range between the anchor and the clicked image', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: makeFourImages(), next_cursor: null })
+    const onSelectionChange = vi.fn()
+    renderSelectionGrid({ type: 'unsorted' }, onSelectionChange)
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+    fireEvent.click(screen.getByTestId('image-card-d'), { shiftKey: true })
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['a', 'b', 'c', 'd']), 'a')
+  })
+
+  it('a second shift-click recomputes the range from the same anchor', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: makeFourImages(), next_cursor: null })
+    const onSelectionChange = vi.fn()
+    renderSelectionGrid({ type: 'unsorted' }, onSelectionChange)
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+    fireEvent.click(screen.getByTestId('image-card-d'), { shiftKey: true })
+    fireEvent.click(screen.getByTestId('image-card-b'), { shiftKey: true })
+
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['a', 'b']), 'a')
+  })
+
+  it('shift-click with no prior anchor behaves like a plain click', async () => {
+    vi.mocked(getImages).mockResolvedValue({ images: makeFourImages(), next_cursor: null })
+    const onSelectionChange = vi.fn()
+    renderSelectionGrid({ type: 'unsorted' }, onSelectionChange)
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByTestId('image-card-b'), { shiftKey: true })
+
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set(['b']), 'b')
+  })
+})
+
+describe('ImageGrid — ImageCard selection-mode behavior', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('suppresses the context menu and selection indicator changes when select mode is active', async () => {
+    const image = makeImage({ id: 'a', title: 'Image A' })
+    vi.mocked(getImages).mockResolvedValue({ images: [image], next_cursor: null })
+    renderSelectionGrid({ type: 'unsorted' })
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    expect(screen.queryByRole('menuitem', { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.getByTestId('image-card-a').className).not.toMatch(/ring-blue-500/)
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+
+    expect(screen.getByTestId('image-card-a').className).toMatch(/ring-blue-500/)
+  })
+
+  it('does not call onSelect or onDoubleClick when a card is clicked in select mode', async () => {
+    const image = makeImage({ id: 'a', title: 'Image A' })
+    vi.mocked(getImages).mockResolvedValue({ images: [image], next_cursor: null })
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const onImageSelect = vi.fn()
+    const onImageDoubleClick = vi.fn()
+    render(
+      <DndContext sensors={[]}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <ImageGrid
+              view={{ type: 'unsorted' }}
+              searchTerm=""
+              debouncedSearchTerm=""
+              sortBy="manual"
+              sortDir={undefined}
+              onImageSelect={onImageSelect}
+              onImageDoubleClick={onImageDoubleClick}
+              selectMode
+              selectedIds={new Set()}
+              onSelectionChange={vi.fn()}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </DndContext>,
+    )
+
+    await waitFor(() => expect(screen.getByText('Image A')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('image-card-a'))
+    await userEvent.dblClick(screen.getByTestId('image-card-a'))
+
+    expect(onImageSelect).not.toHaveBeenCalled()
+    expect(onImageDoubleClick).not.toHaveBeenCalled()
   })
 })
 

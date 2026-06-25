@@ -10,6 +10,7 @@ import type { Tag } from '@/lib/tags'
 import FolderInput from './FolderInput'
 import TagInput from './TagInput'
 import FolderPanelContent from './FolderPanelContent'
+import SelectionPanelBody from './SelectionPanelBody'
 import DetailsGrid from './DetailsGrid'
 import DownloadButton from './DownloadButton'
 import MobileDrawerShell from './MobileDrawerShell'
@@ -20,12 +21,20 @@ import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
 type RightPanelProps =
   | { mode: 'image'; image: Image; onClose: () => void; autoFocusTitle?: boolean }
   | { mode: 'folder'; folder: { id: string; name: string; description: string | null }; onClose: () => void }
+  | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onClose: () => void }
 
 export default function RightPanel(props: RightPanelProps) {
   const isCoarsePointer = useIsCoarsePointer()
 
   const content = props.mode === 'folder' ? (
     <FolderPanelContent key={props.folder.id} folder={props.folder} onClose={props.onClose} />
+  ) : props.mode === 'selection' ? (
+    <SelectionPanelBody
+      selectedCount={props.selectedCount}
+      onAddToFolder={props.onAddToFolder}
+      onMoveToTrash={props.onMoveToTrash}
+      onClose={props.onClose}
+    />
   ) : (
     <ImagePanelBody key={props.image.id} image={props.image} onClose={props.onClose} autoFocusTitle={props.autoFocusTitle} />
   )
