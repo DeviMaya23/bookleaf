@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Plus, UploadCloud, ChevronDown, Images, Focus } from 'lucide-react'
+import { Plus, UploadCloud, ChevronDown, Images, Focus, MousePointerClick } from 'lucide-react'
 import { DndContext } from '@dnd-kit/core'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -31,6 +31,7 @@ import { useMaintenanceActive } from '@/lib/maintenanceStore'
 import MaintenancePage from '@/components/MaintenancePage'
 import { useVisionSuggestion } from './useVisionSuggestion'
 import { handleFileAutoUpload } from './lib/dragHandlers'
+import { bulkAddImagesToFolder, bulkTrashImages } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import { getTags } from '@/lib/tags'
 import { useAppView } from './useAppView'
@@ -55,6 +56,9 @@ export default function AppLayout() {
   const [autoFocusTitle, setAutoFocusTitle] = useState(false)
   const [viewerImage, setViewerImage] = useState<Image | null>(null)
   const [lightboxImage, setLightboxImage] = useState<Image | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [mainSelectedId, setMainSelectedId] = useState<string | null>(null)
   const isCoarsePointer = useIsCoarsePointer()
 
   const folderId = view.type === 'folder' ? view.id : null
@@ -65,7 +69,74 @@ export default function AppLayout() {
     setSelectedImage(null)
     setAutoFocusTitle(false)
     setLightboxImage(null)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setMainSelectedId(null)
   }, [viewKey])
+
+  const handleSelectModeToggle = useCallback((pressed: boolean) => {
+    setSelectMode(pressed)
+    if (pressed) {
+      setSelectedImage(null)
+      setFolderPanelOpen(false)
+      setAutoFocusTitle(false)
+    } else {
+      setSelectedIds(new Set())
+      setMainSelectedId(null)
+    }
+  }, [])
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    setMainSelectedId(null)
+  }, [])
+
+  const bulkAddToFolderMutation = useMutation({
+    mutationFn: ({ imageIds, folderId }: { imageIds: string[]; folderId: string }) =>
+      bulkAddImagesToFolder(getToken, imageIds, folderId),
+    onSuccess: (result, { imageIds }) => {
+      queryClient.invalidateQueries({ queryKey: ['images'] })
+      if (result.succeeded_count < imageIds.length) {
+        toast.warning(`Added ${result.succeeded_count} of ${imageIds.length} images to folder`)
+      } else {
+        toast.success(`Added ${result.succeeded_count} image${result.succeeded_count === 1 ? '' : 's'} to folder`)
+      }
+      exitSelectMode()
+    },
+    onError: () => {
+      toast.error('Failed to add images to folder')
+    },
+  })
+
+  const bulkTrashMutation = useMutation({
+    mutationFn: (imageIds: string[]) => bulkTrashImages(getToken, imageIds),
+    onSuccess: (result, imageIds) => {
+      queryClient.invalidateQueries({ queryKey: ['images'] })
+      if (result.succeeded_count < imageIds.length) {
+        toast.warning(`Moved ${result.succeeded_count} of ${imageIds.length} images to trash`)
+      } else {
+        toast.success(`Moved ${result.succeeded_count} image${result.succeeded_count === 1 ? '' : 's'} to trash`)
+      }
+      exitSelectMode()
+    },
+    onError: () => {
+      toast.error('Failed to move images to trash')
+    },
+  })
+
+  const handleAddSelectionToFolder = useCallback((targetFolderId: string) => {
+    bulkAddToFolderMutation.mutate({ imageIds: Array.from(selectedIds), folderId: targetFolderId })
+  }, [bulkAddToFolderMutation, selectedIds])
+
+  const handleMoveSelectionToTrash = useCallback(() => {
+    bulkTrashMutation.mutate(Array.from(selectedIds))
+  }, [bulkTrashMutation, selectedIds])
+
+  const handleSelectionChange = useCallback((ids: Set<string>, anchorId: string | null) => {
+    setSelectedIds(ids)
+    setMainSelectedId(anchorId)
+  }, [])
 
   useEffect(() => {
     function handlePaste(event: ClipboardEvent) {
@@ -255,6 +326,7 @@ export default function AppLayout() {
                 <GalleryToolbar
                   view={view}
                   controls={gallery}
+                  controlsDisabled={selectMode}
                   focusToggle={
                     <div className="hidden sm:flex">
                       <Toggle
@@ -267,6 +339,19 @@ export default function AppLayout() {
                         <Focus className="w-3.5 h-3.5" />
                       </Toggle>
                     </div>
+                  }
+                  selectModeToggle={
+                    !isCoarsePointer && view.type !== 'trash' ? (
+                      <Toggle
+                        aria-label="Select mode"
+                        aria-pressed={selectMode}
+                        pressed={selectMode}
+                        onPressedChange={handleSelectModeToggle}
+                        className={cn(buttonVariants({ variant: selectMode ? 'secondary' : 'outline', size: 'icon' }))}
+                      >
+                        <MousePointerClick className="w-3.5 h-3.5" />
+                      </Toggle>
+                    ) : null
                   }
                   uploadActions={
                     <>
@@ -309,12 +394,24 @@ export default function AppLayout() {
                   onImageDeleted={handleImageDeleted}
                   onViewDetails={handleViewDetails}
                   sortEndTrigger={sortEndTrigger}
+                  selectMode={selectMode}
+                  selectedIds={selectedIds}
+                  mainSelectedId={mainSelectedId}
+                  onSelectionChange={handleSelectionChange}
                 />
               </div>
             </ScrollArea>
           )}
         </main>
-        {selectedImage && !focusMode ? (
+        {selectedIds.size > 0 ? (
+          <RightPanel
+            mode="selection"
+            selectedCount={selectedIds.size}
+            onAddToFolder={handleAddSelectionToFolder}
+            onMoveToTrash={handleMoveSelectionToTrash}
+            onClose={exitSelectMode}
+          />
+        ) : selectedImage && !focusMode ? (
           <RightPanel
             mode="image"
             image={selectedImage}

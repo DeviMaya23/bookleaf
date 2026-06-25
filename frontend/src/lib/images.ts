@@ -279,6 +279,37 @@ export function computeNewPosition(orderedImages: Image[], newIndex: number): st
   return KeyBetween(prevPos, nextPos)
 }
 
+export interface BulkActionResult {
+  succeeded_count: number
+}
+
+export async function bulkAddImagesToFolder(
+  getToken: GetToken,
+  imageIds: string[],
+  folderId: string,
+): Promise<BulkActionResult> {
+  const res = await apiFetch('/images/bulk/add-to-folder', getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_ids: imageIds, folder_id: folderId }),
+  })
+  if (!res.ok) throw new Error('Failed to add images to folder')
+  return res.json()
+}
+
+export async function bulkTrashImages(
+  getToken: GetToken,
+  imageIds: string[],
+): Promise<BulkActionResult> {
+  const res = await apiFetch('/images/bulk/trash', getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_ids: imageIds }),
+  })
+  if (!res.ok) throw new Error('Failed to move images to trash')
+  return res.json()
+}
+
 export async function acceptSuggestion(
   getToken: GetToken,
   id: string,

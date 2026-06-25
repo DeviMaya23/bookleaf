@@ -212,6 +212,76 @@ describe('RightPanel folders — success scenario', () => {
   })
 })
 
+describe('RightPanel selection mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
+  })
+
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onClose: () => void }> = {}) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel
+          mode="selection"
+          selectedCount={props.selectedCount ?? 1}
+          onAddToFolder={props.onAddToFolder ?? vi.fn()}
+          onMoveToTrash={props.onMoveToTrash ?? vi.fn()}
+          onClose={props.onClose ?? vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders the selected count', () => {
+    renderSelectionPanel({ selectedCount: 1 })
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('calls onAddToFolder with the chosen folder id', async () => {
+    const onAddToFolder = vi.fn()
+    renderSelectionPanel({ onAddToFolder })
+
+    const folderOption = await screen.findByText('Nature')
+    await userEvent.click(folderOption)
+
+    expect(onAddToFolder).toHaveBeenCalledWith('folder-1')
+  })
+
+  it('filters the folder list as the user types in the search input', async () => {
+    vi.mocked(getFolders).mockResolvedValue([
+      { id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
+      { id: 'folder-2', name: 'Work', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
+    ])
+    renderSelectionPanel()
+
+    await screen.findByText('Nature')
+    expect(screen.getByText('Work')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByPlaceholderText('Search folders…'), 'nat')
+
+    expect(screen.getByText('Nature')).toBeInTheDocument()
+    expect(screen.queryByText('Work')).not.toBeInTheDocument()
+  })
+
+  it('calls onMoveToTrash when the trash action is clicked', async () => {
+    const onMoveToTrash = vi.fn()
+    renderSelectionPanel({ onMoveToTrash })
+
+    await userEvent.click(screen.getByRole('button', { name: /move to trash/i }))
+
+    expect(onMoveToTrash).toHaveBeenCalled()
+  })
+
+  it('renders the sidebar shell on a fine-pointer device, taking priority over image mode', () => {
+    renderSelectionPanel({ selectedCount: 3 })
+
+    expect(screen.getByRole('complementary')).toBeInTheDocument()
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
+  })
+})
+
 describe('RightPanel folders — failure scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()

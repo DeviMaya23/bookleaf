@@ -40,13 +40,16 @@ interface ImageCardProps {
   onSelect: (image: Image) => void
   onDoubleClick?: (image: Image) => void
   onViewDetails?: (image: Image) => void
+  selectMode: boolean
+  isSelected: boolean
+  onSelectionClick: (image: Image, shiftKey: boolean) => void
 }
 
-function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect, onDoubleClick, onViewDetails }: ImageCardProps) {
+function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, onAction, onDeletePermanent, onSelect, onDoubleClick, onViewDetails, selectMode, isSelected, onSelectionClick }: ImageCardProps) {
   const isCoarsePointer = useIsCoarsePointer()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `image-${image.id}`,
-    disabled: isTrash,
+    disabled: isTrash || selectMode,
     data: { type: 'image', imageId: image.id, currentFolderId, thumbnailUrl: image.thumbnail_url },
   })
 
@@ -56,20 +59,37 @@ function ImageCard({ image, imgHeight, isTrash, isDropTarget, currentFolderId, o
     opacity: isDragging ? 0.4 : 1,
   }
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (selectMode) {
+      onSelectionClick(image, e.shiftKey)
+      return
+    }
+    onSelect(image)
+  }
+
+  const card = (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      data-testid={`image-card-${image.id}`}
+      className={`cursor-pointer select-none rounded-lg overflow-hidden bg-card${isDropTarget ? ' ring-2 ring-primary' : ''}${isSelected ? ' ring-2 ring-offset-2 ring-blue-500' : ''}`}
+      onClick={handleClick}
+      onDoubleClick={() => { if (!selectMode) onDoubleClick?.(image) }}
+    >
+      <MasonryCardContent image={image} imgHeight={imgHeight} />
+    </div>
+  )
+
+  if (selectMode) {
+    return card
+  }
+
   return (
     <ContextMenu>
       <ContextMenuTrigger>
-        <div
-          ref={setNodeRef}
-          style={style}
-          {...listeners}
-          {...attributes}
-          className={`cursor-pointer rounded-lg overflow-hidden bg-card${isDropTarget ? ' ring-2 ring-primary' : ''}`}
-          onClick={() => onSelect(image)}
-          onDoubleClick={() => onDoubleClick?.(image)}
-        >
-          <MasonryCardContent image={image} imgHeight={imgHeight} />
-        </div>
+        {card}
       </ContextMenuTrigger>
       <ContextMenuContent>
         {isCoarsePointer && (
@@ -117,9 +137,13 @@ interface ImageGridProps {
   onImageDeleted?: (id: string) => void
   onViewDetails?: (image: Image) => void
   sortEndTrigger?: SortEndTrigger | null
+  selectMode?: boolean
+  selectedIds?: Set<string>
+  mainSelectedId?: string | null
+  onSelectionChange?: (ids: Set<string>, anchorId: string | null) => void
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger, selectMode = false, selectedIds, mainSelectedId = null, onSelectionChange }: ImageGridProps) {
   const isTrash = view.type === 'trash'
   const isFolderView = view.type === 'folder'
 
@@ -152,6 +176,32 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
 
   const folderId = view.type === 'folder' ? view.id : null
 
+  const handleSelectionClick = (image: Image, shiftKey: boolean) => {
+    if (!onSelectionChange) return
+    const ids = selectedIds ?? new Set<string>()
+
+    if (shiftKey && mainSelectedId) {
+      const anchorIndex = orderedImages.findIndex((i) => i.id === mainSelectedId)
+      const clickedIndex = orderedImages.findIndex((i) => i.id === image.id)
+      if (anchorIndex === -1 || clickedIndex === -1) {
+        onSelectionChange(new Set([image.id]), image.id)
+        return
+      }
+      const [start, end] = anchorIndex <= clickedIndex ? [anchorIndex, clickedIndex] : [clickedIndex, anchorIndex]
+      const rangeIds = new Set(orderedImages.slice(start, end + 1).map((i) => i.id))
+      onSelectionChange(rangeIds, mainSelectedId)
+      return
+    }
+
+    const next = new Set(ids)
+    if (next.has(image.id)) {
+      next.delete(image.id)
+    } else {
+      next.add(image.id)
+    }
+    onSelectionChange(next, image.id)
+  }
+
   if (layoutMode !== 'masonry') {
     console.warn(`ImageGrid: unsupported layoutMode "${layoutMode}"`)
     return null
@@ -175,6 +225,9 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
           onSelect={onImageSelect}
           onDoubleClick={onImageDoubleClick}
           onViewDetails={onViewDetails}
+          selectMode={selectMode}
+          isSelected={selectedIds?.has(image.id) ?? false}
+          onSelectionClick={handleSelectionClick}
         />
       )}
     />
