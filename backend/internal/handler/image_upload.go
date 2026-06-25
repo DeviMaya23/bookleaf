@@ -56,6 +56,7 @@ type UploadUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
 	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
+	BackfillVisionLabels(ctx context.Context, userID string) (int, error)
 }
 
 type UploadHandler struct {
@@ -178,4 +179,23 @@ func (h *UploadHandler) AcceptSuggestion(c echo.Context) error {
 	}
 
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (h *UploadHandler) BackfillVision(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BackfillVision")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
+	if !ok || userID == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	enqueued, err := h.uploadUsecase.BackfillVisionLabels(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to backfill vision labels")
+	}
+
+	return c.JSON(http.StatusAccepted, map[string]any{"enqueued": enqueued})
 }

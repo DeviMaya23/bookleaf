@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	authmw "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
@@ -29,6 +30,9 @@ type mockUploadUsecase struct {
 	lastAcceptImageID   uuid.UUID
 	lastAcceptUserID    string
 	lastSuggestedFolder string
+	backfillEnqueued    int
+	backfillErr         error
+	lastBackfillUserID  string
 }
 
 func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -51,6 +55,11 @@ func (m *mockUploadUsecase) AcceptSuggestion(_ context.Context, imageID uuid.UUI
 		return m.acceptSuggestionErr
 	}
 	return m.err
+}
+
+func (m *mockUploadUsecase) BackfillVisionLabels(_ context.Context, userID string) (int, error) {
+	m.lastBackfillUserID = userID
+	return m.backfillEnqueued, m.backfillErr
 }
 
 // --- InitiateUpload ---
@@ -336,4 +345,39 @@ func TestUploadHandler_AcceptSuggestion_MalformedJSON(t *testing.T) {
 	err := h.AcceptSuggestion(c)
 
 	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+// --- BackfillVision ---
+
+func TestUploadHandler_BackfillVision_Success(t *testing.T) {
+	uc := &mockUploadUsecase{backfillEnqueued: 5}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodPost, "/me/vision/backfill", "")
+
+	err := h.BackfillVision(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+	assert.JSONEq(t, `{"enqueued":5}`, rec.Body.String())
+	assert.Equal(t, "kp_abc123", uc.lastBackfillUserID)
+}
+
+func TestUploadHandler_BackfillVision_UsecaseError(t *testing.T) {
+	uc := &mockUploadUsecase{backfillErr: errors.New("db error")}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/me/vision/backfill", "")
+
+	err := h.BackfillVision(c)
+
+	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+func TestUploadHandler_BackfillVision_MissingAuthContext(t *testing.T) {
+	h := NewUploadHandler(&mockUploadUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/me/vision/backfill", "")
+	c.Set(string(authmw.AuthenticatedUserIDContextKey), "")
+
+	err := h.BackfillVision(c)
+
+	assertHTTPError(t, err, http.StatusInternalServerError)
 }
