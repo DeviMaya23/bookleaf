@@ -9,6 +9,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
+	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
+
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
@@ -339,6 +342,15 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", trashHandler.SoftDelete)
 	protected.POST("/images/:id/restore", trashHandler.Restore)
+
+	if cfg.AnthropicAPIKey != "" {
+		aiClient := anthropic.NewClient(
+			anthropicOption.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")),
+		)
+		suggestionUsecase := usecase.NewSuggestionUsecase(&aiClient)
+		suggestionHandler := httphandler.NewSuggestionHandler(suggestionUsecase)
+		protected.GET("/suggestion", suggestionHandler.GetSuggestion)
+	}
 
 	return riverClient, riverPool
 }
