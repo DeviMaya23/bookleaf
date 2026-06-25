@@ -59,6 +59,8 @@ type mockImageRepository struct {
 	filterOwnedCalls      int
 	lastFilterOwnedIDs    []uuid.UUID
 	filterOwnedResult     []uuid.UUID
+	listUnlabelledResult  []*domain.Image
+	listUnlabelledErr     error
 }
 
 func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*domain.Image, error) {
@@ -133,6 +135,9 @@ func (m *mockImageRepository) FindDuplicates(_ context.Context, _ string, _ stri
 }
 func (m *mockImageRepository) ListUnhashed(_ context.Context, _ int) ([]*domain.Image, error) {
 	return nil, m.err
+}
+func (m *mockImageRepository) ListUnlabelled(_ context.Context, _ string) ([]*domain.Image, error) {
+	return m.listUnlabelledResult, m.listUnlabelledErr
 }
 func (m *mockImageRepository) UpdatePHash(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err

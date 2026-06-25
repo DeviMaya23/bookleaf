@@ -522,6 +522,17 @@ func (r *imageRepository) ListUnhashed(ctx context.Context, limit int) ([]*domai
 	return images, nil
 }
 
+func (r *imageRepository) ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("user_id = ? AND ai_labels IS NULL AND deleted_at IS NULL", userID).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list unlabelled images: %w", err)
+	}
+	return images, nil
+}
+
 func (r *imageRepository) UpdatePHash(ctx context.Context, id uuid.UUID, phash string) error {
 	result := r.db.WithContext(ctx).
 		Model(&domain.Image{}).

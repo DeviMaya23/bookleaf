@@ -312,6 +312,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.GET("/me", meHandler.GetMe)
 	protected.PATCH("/me", meHandler.UpdateMe)
 	protected.DELETE("/me", meHandler.DeleteMe)
+	protected.POST("/me/vision/backfill", uploadHandler.BackfillVision)
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)
 	protected.GET("/folders/:id", folderHandler.GetFolder)
