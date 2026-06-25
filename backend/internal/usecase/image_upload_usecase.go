@@ -36,6 +36,7 @@ type UploadImageRepository interface {
 	UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error
 	FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error)
+	ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error)
 }
 
 const uploadURLTTL = 15 * time.Minute
@@ -485,4 +486,26 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 	}
 
 	return nil
+}
+
+func (u *imageUploadUsecase) BackfillVisionLabels(ctx context.Context, userID string) (int, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BackfillVisionLabels")
+	defer span.End()
+
+	images, err := u.imageRepo.ListUnlabelled(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("list unlabelled images: %w", err)
+	}
+
+	for i, img := range images {
+		if err := u.enqueuer.Insert(ctx, VisionArgs{ImageID: img.ID, UserID: userID}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return i, fmt.Errorf("enqueue vision labelling: %w", err)
+		}
+	}
+
+	return len(images), nil
 }

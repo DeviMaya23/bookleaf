@@ -229,6 +229,57 @@ func TestImageRepository_UpdateAILabels_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
+func TestImageRepository_ListUnlabelled_ReturnsOnlyUnlabelledNonDeleted(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	unlabelled, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+
+	labelled, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	require.NoError(t, repo.UpdateAILabels(context.Background(), labelled.ID, json.RawMessage(`[]`)))
+
+	deleted, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(context.Background(), deleted.ID, userID))
+
+	images, err := repo.ListUnlabelled(context.Background(), userID)
+
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	assert.Equal(t, unlabelled.ID, images[0].ID)
+}
+
+func TestImageRepository_ListUnlabelled_ExcludesOtherUserImages(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	userRepo := NewUserRepository(tx)
+	owner, err := userRepo.GetOrCreate(context.Background(), "kp_imgown8")
+	require.NoError(t, err)
+	other, err := userRepo.GetOrCreate(context.Background(), "kp_imgoth8")
+	require.NoError(t, err)
+	repo := NewImageRepository(tx)
+	_, err = repo.Create(context.Background(), newTestImage(owner.ID))
+	require.NoError(t, err)
+
+	images, err := repo.ListUnlabelled(context.Background(), other.ID)
+
+	require.NoError(t, err)
+	assert.Empty(t, images)
+}
+
+func TestImageRepository_ListUnlabelled_Empty(t *testing.T) {
+	repo, userID := setupImageTest(t)
+
+	created, err := repo.Create(context.Background(), newTestImage(userID))
+	require.NoError(t, err)
+	require.NoError(t, repo.UpdateAILabels(context.Background(), created.ID, json.RawMessage(`[]`)))
+
+	images, err := repo.ListUnlabelled(context.Background(), userID)
+
+	require.NoError(t, err)
+	assert.Empty(t, images)
+}
+
 func TestImageRepository_SoftDelete_Success(t *testing.T) {
 	repo, userID := setupImageTest(t)
 
