@@ -35,7 +35,7 @@
 - [x] 5.2 Unit test `ImageCard` selection-mode behavior: context menu suppressed, click does not invoke `onSelect`/`onDoubleClick`, selection indicator class applied/removed based on `isSelected` — assert via `data-testid`/role, not copy text
 - [x] 5.3 Unit test `GalleryToolbar`: select-mode toggle renders on fine-pointer only; sort/filter triggers disabled when `controlsDisabled` is true
 - [x] 5.4 Unit test `RightPanel` selection mode: renders selected count; takes priority over `image` mode when `selectedIds` is non-empty; remains visible when focus mode is active
-- [ ] 5.5 Unit test the bulk action wiring: successful add-to-folder/trash exits select mode entirely (selection, anchor, and `selectMode` all reset); toast reflects `succeeded_count` vs. selection size
+- [x] 5.5 Unit test the bulk action wiring: successful add-to-folder/trash exits select mode entirely (selection, anchor, and `selectMode` all reset); toast reflects `succeeded_count` vs. selection size
 
 ## 6. Verification
 
