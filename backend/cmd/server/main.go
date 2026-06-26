@@ -12,6 +12,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
 
+	"github.com/devi/bookleaf/internal/agent"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
@@ -348,8 +349,9 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 		aiClient := anthropic.NewClient(
 			anthropicOption.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")),
 		)
-		suggestionUsecase := usecase.NewSuggestionUsecase(&aiClient)
-		suggestionHandler := httphandler.NewSuggestionHandler(suggestionUsecase)
+		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient)
+		suggestionUsecase := usecase.NewSuggestionUsecase(agentTools, imageRepository, folderRepository)
+		suggestionHandler := httphandler.NewSuggestionHandler(*suggestionUsecase)
 		protected.GET("/suggestion", suggestionHandler.GetSuggestion)
 	}
 
