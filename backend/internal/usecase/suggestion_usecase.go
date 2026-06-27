@@ -36,33 +36,29 @@ func NewSuggestionUsecase(agentService *agent.AgentService,
 func (u *SuggestionUsecase) CategoriseImage(ctx context.Context, userID string, imageID uuid.UUID) (any, error) {
 
 	// TODO check if user has ai helper on
+	// maybe check if image belongs to user
 
 	res, err := u.agentService.GetFolderSuggestion(ctx, userID, imageID)
 	if err != nil {
 		return nil, err
 	}
+	var folderUUID uuid.UUID
 
 	if res.FolderID != "" {
 		// set image folder
-		folderUUID, err := uuid.Parse(res.FolderID)
-		if err != nil {
-			return nil, err
-		}
-		err = u.imageRepo.SetImageFolder(ctx, imageID, &folderUUID)
+		folderUUID, err = uuid.Parse(res.FolderID)
 		if err != nil {
 			return nil, err
 		}
 	} else if res.NewFolderName != "" {
 		// create new folder and set image folder
-		newFolderID := uuid.New()
-
 		parentFolderUUID, err := uuid.Parse(res.NewFolderParentID)
 		if err != nil {
 			// TODO log
 			parentFolderUUID = uuid.Nil
 		}
 
-		_, err = u.folderRepo.Create(ctx, &domain.Folder{
+		newFolder, err := u.folderRepo.Create(ctx, &domain.Folder{
 			UserID:   userID,
 			Name:     res.NewFolderName,
 			ParentID: &parentFolderUUID,
@@ -70,11 +66,15 @@ func (u *SuggestionUsecase) CategoriseImage(ctx context.Context, userID string, 
 		if err != nil {
 			return nil, err
 		}
+		folderUUID = newFolder.ID
+	} else {
+		// no folder suggestion, do nothing
+		return res, nil
+	}
 
-		err = u.imageRepo.SetImageFolder(ctx, imageID, &newFolderID)
-		if err != nil {
-			return nil, err
-		}
+	err = u.imageRepo.SetImageFolder(ctx, imageID, &folderUUID)
+	if err != nil {
+		return nil, err
 	}
 	return res, nil
 

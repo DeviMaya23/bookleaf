@@ -7,7 +7,6 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/util"
 	"github.com/google/uuid"
 )
 
@@ -45,23 +44,7 @@ func (a *AgentService) listFolders(ctx context.Context, userID string) (string, 
 	if err != nil {
 		return "", err
 	}
-
-	transformedFolders := make([]map[string]interface{}, 0, len(folders))
-	for _, folder := range folders {
-		transformedFolder := map[string]interface{}{
-			"folder_id":          folder.ID.String(),
-			"folder_name":        folder.Name,
-			"folder_description": util.DerefOr(folder.Description, ""),
-			"folder_path":        getFolderPath(folders, folder),
-		}
-		transformedFolders = append(transformedFolders, transformedFolder)
-	}
-	str, err := json.Marshal(transformedFolders)
-	if err != nil {
-		return "", err
-	}
-	return string(str), nil
-
+	return formatFolderList(folders)
 }
 
 func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (Suggestion, error) {
@@ -78,7 +61,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		return res, err
 	}
 
-	imageMetadata, err := getImageMetadata(img)
+	imageMetadata, err := formatImageLabels(img)
 	if err != nil {
 		return res, err
 	}
