@@ -349,8 +349,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 		aiClient := anthropic.NewClient(
 			anthropicOption.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")),
 		)
-		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient)
-		_ = usecase.NewSuggestionUsecase(agentTools, imageRepository, folderRepository)
+		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel)
+		_ = usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, tel)
 	}
 
 	return riverClient, riverPool

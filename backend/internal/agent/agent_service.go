@@ -7,7 +7,9 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/devi/bookleaf/internal/domain"
+	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/codes"
 )
 
 type AgentImageRepository interface {
@@ -29,13 +31,15 @@ type AgentService struct {
 	imageRepo  AgentImageRepository
 	folderRepo AgentFolderRepository
 	aiClient   *anthropic.Client
+	tel        *observability.Telemetry
 }
 
-func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepository, aiClient *anthropic.Client) *AgentService {
+func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepository, aiClient *anthropic.Client, tel *observability.Telemetry) *AgentService {
 	return &AgentService{
 		imageRepo:  imageRepo,
 		folderRepo: folderRepo,
 		aiClient:   aiClient,
+		tel:        tel,
 	}
 }
 
@@ -48,6 +52,9 @@ func (a *AgentService) listFolders(ctx context.Context, userID string) (string, 
 }
 
 func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (Suggestion, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "agent.GetFolderSuggestion")
+	defer span.End()
+
 	res := Suggestion{}
 
 	tools := make([]anthropic.ToolUnionParam, len(folderSuggestionToolParams))
@@ -58,11 +65,15 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 
 	img, err := u.imageRepo.GetByID(ctx, imageID, userID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return res, err
 	}
 
 	imageMetadata, err := formatImageLabels(img)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return res, err
 	}
 	userPrompt := fmt.Sprintf("\nImage metadata: %s", imageMetadata)
@@ -74,7 +85,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 	var toolResultText string
 
 	for {
-		response, err := u.aiClient.Messages.New(context.Background(), anthropic.MessageNewParams{
+		response, err := u.aiClient.Messages.New(ctx, anthropic.MessageNewParams{
 			Model:     anthropic.ModelClaudeHaiku4_5,
 			MaxTokens: 1024,
 			Tools:     tools,
@@ -84,8 +95,9 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 			},
 		})
 		if err != nil {
-			fmt.Printf("API error: %v\n", err)
-			return res, err
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return res, fmt.Errorf("call anthropic api: %w", err)
 		}
 
 		messages = append(messages, response.ToParam())
@@ -99,12 +111,16 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 				case "get_folder_list":
 					folders, err := u.listFolders(ctx, userID)
 					if err != nil {
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
 						return res, err
 					}
 					toolResultText = fmt.Sprintf("Folder list: %s", folders)
 				case "submit_existing_folder", "submit_new_folder":
 					if err := json.Unmarshal([]byte(variant.Input), &res); err != nil {
-						return res, fmt.Errorf("failed to unmarshal tool input: %w", err)
+						span.RecordError(err)
+						span.SetStatus(codes.Error, err.Error())
+						return res, fmt.Errorf("unmarshal tool input: %w", err)
 					}
 					return res, nil
 				default:
@@ -121,7 +137,10 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 					fallbackText = text.Text
 				}
 			}
-			return res, fmt.Errorf("agent did not call a submit tool, got text instead: %s", fallbackText)
+			err := fmt.Errorf("agent did not call a submit tool, got text instead: %s", fallbackText)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return res, err
 		}
 
 		messages = append(messages, anthropic.NewUserMessage(toolResults...))
