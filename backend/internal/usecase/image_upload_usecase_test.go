@@ -165,6 +165,15 @@ type noopJobEnqueuer struct{}
 
 func (n *noopJobEnqueuer) Insert(_ context.Context, _ JobArgs) error { return nil }
 
+type capturingJobEnqueuer struct {
+	inserted []JobArgs
+}
+
+func (c *capturingJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
+	c.inserted = append(c.inserted, args)
+	return nil
+}
+
 type spyJobEnqueuer struct {
 	insertCalls int
 }
@@ -477,6 +486,42 @@ func TestImageUploadUsecase_ProcessVisionLabelling_VisionDisabledReturnsNil(t *t
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, visionSvc.calls)
+}
+
+func TestImageUploadUsecase_ProcessVisionLabelling_AICategorisationEnabled_EnqueuesCategoriseJob(t *testing.T) {
+	imageID := uuid.New()
+	thumb := "users/kp_abc123/thumbnails/thumb.jpg"
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", ThumbnailPath: &thumb}}
+	store := &mockStorageService{objectBytes: []byte("img-bytes")}
+	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, AICategorisationEnabled: true}}
+	enqueuer := &capturingJobEnqueuer{}
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, &mockPendingUploadRepository{}, nil, userRepo, store, visionSvc, enqueuer, noopTel())
+
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	require.Len(t, enqueuer.inserted, 1)
+	args, ok := enqueuer.inserted[0].(CategoriseImageArgs)
+	require.True(t, ok, "inserted job must be CategoriseImageArgs")
+	assert.Equal(t, imageID, args.ImageID)
+	assert.Equal(t, "kp_abc123", args.UserID)
+}
+
+func TestImageUploadUsecase_ProcessVisionLabelling_AICategorisationDisabled_NoCategoriseJob(t *testing.T) {
+	imageID := uuid.New()
+	thumb := "users/kp_abc123/thumbnails/thumb.jpg"
+	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123", ThumbnailPath: &thumb}}
+	store := &mockStorageService{objectBytes: []byte("img-bytes")}
+	visionSvc := &mockVisionService{labels: []domain.Label{{Description: "Nature", Score: 0.98}}}
+	userRepo := &stubUserRepo{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, AICategorisationEnabled: false}}
+	enqueuer := &capturingJobEnqueuer{}
+	uc := NewImageUploadUsecase(imageRepo, imageRepo, &mockPendingUploadRepository{}, nil, userRepo, store, visionSvc, enqueuer, noopTel())
+
+	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Empty(t, enqueuer.inserted)
 }
 
 func TestImageUploadUsecase_ProcessVisionLabelling_VisionAPIErrorReturnsError(t *testing.T) {

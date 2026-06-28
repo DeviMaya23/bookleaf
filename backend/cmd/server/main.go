@@ -250,6 +250,16 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
+	if cfg.AnthropicAPIKey != "" {
+		aiClient := anthropic.NewClient(
+			anthropicOption.WithAPIKey(cfg.AnthropicAPIKey),
+		)
+		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
+		categorisationLogRepo := repository.NewCategorisationLogRepository(db)
+		categorisationUsecase := usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, categorisationLogRepo, tel)
+		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase))
+	}
+
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 10},
@@ -344,14 +354,6 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.PATCH("/images/:id", imageHandler.UpdateImage)
 	protected.DELETE("/images/:id", trashHandler.SoftDelete)
 	protected.POST("/images/:id/restore", trashHandler.Restore)
-
-	if cfg.AnthropicAPIKey != "" {
-		aiClient := anthropic.NewClient(
-			anthropicOption.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")),
-		)
-		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel)
-		_ = usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, tel)
-	}
 
 	return riverClient, riverPool
 }

@@ -485,6 +485,15 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 		return fmt.Errorf("save labels: %w", err)
 	}
 
+	if user.AICategorisationEnabled {
+		if err := u.enqueuer.Insert(ctx, CategoriseImageArgs{
+			ImageID: imageID,
+			UserID:  userID,
+		}); err != nil {
+			return fmt.Errorf("enqueue categorise image: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -66,6 +66,7 @@ type Config struct {
 	Port               string
 	CORSAllowedOrigins []string
 	AnthropicAPIKey    string
+	AnthropicModel     string
 }
 
 func Load() (*Config, error) {
@@ -241,6 +242,7 @@ func loadFromEnv() (*Config, error) {
 			BypassToken: maintenanceBypassToken,
 		},
 		AnthropicAPIKey:    envWithDefault("ANTHROPIC_API_KEY", ""),
+		AnthropicModel:     envWithDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
 		Port:               port,
 		CORSAllowedOrigins: strings.Split(corsAllowedOriginsRaw, ","),
 	}, nil

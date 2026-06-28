@@ -14,8 +14,13 @@ import (
 type CategorisationUsecase struct {
 	imageRepo    categorisationImageRepository
 	folderRepo   categorisationFolderRepository
-	agentService *agent.AgentService
+	logRepo      categorisationLogRepository
+	agentService categorisationAgentService
 	tel          *observability.Telemetry
+}
+
+type categorisationAgentService interface {
+	GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (agent.Suggestion, error)
 }
 
 type categorisationImageRepository interface {
@@ -27,14 +32,21 @@ type categorisationFolderRepository interface {
 	Create(ctx context.Context, folder *domain.Folder) (*domain.Folder, error)
 }
 
-func NewCategorisationUsecase(agentService *agent.AgentService,
+type categorisationLogRepository interface {
+	Create(ctx context.Context, log *domain.CategorisationLog) error
+	GetByImageID(ctx context.Context, imageID uuid.UUID) (*domain.CategorisationLog, error)
+}
+
+func NewCategorisationUsecase(agentService categorisationAgentService,
 	imageRepo categorisationImageRepository,
 	folderRepo categorisationFolderRepository,
+	logRepo categorisationLogRepository,
 	tel *observability.Telemetry) *CategorisationUsecase {
 	return &CategorisationUsecase{
 		agentService: agentService,
 		imageRepo:    imageRepo,
 		folderRepo:   folderRepo,
+		logRepo:      logRepo,
 		tel:          tel,
 	}
 }
@@ -43,51 +55,98 @@ func (u *CategorisationUsecase) CategoriseImage(ctx context.Context, userID stri
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CategoriseImage")
 	defer span.End()
 
-	res, err := u.agentService.GetFolderSuggestion(ctx, userID, imageID)
+	var folderID *uuid.UUID
+	var newFolderName string
+	var newFolderParentID uuid.UUID
+
+	existingLog, err := u.logRepo.GetByImageID(ctx, imageID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
-	var folderUUID uuid.UUID
+	img, err := u.imageRepo.GetByID(ctx, imageID, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if len(img.ImageFolders) > 0 {
+		return nil
+	}
 
-	if res.FolderID != "" {
-		folderUUID, err = uuid.Parse(res.FolderID)
+	if existingLog != nil {
+		folderID = existingLog.FolderID
+		if existingLog.NewFolderName != nil {
+			newFolderName = *existingLog.NewFolderName
+		}
+	} else {
+		res, err := u.agentService.GetFolderSuggestion(ctx, userID, imageID)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("parse suggested folder id: %w", err)
+			return err
 		}
-	} else if res.NewFolderName != "" {
-		var parentFolderUUID uuid.UUID
-		if res.NewFolderParentID != "" {
-			parentFolderUUID, err = uuid.Parse(res.NewFolderParentID)
-			if err != nil {
-				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-				return fmt.Errorf("parse suggested parent folder id: %w", err)
+
+		imgID := imageID
+		logEntry := &domain.CategorisationLog{
+			ImageID:   &imgID,
+			UserID:    userID,
+			Reasoning: res.Reasoning,
+		}
+		if res.FolderID != "" {
+			if parsed, parseErr := uuid.Parse(res.FolderID); parseErr == nil {
+				logEntry.FolderID = &parsed
+				folderID = logEntry.FolderID
 			}
+		}
+		if res.NewFolderName != "" {
+			name := res.NewFolderName
+			logEntry.NewFolderName = &name
+			newFolderName = res.NewFolderName
+			if res.NewFolderParentID != "" {
+				if parsed, parseErr := uuid.Parse(res.NewFolderParentID); parseErr == nil {
+					newFolderParentID = parsed
+				}
+			}
+		}
+		if logErr := u.logRepo.Create(ctx, logEntry); logErr != nil {
+			span.RecordError(logErr)
+			span.SetStatus(codes.Error, logErr.Error())
+			return logErr
+		}
+	}
+
+	if folderID != nil {
+		if err := u.imageRepo.SetImageFolder(ctx, imageID, folderID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+	} else if newFolderName != "" {
+		var parentPtr *uuid.UUID
+		if newFolderParentID != uuid.Nil {
+			parentPtr = &newFolderParentID
 		}
 		newFolder, err := u.folderRepo.Create(ctx, &domain.Folder{
 			UserID:   userID,
-			Name:     res.NewFolderName,
-			ParentID: &parentFolderUUID,
+			Name:     newFolderName,
+			ParentID: parentPtr,
 		})
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
-		folderUUID = newFolder.ID
+		if err := u.imageRepo.SetImageFolder(ctx, imageID, &newFolder.ID); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
 	} else {
 		return fmt.Errorf("agent returned suggestion with no folder id or new folder name")
 	}
 
-	if err := u.imageRepo.SetImageFolder(ctx, imageID, &folderUUID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
 	return nil
 }

@@ -32,14 +32,16 @@ type AgentService struct {
 	folderRepo AgentFolderRepository
 	aiClient   *anthropic.Client
 	tel        *observability.Telemetry
+	model      string
 }
 
-func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepository, aiClient *anthropic.Client, tel *observability.Telemetry) *AgentService {
+func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepository, aiClient *anthropic.Client, tel *observability.Telemetry, model string) *AgentService {
 	return &AgentService{
 		imageRepo:  imageRepo,
 		folderRepo: folderRepo,
 		aiClient:   aiClient,
 		tel:        tel,
+		model:      model,
 	}
 }
 
@@ -86,7 +88,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 
 	for {
 		response, err := u.aiClient.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.ModelClaudeHaiku4_5,
+			Model:     u.model,
 			MaxTokens: 1024,
 			Tools:     tools,
 			Messages:  messages,
