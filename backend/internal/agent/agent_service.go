@@ -10,6 +10,7 @@ import (
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 )
 
 const VISION_LABEL_SCORE_THRESHOLD = 0.75
@@ -48,38 +49,20 @@ func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepos
 	}
 }
 
-//nolint:unused
-func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
-	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, nil)
-	if err != nil {
-		return "", err
-	}
-	return formatFolderTopLabels(folderID, images, VISION_LABEL_SCORE_THRESHOLD)
-}
-
-//nolint:unused
-func (a *AgentService) getFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
-	direction := "asc"
-	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, &direction)
-	if err != nil {
-		return "", err
-	}
-	return formatFolderImageSamples(images, VISION_LABEL_SCORE_THRESHOLD)
-}
-
-func (a *AgentService) listFolders(ctx context.Context, userID string) (string, error) {
-	folders, err := a.folderRepo.List(ctx, userID)
-	if err != nil {
-		return "", err
-	}
-	return formatFolderList(folders)
-}
-
 func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (Suggestion, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "agent.GetFolderSuggestion")
 	defer span.End()
 
 	res := Suggestion{}
+	toolsUsed := []string{}
+	defer func() {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Info("folder suggestion complete",
+			zap.String("user_id", userID),
+			zap.String("image_id", imageID.String()),
+			zap.Int("tool_call_count", len(toolsUsed)),
+			zap.Strings("tools_used", toolsUsed),
+		)
+	}()
 
 	tools := make([]anthropic.ToolUnionParam, len(folderSuggestionToolParams))
 	for i, t := range folderSuggestionToolParams {
@@ -100,13 +83,66 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		span.SetStatus(codes.Error, err.Error())
 		return res, err
 	}
-	userPrompt := fmt.Sprintf("\nImage metadata: %s", imageMetadata)
+
+	folders, err := u.folderRepo.List(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return res, err
+	}
+	folderList, err := formatFolderList(folders)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return res, err
+	}
+
+	userPrompt := fmt.Sprintf("Image metadata: %s\nFolder list: %s", imageMetadata, folderList)
 
 	messages := []anthropic.MessageParam{
 		anthropic.NewUserMessage(anthropic.NewTextBlock(userPrompt)),
 	}
 
-	var toolResultText string
+	invalidInputCount := 0
+
+	handleFolderIDTool := func(rawInput json.RawMessage, fetchFn func(context.Context, string, uuid.UUID) (string, error)) (string, error) {
+		var input struct {
+			FolderID string `json:"folder_id"`
+		}
+		if err := json.Unmarshal(rawInput, &input); err != nil {
+			invalidInputCount++
+			if invalidInputCount >= 3 {
+				capErr := fmt.Errorf("agent exceeded invalid input cap")
+				span.RecordError(capErr)
+				span.SetStatus(codes.Error, capErr.Error())
+				return "", capErr
+			}
+			return "invalid folder ID format", nil
+		}
+		folderID, err := uuid.Parse(input.FolderID)
+		if err != nil {
+			invalidInputCount++
+			if invalidInputCount >= 3 {
+				capErr := fmt.Errorf("agent exceeded invalid input cap")
+				span.RecordError(capErr)
+				span.SetStatus(codes.Error, capErr.Error())
+				return "", capErr
+			}
+			return "invalid folder ID format", nil
+		}
+		result, err := fetchFn(ctx, userID, folderID)
+		if err != nil {
+			invalidInputCount++
+			if invalidInputCount >= 3 {
+				capErr := fmt.Errorf("agent exceeded invalid input cap")
+				span.RecordError(capErr)
+				span.SetStatus(codes.Error, capErr.Error())
+				return "", capErr
+			}
+			return "could not retrieve folder data for the given ID", nil
+		}
+		return result, nil
+	}
 
 	for {
 		response, err := u.aiClient.Messages.New(ctx, anthropic.MessageNewParams{
@@ -131,16 +167,28 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		for _, block := range response.Content {
 			switch variant := block.AsAny().(type) {
 			case anthropic.ToolUseBlock:
+				var toolResultText string
 				switch variant.Name {
-				case "get_folder_list":
-					folders, err := u.listFolders(ctx, userID)
+				case "get_folder_top_labels":
+					toolsUsed = append(toolsUsed, variant.Name)
+					result, err := handleFolderIDTool(variant.Input, func(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+						return u.getFolderTopLabels(ctx, userID, folderID, findFolder(folders, folderID))
+					})
 					if err != nil {
-						span.RecordError(err)
-						span.SetStatus(codes.Error, err.Error())
 						return res, err
 					}
-					toolResultText = fmt.Sprintf("Folder list: %s", folders)
+					toolResultText = result
+
+				case "get_folder_image_samples":
+					toolsUsed = append(toolsUsed, variant.Name)
+					result, err := handleFolderIDTool(variant.Input, u.getFolderImageSamples)
+					if err != nil {
+						return res, err
+					}
+					toolResultText = result
+
 				case "submit_existing_folder", "submit_new_folder":
+					toolsUsed = append(toolsUsed, variant.Name)
 					if err := json.Unmarshal([]byte(variant.Input), &res); err != nil {
 						span.RecordError(err)
 						span.SetStatus(codes.Error, err.Error())
@@ -169,4 +217,22 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 
 		messages = append(messages, anthropic.NewUserMessage(toolResults...))
 	}
+}
+
+
+func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, folder *domain.Folder) (string, error) {
+	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	return formatFolderTopLabels(folderID, folder, images, VISION_LABEL_SCORE_THRESHOLD)
+}
+
+func (a *AgentService) getFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+	direction := "desc"
+	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, &direction)
+	if err != nil {
+		return "", err
+	}
+	return formatFolderImageSamples(images, VISION_LABEL_SCORE_THRESHOLD)
 }

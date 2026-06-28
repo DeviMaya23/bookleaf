@@ -55,7 +55,16 @@ func formatImageLabels(image *domain.Image, threshold float64) (string, error) {
 	return string(metadataJSON), nil
 }
 
-func formatFolderTopLabels(folderID uuid.UUID, images []*domain.Image, threshold float64) (string, error) {
+func findFolder(folders []*domain.Folder, id uuid.UUID) *domain.Folder {
+	for _, f := range folders {
+		if f.ID == id {
+			return f
+		}
+	}
+	return nil
+}
+
+func formatFolderTopLabels(folderID uuid.UUID, folder *domain.Folder, images []*domain.Image, threshold float64) (string, error) {
 	labelCount := map[string]int{}
 	tagCount := map[string]int{}
 
@@ -97,11 +106,18 @@ func formatFolderTopLabels(folderID uuid.UUID, images []*domain.Image, threshold
 		return result
 	}
 
+	name, desc := "", ""
+	if folder != nil {
+		name = folder.Name
+		desc = util.DerefOr(folder.Description, "")
+	}
 	out := map[string]interface{}{
-		"folder_id":         folderID.String(),
-		"image_count":       len(images),
-		"top_vision_labels": topN(labelCount, 5),
-		"top_user_tags":     topN(tagCount, 5),
+		"folder_id":          folderID.String(),
+		"folder_name":        name,
+		"folder_description": desc,
+		"image_count":        len(images),
+		"top_vision_labels":  topN(labelCount, 5),
+		"top_user_tags":      topN(tagCount, 5),
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
