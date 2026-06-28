@@ -25,8 +25,7 @@ func formatFolderList(folders []*domain.Folder) (string, error) {
 	return string(str), nil
 }
 
-// rename for consistency
-func formatImageLabels(image *domain.Image) (string, error) {
+func formatImageLabels(image *domain.Image, threshold float64) (string, error) {
 	var results []struct {
 		Description string  `json:"Description"`
 		Score       float64 `json:"Score"`
@@ -38,7 +37,9 @@ func formatImageLabels(image *domain.Image) (string, error) {
 
 	labels := make([]string, 0, len(results))
 	for _, result := range results {
-		labels = append(labels, result.Description)
+		if result.Score >= threshold {
+			labels = append(labels, result.Description)
+		}
 	}
 	metadata := map[string]interface{}{
 		"image_name":     image.Title,

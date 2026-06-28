@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
+const VISION_LABEL_SCORE_THRESHOLD = 0.75
+
 type AgentImageRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 }
@@ -72,7 +74,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		return res, err
 	}
 
-	imageMetadata, err := formatImageLabels(img)
+	imageMetadata, err := formatImageLabels(img, VISION_LABEL_SCORE_THRESHOLD)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

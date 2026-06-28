@@ -18,7 +18,7 @@ func TestFormatImageLabels_CorrectOutput(t *testing.T) {
 	require.NoError(t, err)
 	img := &domain.Image{Title: "sunset.jpg", AILabels: rawLabels}
 
-	result, err := formatImageLabels(img)
+	result, err := formatImageLabels(img, 0.9)
 
 	require.NoError(t, err)
 	var out map[string]any
