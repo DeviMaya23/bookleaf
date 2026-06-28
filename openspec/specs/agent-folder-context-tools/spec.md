@@ -52,8 +52,8 @@ The response SHALL include:
 
 ---
 
-### Requirement: get_folder_image_samples returns the 5 oldest images in a folder
-The system SHALL provide a `get_folder_image_samples` agent tool that, given a `folder_id`, returns metadata for up to 5 images sorted by `created_at ASC`.
+### Requirement: get_folder_image_samples returns the 5 newest images in a folder
+The system SHALL provide a `get_folder_image_samples` agent tool that, given a `folder_id`, returns metadata for up to 5 images sorted by `created_at DESC`.
 
 Each image entry in the response SHALL include:
 - `image_name`: the image's title
@@ -63,7 +63,7 @@ Each image entry in the response SHALL include:
 
 #### Scenario: Folder with more than 5 images returns only 5
 - **WHEN** the tool is called with a folder containing more than 5 images
-- **THEN** exactly 5 image entries are returned, corresponding to the 5 with the earliest `created_at`
+- **THEN** exactly 5 image entries are returned, corresponding to the 5 with the latest `created_at`
 
 #### Scenario: Folder with fewer than 5 images returns all
 - **WHEN** the tool is called with a folder containing fewer than 5 images
