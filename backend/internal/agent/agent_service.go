@@ -12,8 +12,11 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
+const VISION_LABEL_SCORE_THRESHOLD = 0.75
+
 type AgentImageRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
+	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 }
 
 type AgentFolderRepository interface {
@@ -45,6 +48,25 @@ func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepos
 	}
 }
 
+//nolint:unused
+func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	return formatFolderTopLabels(folderID, images, VISION_LABEL_SCORE_THRESHOLD)
+}
+
+//nolint:unused
+func (a *AgentService) getFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+	direction := "asc"
+	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, &direction)
+	if err != nil {
+		return "", err
+	}
+	return formatFolderImageSamples(images, VISION_LABEL_SCORE_THRESHOLD)
+}
+
 func (a *AgentService) listFolders(ctx context.Context, userID string) (string, error) {
 	folders, err := a.folderRepo.List(ctx, userID)
 	if err != nil {
@@ -72,7 +94,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		return res, err
 	}
 
-	imageMetadata, err := formatImageLabels(img)
+	imageMetadata, err := formatImageLabels(img, VISION_LABEL_SCORE_THRESHOLD)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

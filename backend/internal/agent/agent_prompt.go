@@ -10,6 +10,32 @@ If no existing folder is a good fit, call submit_new_folder with a suggested fol
 Always provide your reasoning when calling either tool.`
 
 var folderSuggestionToolParams = []anthropic.ToolParam{
+	// {
+	// 	Name:        "get_folder_top_labels",
+	// 	Description: anthropic.String("Get aggregated vision labels and user tags for all images in a folder."),
+	// 	InputSchema: anthropic.ToolInputSchemaParam{
+	// 		Properties: map[string]any{
+	// 			"folder_id": map[string]any{
+	// 				"type":        "string",
+	// 				"description": "The ID of the folder to aggregate labels for.",
+	// 			},
+	// 		},
+	// 		Required: []string{"folder_id"},
+	// 	},
+	// },
+	// {
+	// 	Name:        "get_folder_image_samples",
+	// 	Description: anthropic.String("Get metadata for up to 5 of the oldest images in a folder."),
+	// 	InputSchema: anthropic.ToolInputSchemaParam{
+	// 		Properties: map[string]any{
+	// 			"folder_id": map[string]any{
+	// 				"type":        "string",
+	// 				"description": "The ID of the folder to sample images from.",
+	// 			},
+	// 		},
+	// 		Required: []string{"folder_id"},
+	// 	},
+	// },
 	{
 		Name:        "get_folder_list",
 		Description: anthropic.String("Get a list of all folders belonging to the current user."),
