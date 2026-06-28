@@ -9,6 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
+	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/devi/bookleaf/internal/agent"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
@@ -245,6 +249,16 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewAccountKindeDeletionWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
+
+	if cfg.AnthropicAPIKey != "" {
+		aiClient := anthropic.NewClient(
+			anthropicOption.WithAPIKey(cfg.AnthropicAPIKey),
+		)
+		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
+		categorisationLogRepo := repository.NewCategorisationLogRepository(db)
+		categorisationUsecase := usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, categorisationLogRepo, tel)
+		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase))
+	}
 
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
