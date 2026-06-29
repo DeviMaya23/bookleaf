@@ -65,7 +65,7 @@ func TestFormatFolderTopLabels_CorrectTopCounts(t *testing.T) {
 		},
 	}
 
-	result, err := formatFolderTopLabels(folderID, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -90,7 +90,7 @@ func TestFormatFolderTopLabels_BelowThresholdExcluded(t *testing.T) {
 		},
 	}
 
-	result, err := formatFolderTopLabels(folderID, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -111,7 +111,7 @@ func TestFormatFolderTopLabels_FewerThan5LabelsReturnsAllAvailable(t *testing.T)
 		},
 	}
 
-	result, err := formatFolderTopLabels(folderID, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -123,7 +123,7 @@ func TestFormatFolderTopLabels_FewerThan5LabelsReturnsAllAvailable(t *testing.T)
 func TestFormatFolderTopLabels_NoImagesReturnsZeroCounts(t *testing.T) {
 	folderID := uuid.New()
 
-	result, err := formatFolderTopLabels(folderID, []*domain.Image{}, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, []*domain.Image{}, 0.75)
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -131,6 +131,20 @@ func TestFormatFolderTopLabels_NoImagesReturnsZeroCounts(t *testing.T) {
 	assert.Equal(t, float64(0), out["image_count"])
 	assert.Empty(t, out["top_vision_labels"].([]any))
 	assert.Empty(t, out["top_user_tags"].([]any))
+}
+
+func TestFormatFolderTopLabels_IncludesFolderNameAndDescription(t *testing.T) {
+	folderID := uuid.New()
+	desc := "mood shots"
+	folder := &domain.Folder{ID: folderID, Name: "Photography", Description: &desc}
+
+	result, err := formatFolderTopLabels(folderID, folder, []*domain.Image{}, 0.75)
+
+	require.NoError(t, err)
+	var out map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result), &out))
+	assert.Equal(t, "Photography", out["folder_name"])
+	assert.Equal(t, "mood shots", out["folder_description"])
 }
 
 func TestFormatFolderImageSamples_MoreThan5ReturnsOnly5(t *testing.T) {

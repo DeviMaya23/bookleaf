@@ -3,44 +3,39 @@ package agent
 import "github.com/anthropics/anthropic-sdk-go"
 
 const folderSuggestionSystemPrompt = `You are helping a user organize images into folders in their personal image reference library.
-You will be given an image's metadata (name and visual labels). Use the get_folder_list tool to see the user's existing folders, including each folder's name, description, and full path.
-Decide whether an existing folder is a good fit for the image, using the folder's description and path — not just its name, since names alone are often too generic.
-If an existing folder fits well, call submit_existing_folder with that folder's ID.
-If no existing folder is a good fit, call submit_new_folder with a suggested folder name, and optionally a parent folder ID if it should be a subfolder of an existing one. Do not force a poor match just to avoid creating a new folder.
+You will be given an image's metadata (name and visual labels) and a list of user's existing folders, including each folder's name, description, and full path.
+Decide whether an existing folder is a good fit for the image, or if a new folder should be created.
+If the folder names and descriptions give you enough confidence to decide, call submit_existing_folder or submit_new_folder directly.
+If you are uncertain between two or more folders, or a folder's description is missing or too vague to judge, you may call get_folder_top_labels on a specific candidate folder to see its most common labels and tags.
+If the aggregated summary still isn't enough to decide — for example, if you want to see what specific images already exist in a folder — you may call get_folder_image_samples on that folder to see a few example images directly.
+Use these tools only on folders you are genuinely considering, not on every folder in the list.
 Always provide your reasoning when calling either tool.`
 
 var folderSuggestionToolParams = []anthropic.ToolParam{
-	// {
-	// 	Name:        "get_folder_top_labels",
-	// 	Description: anthropic.String("Get aggregated vision labels and user tags for all images in a folder."),
-	// 	InputSchema: anthropic.ToolInputSchemaParam{
-	// 		Properties: map[string]any{
-	// 			"folder_id": map[string]any{
-	// 				"type":        "string",
-	// 				"description": "The ID of the folder to aggregate labels for.",
-	// 			},
-	// 		},
-	// 		Required: []string{"folder_id"},
-	// 	},
-	// },
-	// {
-	// 	Name:        "get_folder_image_samples",
-	// 	Description: anthropic.String("Get metadata for up to 5 of the oldest images in a folder."),
-	// 	InputSchema: anthropic.ToolInputSchemaParam{
-	// 		Properties: map[string]any{
-	// 			"folder_id": map[string]any{
-	// 				"type":        "string",
-	// 				"description": "The ID of the folder to sample images from.",
-	// 			},
-	// 		},
-	// 		Required: []string{"folder_id"},
-	// 	},
-	// },
 	{
-		Name:        "get_folder_list",
-		Description: anthropic.String("Get a list of all folders belonging to the current user."),
+		Name:        "get_folder_top_labels",
+		Description: anthropic.String("Get aggregated vision labels and user tags for all images in a folder."),
 		InputSchema: anthropic.ToolInputSchemaParam{
-			Properties: map[string]any{},
+			Properties: map[string]any{
+				"folder_id": map[string]any{
+					"type":        "string",
+					"description": "The ID of the folder to aggregate labels for.",
+				},
+			},
+			Required: []string{"folder_id"},
+		},
+	},
+	{
+		Name:        "get_folder_image_samples",
+		Description: anthropic.String("Get metadata for up to 5 of the newest images in a folder."),
+		InputSchema: anthropic.ToolInputSchemaParam{
+			Properties: map[string]any{
+				"folder_id": map[string]any{
+					"type":        "string",
+					"description": "The ID of the folder to sample images from.",
+				},
+			},
+			Required: []string{"folder_id"},
 		},
 	},
 	{
