@@ -40,3 +40,6 @@ ext-build:
 
 ext-build-prod:
 	@cd extensions && npm run build:chrome:prod && npm run build:firefox:prod
+update-clearurls:
+	@curl -fsSL https://rules2.clearurls.xyz/data.min.json -o extensions/vendor/clearurls-data.min.json
+	@jq '{providers: {google: .providers.google, duckduckgo: .providers.duckduckgo, twitter: .providers.twitter, instagram: .providers.instagram, facebook: .providers.facebook, reddit: .providers.reddit}}' extensions/vendor/clearurls-data.min.json > extensions/src/lib/clearUrlsProviders.json
