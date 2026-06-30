@@ -4,6 +4,7 @@ import { getDragEnabled, setDragEnabled } from "../lib/storage";
 import type { Colors } from "./App";
 
 const SNIP_COMMAND_NAME = "snip-capture";
+const BROWSE_IMAGES_COMMAND_NAME = "browse-images";
 const CHROME_SHORTCUTS_URL = "chrome://extensions/shortcuts";
 
 export const isFirefox =
@@ -74,12 +75,15 @@ export default function Settings({
 }) {
   const [dragEnabled, setDragEnabledState] = useState(true);
   const [shortcut, setShortcut] = useState("");
+  const [browseShortcut, setBrowseShortcut] = useState("");
 
   useEffect(() => {
     getDragEnabled().then(setDragEnabledState);
     browser.commands.getAll().then((commands) => {
       const snip = commands.find((command) => command.name === SNIP_COMMAND_NAME);
       setShortcut(snip?.shortcut ?? "");
+      const browse = commands.find((command) => command.name === BROWSE_IMAGES_COMMAND_NAME);
+      setBrowseShortcut(browse?.shortcut ?? "");
     });
   }, []);
 
@@ -192,6 +196,7 @@ export default function Settings({
           display: "flex",
           alignItems: "center",
           padding: "0 14px",
+          borderBottom: `1px solid ${c.divider}`,
           gap: 10,
         }}
       >
@@ -209,6 +214,33 @@ export default function Settings({
           }}
         >
           {shortcut || "Not set"}
+        </button>
+      </div>
+
+      {/* Browse images hotkey row */}
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 14px",
+          gap: 10,
+        }}
+      >
+        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Browse images hotkey</span>
+        <button
+          onClick={handleChangeClick}
+          style={{
+            fontSize: 12,
+            color: c.textSec,
+            background: "transparent",
+            border: `1px solid ${c.border}`,
+            borderRadius: 6,
+            padding: "4px 9px",
+            cursor: "pointer",
+          }}
+        >
+          {browseShortcut || "Not set"}
         </button>
       </div>
     </div>
