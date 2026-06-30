@@ -4,6 +4,7 @@ import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
 import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
 import { linkOnlyCardUrlPatterns } from "../lib/cardDomResolveRules";
+import { cleanUrl } from "../lib/urlCleaner";
 
 browser.action.setBadgeText({ text: "" });
 
@@ -464,7 +465,7 @@ export async function handleSave({
       return;
     }
 
-    await persistImage({ ...fetched, title, pageUrl, tabId, silent });
+    await persistImage({ ...fetched, title, pageUrl: cleanUrl(pageUrl), tabId, silent });
   } finally {
     activeSaves--;
     updateBadge();
