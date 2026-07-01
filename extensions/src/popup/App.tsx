@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
-import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
-import { login } from "../lib/auth";
+import { LayoutGrid, Moon, Scissors, Settings as SettingsIcon, Sun } from "lucide-react";
+import { logout } from "../lib/auth";
 import {
   clearAuth,
   getAuth,
@@ -78,14 +78,26 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    function onAuthChanged(changes: Record<string, browser.Storage.StorageChange>) {
+      const authChange = changes["bookleaf_auth"];
+      if (!authChange?.newValue) return;
+      const auth = authChange.newValue as { expiresAt: number };
+      if (Date.now() >= auth.expiresAt) return;
+      setAuthState("authenticated");
+      Promise.all([getUsername(), getAvatar()]).then(([name, pic]) => {
+        setUsername(name);
+        setAvatar(pic);
+      });
+    }
+    browser.storage.onChanged.addListener(onAuthChanged);
+    return () => browser.storage.onChanged.removeListener(onAuthChanged);
+  }, []);
+
   async function handleLogin() {
     setError(null);
     try {
-      await login();
-      const [auth, name, pic] = await Promise.all([getAuth(), getUsername(), getAvatar()]);
-      setAuthState(auth ? "authenticated" : "unauthenticated");
-      setUsername(name);
-      setAvatar(pic);
+      await browser.runtime.sendMessage({ type: "start-login" });
     } catch {
       setError("Login failed. Please try again.");
     }
@@ -94,6 +106,7 @@ export default function App() {
   async function handleLogout() {
     await clearAuth();
     setAuthState("unauthenticated");
+    void logout();
   }
 
   async function handleToggleDark() {
@@ -129,8 +142,19 @@ export default function App() {
         isDark={isDark}
         onToggleDark={handleToggleDark}
         onBack={() => setView("main")}
+        onLogout={handleLogout}
       />
     );
+  }
+
+  async function handleSnip() {
+    await browser.runtime.sendMessage({ type: "trigger-snip" });
+    window.close();
+  }
+
+  async function handleImagePicker() {
+    await browser.runtime.sendMessage({ type: "trigger-image-picker" });
+    window.close();
   }
 
   return (
@@ -144,7 +168,8 @@ export default function App() {
       onOpen={handleOpen}
       onOpenSettings={() => setView("settings")}
       onViewAll={handleViewAll}
-      onLogout={handleLogout}
+      onSnip={handleSnip}
+      onImagePicker={handleImagePicker}
     />
   );
 }
@@ -178,7 +203,12 @@ function LoggedOut({
         </button>
         <div style={s.signupLine}>
           New here?{" "}
-          <span style={s.signupLink}>Sign up free</span>
+          <span
+            style={s.signupLink}
+            onClick={() => browser.tabs.create({ url: import.meta.env.VITE_APP_URL })}
+          >
+            Sign up free
+          </span>
         </div>
       </div>
     </div>
@@ -195,7 +225,8 @@ function LoggedIn({
   onOpen,
   onOpenSettings,
   onViewAll,
-  onLogout,
+  onSnip,
+  onImagePicker,
 }: {
   c: Colors;
   isDark: boolean;
@@ -206,7 +237,8 @@ function LoggedIn({
   onOpen: () => void;
   onOpenSettings: () => void;
   onViewAll: () => void;
-  onLogout: () => void;
+  onSnip: () => void;
+  onImagePicker: () => void;
 }) {
   return (
     <div
@@ -447,22 +479,46 @@ function LoggedIn({
           padding: "8px 14px 12px",
           borderTop: `1px solid ${c.divider}`,
           display: "flex",
-          justifyContent: "flex-end",
+          gap: 6,
         }}
       >
         <button
-          onClick={onLogout}
+          onClick={onSnip}
+          title="Snip"
           style={{
-            fontSize: 12,
-            color: c.textSec,
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 30,
+            borderRadius: 6,
+            border: `1px solid ${c.border}`,
             background: "transparent",
-            border: "none",
+            color: c.textSec,
             cursor: "pointer",
             padding: 0,
-            letterSpacing: "-0.01em",
           }}
         >
-          Log out
+          <Scissors size={14} />
+        </button>
+        <button
+          onClick={onImagePicker}
+          title="Batch Save"
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 30,
+            borderRadius: 6,
+            border: `1px solid ${c.border}`,
+            background: "transparent",
+            color: c.textSec,
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <LayoutGrid size={14} />
         </button>
       </div>
     </div>

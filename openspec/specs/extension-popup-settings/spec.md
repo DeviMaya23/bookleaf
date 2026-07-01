@@ -96,16 +96,48 @@ On Chrome, where the `commands` API provides no way for an extension to set its 
 - **AND** no in-popup key-capture UI is shown
 - **AND** `browser.commands.update` is never called
 
-### Requirement: Browse images hotkey display
+### Requirement: Hotkeys section
 
-The Settings view SHALL display the `browse-images` command's currently configured keyboard shortcut in a dedicated row below the snip hotkey row. The row SHALL follow the same visual pattern as the snip hotkey row: a label on the left (`"Browse images hotkey"`) and a clickable button on the right showing the current shortcut value (or `"Not set"` if unassigned). Clicking the button SHALL invoke the same browser shortcut settings navigation as the snip hotkey control (Firefox: `browser.commands.openShortcutSettings()`; Chrome: open `chrome://extensions/shortcuts`). Both shortcuts SHALL be fetched in the same `browser.commands.getAll()` call that already retrieves the snip command.
+The Settings view SHALL display a "Hotkeys" section header between the toggle rows and the hotkey rows. The header SHALL use the same visual style as the "Recently Saved" label in the main view: `10px`, `font-weight 600`, `letter-spacing 0.07em`, uppercase, secondary text colour. A section separator SHALL appear above the header and above the Logout row. No row dividers SHALL appear between individual rows within a section.
 
-#### Scenario: Browse images shortcut is shown in Settings
+The Hotkeys section SHALL contain two rows:
+
+- **Snip** — displays the snip command's current shortcut (or `"Not set"`)
+- **Batch Save** — displays the `browse-images` command's current shortcut (or `"Not set"`)
+
+Both rows SHALL follow the same pattern: label on the left, clickable button on the right. Clicking either button SHALL open the browser's shortcut settings (Firefox: `browser.commands.openShortcutSettings()`; Chrome: `chrome://extensions/shortcuts`). Both shortcuts SHALL be fetched in the same `browser.commands.getAll()` call.
+
+#### Scenario: Hotkeys section is shown with section header
 
 - **WHEN** the Settings view is opened
-- **THEN** a row labeled `"Browse images hotkey"` displays the currently configured shortcut for the `browse-images` command (e.g. `"Alt+Shift+I"`)
+- **THEN** a "HOTKEYS" section header is displayed above the Snip and Batch Save rows
+- **AND** a separator appears above the header
 
-#### Scenario: Clicking the browse images hotkey control opens shortcut settings
+#### Scenario: Snip shortcut is shown
 
-- **WHEN** the user clicks the browse images hotkey button
-- **THEN** the browser's shortcut settings are opened (same behavior as the snip hotkey control)
+- **WHEN** the Settings view is opened
+- **THEN** a row labeled `"Snip"` displays the currently configured shortcut for the snip command
+
+#### Scenario: Batch Save shortcut is shown
+
+- **WHEN** the Settings view is opened
+- **THEN** a row labeled `"Batch Save"` displays the currently configured shortcut for the `browse-images` command (e.g. `"Alt+Shift+I"`)
+
+#### Scenario: Clicking a hotkey button opens shortcut settings
+
+- **WHEN** the user clicks either hotkey button
+- **THEN** the browser's shortcut settings are opened
+
+### Requirement: Log out row in Settings
+
+The Settings view SHALL display a "Log out" row at the bottom, below all toggle and hotkey rows. The row SHALL render the text "Log out" in red, right-aligned. Clicking it SHALL call `clearAuth()` and transition the popup to the logged-out state. The Settings view SHALL accept an `onLogout` prop wired to the same `handleLogout` handler used previously by the main view's footer.
+
+#### Scenario: Log out row is visible at the bottom of Settings
+
+- **WHEN** the user opens the Settings view
+- **THEN** a "Log out" row is displayed below the hotkey rows, with red right-aligned text
+
+#### Scenario: Clicking Log out clears auth and transitions to logged-out state
+
+- **WHEN** the user clicks "Log out" in the Settings view
+- **THEN** `clearAuth()` is called and the popup transitions to the logged-out state

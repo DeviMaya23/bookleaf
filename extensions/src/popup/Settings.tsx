@@ -67,11 +67,13 @@ export default function Settings({
   isDark,
   onToggleDark,
   onBack,
+  onLogout,
 }: {
   c: Colors;
   isDark: boolean;
   onToggleDark: () => void;
   onBack: () => void;
+  onLogout: () => void;
 }) {
   const [dragEnabled, setDragEnabledState] = useState(true);
   const [shortcut, setShortcut] = useState("");
@@ -161,7 +163,6 @@ export default function Settings({
           display: "flex",
           alignItems: "center",
           padding: "0 14px",
-          borderBottom: `1px solid ${c.divider}`,
           gap: 10,
         }}
       >
@@ -181,12 +182,31 @@ export default function Settings({
           display: "flex",
           alignItems: "center",
           padding: "0 14px",
-          borderBottom: `1px solid ${c.divider}`,
           gap: 10,
         }}
       >
         <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Drag to save</span>
         <Switch c={c} checked={dragEnabled} onChange={handleToggleDrag} />
+      </div>
+
+      {/* Hotkeys section header */}
+      <div
+        style={{
+          padding: "10px 14px 4px",
+          borderTop: `1px solid ${c.border}`,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: c.textSec,
+          }}
+        >
+          Hotkeys
+        </span>
       </div>
 
       {/* Snip hotkey row */}
@@ -196,11 +216,10 @@ export default function Settings({
           display: "flex",
           alignItems: "center",
           padding: "0 14px",
-          borderBottom: `1px solid ${c.divider}`,
           gap: 10,
         }}
       >
-        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Snip hotkey</span>
+        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Snip</span>
         <button
           onClick={handleChangeClick}
           style={{
@@ -217,7 +236,7 @@ export default function Settings({
         </button>
       </div>
 
-      {/* Browse images hotkey row */}
+      {/* Batch Save hotkey row */}
       <div
         style={{
           height: 48,
@@ -227,7 +246,7 @@ export default function Settings({
           gap: 10,
         }}
       >
-        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Browse images hotkey</span>
+        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Batch Save</span>
         <button
           onClick={handleChangeClick}
           style={{
@@ -241,6 +260,33 @@ export default function Settings({
           }}
         >
           {browseShortcut || "Not set"}
+        </button>
+      </div>
+
+      {/* Log out row */}
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          padding: "0 14px",
+          borderTop: `1px solid ${c.border}`,
+        }}
+      >
+        <button
+          onClick={onLogout}
+          style={{
+            fontSize: 12,
+            color: "#e53e3e",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Log out
         </button>
       </div>
     </div>
