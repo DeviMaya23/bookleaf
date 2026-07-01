@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
-import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
+import { LayoutGrid, Moon, Scissors, Settings as SettingsIcon, Sun } from "lucide-react";
 import { login } from "../lib/auth";
 import {
   clearAuth,
@@ -129,8 +129,19 @@ export default function App() {
         isDark={isDark}
         onToggleDark={handleToggleDark}
         onBack={() => setView("main")}
+        onLogout={handleLogout}
       />
     );
+  }
+
+  async function handleSnip() {
+    await browser.runtime.sendMessage({ type: "trigger-snip" });
+    window.close();
+  }
+
+  async function handleImagePicker() {
+    await browser.runtime.sendMessage({ type: "trigger-image-picker" });
+    window.close();
   }
 
   return (
@@ -144,7 +155,8 @@ export default function App() {
       onOpen={handleOpen}
       onOpenSettings={() => setView("settings")}
       onViewAll={handleViewAll}
-      onLogout={handleLogout}
+      onSnip={handleSnip}
+      onImagePicker={handleImagePicker}
     />
   );
 }
@@ -195,7 +207,8 @@ function LoggedIn({
   onOpen,
   onOpenSettings,
   onViewAll,
-  onLogout,
+  onSnip,
+  onImagePicker,
 }: {
   c: Colors;
   isDark: boolean;
@@ -206,7 +219,8 @@ function LoggedIn({
   onOpen: () => void;
   onOpenSettings: () => void;
   onViewAll: () => void;
-  onLogout: () => void;
+  onSnip: () => void;
+  onImagePicker: () => void;
 }) {
   return (
     <div
@@ -447,22 +461,46 @@ function LoggedIn({
           padding: "8px 14px 12px",
           borderTop: `1px solid ${c.divider}`,
           display: "flex",
-          justifyContent: "flex-end",
+          gap: 6,
         }}
       >
         <button
-          onClick={onLogout}
+          onClick={onSnip}
+          title="Snip"
           style={{
-            fontSize: 12,
-            color: c.textSec,
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 30,
+            borderRadius: 6,
+            border: `1px solid ${c.border}`,
             background: "transparent",
-            border: "none",
+            color: c.textSec,
             cursor: "pointer",
             padding: 0,
-            letterSpacing: "-0.01em",
           }}
         >
-          Log out
+          <Scissors size={14} />
+        </button>
+        <button
+          onClick={onImagePicker}
+          title="Pick images"
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: 30,
+            borderRadius: 6,
+            border: `1px solid ${c.border}`,
+            background: "transparent",
+            color: c.textSec,
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <LayoutGrid size={14} />
         </button>
       </div>
     </div>

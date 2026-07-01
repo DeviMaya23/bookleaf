@@ -67,11 +67,13 @@ export default function Settings({
   isDark,
   onToggleDark,
   onBack,
+  onLogout,
 }: {
   c: Colors;
   isDark: boolean;
   onToggleDark: () => void;
   onBack: () => void;
+  onLogout: () => void;
 }) {
   const [dragEnabled, setDragEnabledState] = useState(true);
   const [shortcut, setShortcut] = useState("");
@@ -224,6 +226,7 @@ export default function Settings({
           display: "flex",
           alignItems: "center",
           padding: "0 14px",
+          borderBottom: `1px solid ${c.divider}`,
           gap: 10,
         }}
       >
@@ -241,6 +244,32 @@ export default function Settings({
           }}
         >
           {browseShortcut || "Not set"}
+        </button>
+      </div>
+
+      {/* Log out row */}
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          padding: "0 14px",
+        }}
+      >
+        <button
+          onClick={onLogout}
+          style={{
+            fontSize: 12,
+            color: "#e53e3e",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Log out
         </button>
       </div>
     </div>

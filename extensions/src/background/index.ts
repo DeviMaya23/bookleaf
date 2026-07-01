@@ -148,6 +148,33 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
     return;
   }
 
+  if (msg.type === "trigger-snip") {
+    void (async () => {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id === undefined) return;
+      try {
+        const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId);
+        await browser.tabs.sendMessage(tab.id, { type: "snip-frame", dataUrl });
+      } catch {
+        // restricted page or no content script — no-op
+      }
+    })();
+    return;
+  }
+
+  if (msg.type === "trigger-image-picker") {
+    void (async () => {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id === undefined) return;
+      try {
+        await browser.tabs.sendMessage(tab.id, { type: "open-image-picker" });
+      } catch {
+        // restricted page or no content script — no-op
+      }
+    })();
+    return;
+  }
+
   if (!msg.resolved || sender.tab?.id === undefined) return;
   resolvedContextByTab.set(sender.tab.id, msg.resolved);
 });
