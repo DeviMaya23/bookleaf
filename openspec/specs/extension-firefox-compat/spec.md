@@ -17,8 +17,9 @@ The Firefox build SHALL transform the manifest via `vite.config.ts`:
   - `firefox` (dev) → `"bookleaf-dev@evimay.me"`
   - `firefox-production` (prod) → `"bookleaf@evimay.me"`
 - Convert `background.service_worker` to `background.scripts` (array containing the same path), removing `background.type`
+- When the build mode is `firefox-production`, additionally inject `browser_specific_settings.gecko.update_url` set to the fixed, hardcoded URL of the hosted Firefox `bookleaf-extension-updates.json`. This field SHALL NOT be injected for the `firefox` (dev) build mode.
 
-Neither transformation SHALL appear in the Chrome build.
+Neither the gecko/background transformation nor the production-only `update_url` injection SHALL appear in the Chrome build, in dev or production mode.
 
 #### Scenario: Dev Firefox build produces a manifest with the dev gecko ID
 
@@ -39,6 +40,21 @@ Neither transformation SHALL appear in the Chrome build.
 - **WHEN** `npm run build` is run
 - **THEN** the output at `dist/chrome/manifest.json` does not contain `browser_specific_settings`
 - **AND** `dist/chrome/manifest.json` contains `background.service_worker`
+
+#### Scenario: Production Firefox build includes the update_url field
+
+- **WHEN** `npm run build:firefox:prod` is run
+- **THEN** the output at `dist/firefox/manifest.json` contains `browser_specific_settings.gecko.update_url` set to the hosted `updates.json` URL
+
+#### Scenario: Dev Firefox build does not include the update_url field
+
+- **WHEN** `npm run build:firefox` is run
+- **THEN** the output at `dist/firefox/manifest.json` does not contain `browser_specific_settings.gecko.update_url`
+
+#### Scenario: Chrome build never includes the update_url field
+
+- **WHEN** `npm run build` or `npm run build:chrome:prod` is run
+- **THEN** the output manifest does not contain `browser_specific_settings`
 
 ### Requirement: Context menu registers on both browsers via polyfill
 
