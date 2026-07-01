@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
+import { login } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
 import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
@@ -128,6 +129,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
     resolved?: Partial<{ srcUrl: string; title: string }>;
   };
 
+  if (msg.type === "start-login") {
+    void login();
+    return;
+  }
+
   if (msg.type === "drag-save") {
     handleDragSaveMessage(message as DragSaveMessage, sender.tab);
     return;
@@ -145,6 +151,33 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
 
   if (msg.type === "picker-save") {
     void handlePickerSaveMessage(message as PickerSaveMessage, sender.tab);
+    return;
+  }
+
+  if (msg.type === "trigger-snip") {
+    void (async () => {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id === undefined) return;
+      try {
+        const dataUrl = await browser.tabs.captureVisibleTab(tab.windowId);
+        await browser.tabs.sendMessage(tab.id, { type: "snip-frame", dataUrl });
+      } catch {
+        // restricted page or no content script — no-op
+      }
+    })();
+    return;
+  }
+
+  if (msg.type === "trigger-image-picker") {
+    void (async () => {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id === undefined) return;
+      try {
+        await browser.tabs.sendMessage(tab.id, { type: "open-image-picker" });
+      } catch {
+        // restricted page or no content script — no-op
+      }
+    })();
     return;
   }
 

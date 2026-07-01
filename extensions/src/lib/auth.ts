@@ -105,6 +105,17 @@ export async function exchangeCodeForTokens(
   return { auth, idToken: json.id_token ?? null };
 }
 
+export async function logout(): Promise<void> {
+  const issuerUrl = import.meta.env.VITE_KINDE_ISSUER_URL;
+  const redirectUri = getRedirectUri();
+  const logoutUrl = `${issuerUrl}/logout?redirect=${encodeURIComponent(redirectUri)}`;
+  try {
+    await browser.identity.launchWebAuthFlow({ url: logoutUrl, interactive: false });
+  } catch {
+    // best-effort — ignore if Kinde doesn't redirect back to extension URI
+  }
+}
+
 export async function login(): Promise<void> {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
