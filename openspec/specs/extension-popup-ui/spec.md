@@ -22,7 +22,7 @@ The popup SHALL be 320px wide. The `index.html` body width SHALL be updated from
 When no valid auth token exists, the popup SHALL render a branded logged-out layout containing:
 - A header with the extension icon (`icons/icon48.png`, 16px) and the "Bookleaf" wordmark
 - A centered body with a large dimmed icon, a tagline ("Save images to your Bookleaf collection as you browse the web."), and a full-width dark CTA button labelled "Log in to Bookleaf"
-- A footer line: "New here? Sign up free" (the "Sign up free" text is a non-functional placeholder link in this iteration)
+- A footer line: "New here? Sign up free" (the "Sign up free" text is a link that opens `VITE_APP_URL` in a new tab)
 
 #### Scenario: Logged-out state renders when no auth token is stored
 
@@ -32,7 +32,8 @@ When no valid auth token exists, the popup SHALL render a branded logged-out lay
 #### Scenario: Login button triggers auth flow
 
 - **WHEN** the user clicks "Log in to Bookleaf"
-- **THEN** the existing `login()` flow is invoked and the popup transitions to the logged-in state on success
+- **THEN** a `{ type: "start-login" }` message is sent to the background script, which runs the OAuth flow and writes auth to storage
+- **AND** the popup transitions to the logged-in state when `browser.storage.onChanged` fires with a valid `bookleaf_auth` entry
 
 #### Scenario: Login failure shows error
 
@@ -47,7 +48,7 @@ When a valid auth token exists, the popup SHALL render:
 - A header with the extension icon, the "Bookleaf" wordmark, and an "Open ↗" button that opens the Bookleaf web app URL (`VITE_APP_URL`) in a new tab
 - A user row with an avatar (`<img>` using stored `bookleaf_avatar` URL if available, otherwise a gradient placeholder div), the stored username, and a dark/light mode toggle icon button
 - A "Recently Saved" section (see `extension-recent-saves` spec for data source)
-- A footer with two icon buttons: a `Scissors` icon (title `"Snip"`) and a `LayoutGrid` icon (title `"Pick images"`). The footer SHALL NOT contain a "Log out" button.
+- A footer with two icon buttons: a `Scissors` icon (title `"Snip"`) and a `LayoutGrid` icon (title `"Batch Save"`). The footer SHALL NOT contain a "Log out" button.
 
 #### Scenario: Logged-in state renders when valid auth token is stored
 
@@ -65,9 +66,9 @@ When a valid auth token exists, the popup SHALL render:
 - **THEN** `browser.runtime.sendMessage({ type: "trigger-snip" })` is sent to the background
 - **AND** `window.close()` is called to dismiss the popup
 
-#### Scenario: Image picker button sends trigger message and closes popup
+#### Scenario: Batch Save button sends trigger message and closes popup
 
-- **WHEN** the user clicks the LayoutGrid icon button in the footer
+- **WHEN** the user clicks the LayoutGrid icon button (title `"Batch Save"`) in the footer
 - **THEN** `browser.runtime.sendMessage({ type: "trigger-image-picker" })` is sent to the background
 - **AND** `window.close()` is called to dismiss the popup
 

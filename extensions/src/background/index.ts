@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
+import { login } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
 import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
@@ -127,6 +128,11 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
     type?: string;
     resolved?: Partial<{ srcUrl: string; title: string }>;
   };
+
+  if (msg.type === "start-login") {
+    void login();
+    return;
+  }
 
   if (msg.type === "drag-save") {
     handleDragSaveMessage(message as DragSaveMessage, sender.tab);

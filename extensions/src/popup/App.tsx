@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
 import { LayoutGrid, Moon, Scissors, Settings as SettingsIcon, Sun } from "lucide-react";
-import { login } from "../lib/auth";
+import { logout } from "../lib/auth";
 import {
   clearAuth,
   getAuth,
@@ -78,14 +78,26 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    function onAuthChanged(changes: Record<string, browser.Storage.StorageChange>) {
+      const authChange = changes["bookleaf_auth"];
+      if (!authChange?.newValue) return;
+      const auth = authChange.newValue as { expiresAt: number };
+      if (Date.now() >= auth.expiresAt) return;
+      setAuthState("authenticated");
+      Promise.all([getUsername(), getAvatar()]).then(([name, pic]) => {
+        setUsername(name);
+        setAvatar(pic);
+      });
+    }
+    browser.storage.onChanged.addListener(onAuthChanged);
+    return () => browser.storage.onChanged.removeListener(onAuthChanged);
+  }, []);
+
   async function handleLogin() {
     setError(null);
     try {
-      await login();
-      const [auth, name, pic] = await Promise.all([getAuth(), getUsername(), getAvatar()]);
-      setAuthState(auth ? "authenticated" : "unauthenticated");
-      setUsername(name);
-      setAvatar(pic);
+      await browser.runtime.sendMessage({ type: "start-login" });
     } catch {
       setError("Login failed. Please try again.");
     }
@@ -94,6 +106,7 @@ export default function App() {
   async function handleLogout() {
     await clearAuth();
     setAuthState("unauthenticated");
+    void logout();
   }
 
   async function handleToggleDark() {
@@ -190,7 +203,12 @@ function LoggedOut({
         </button>
         <div style={s.signupLine}>
           New here?{" "}
-          <span style={s.signupLink}>Sign up free</span>
+          <span
+            style={s.signupLink}
+            onClick={() => browser.tabs.create({ url: import.meta.env.VITE_APP_URL })}
+          >
+            Sign up free
+          </span>
         </div>
       </div>
     </div>
@@ -485,7 +503,7 @@ function LoggedIn({
         </button>
         <button
           onClick={onImagePicker}
-          title="Pick images"
+          title="Batch Save"
           style={{
             flex: 1,
             display: "flex",
