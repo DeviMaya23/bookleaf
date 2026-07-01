@@ -6,29 +6,35 @@ Detail panel for the selected image, rendered as a 320px sibling to the main con
 
 ### Requirement: Right panel opens when an image card is clicked
 
-The system SHALL render a 320px right panel (`RightPanel` component) as a sibling to the main content area in `AppLayout`. The panel SHALL be hidden when no image is selected. When the user clicks an image card, the panel SHALL become visible and display that image's metadata. The panel SHALL NOT be rendered while focus mode is active, even if an image is selected. The panel SHALL NOT be rendered below the `sm` breakpoint, even if an image is selected.
+The system SHALL render the right panel (`RightPanel` component) when an image is selected. On fine-pointer devices, the panel SHALL render as a 320px sidebar, a sibling to the main content area in `AppLayout`, opened by clicking an image card; this behavior is unchanged from before. On coarse-pointer devices (`useIsCoarsePointer()` is true), the panel SHALL render as a bottom drawer instead of a sidebar, and SHALL be opened via the "View details" item in the image card's context menu (per `fe-gallery-view`) rather than by tapping the card — tapping a card on a coarse-pointer device opens the lightbox instead, per `fe-image-lightbox`. The panel SHALL be hidden (not rendered in either shell) when no image is selected. The panel SHALL NOT be rendered while focus mode is active, even if an image is selected.
 
-#### Scenario: Clicking an image card opens the right panel
+#### Scenario: Clicking an image card opens the right panel as a sidebar on a fine-pointer device
 
-- **WHEN** the authenticated user clicks an image card in the gallery at or above the `sm` breakpoint
-- **THEN** the right panel becomes visible on the right side of the layout
+- **WHEN** a user on a fine-pointer device clicks an image card in the gallery
+- **THEN** the right panel becomes visible as a sidebar on the right side of the layout
 - **AND** the panel displays the selected image's metadata
+
+#### Scenario: Selecting "View details" opens the right panel as a bottom drawer on a coarse-pointer device
+
+- **WHEN** a user on a coarse-pointer device selects "View details" from an image card's context menu
+- **THEN** the right panel becomes visible as a bottom drawer
+- **AND** the panel displays the selected image's metadata
+
+#### Scenario: Tapping an image card does not open the right panel on a coarse-pointer device
+
+- **WHEN** a user on a coarse-pointer device taps an image card
+- **THEN** the right panel is not opened
+- **AND** the lightbox opens instead, per `fe-image-lightbox`
 
 #### Scenario: Panel is hidden when no image is selected
 
 - **WHEN** no image has been selected
-- **THEN** the right panel is not rendered in the layout
+- **THEN** the right panel is not rendered in either shell
 
 #### Scenario: Panel stays hidden while focus mode is active
 
 - **WHEN** focus mode is active
-- **AND** the user clicks an image card
-- **THEN** the right panel is not rendered, even though an image is now selected
-
-#### Scenario: Panel stays hidden below the breakpoint
-
-- **WHEN** the viewport width is below the `sm` breakpoint
-- **AND** the user taps an image card
+- **AND** an image becomes selected
 - **THEN** the right panel is not rendered, even though an image is now selected
 
 ---
@@ -290,32 +296,63 @@ The system SHALL render a Tags section in `RightPanel` between the Folders secti
 
 ### Requirement: Right panel opens or updates when a folder is selected
 
-The system SHALL render the right panel showing folder content (via `FolderPanelContent`) when the user selects a folder in the sidebar that differs from the currently active folder. Selecting the currently active folder again SHALL be a no-op — the panel's existing content, whatever it is currently displaying, SHALL remain unchanged. The panel SHALL NOT be rendered below the `sm` breakpoint, even if a folder is selected.
+The system SHALL render the right panel showing folder content (via `FolderPanelContent`) when the user selects a folder in the sidebar that differs from the currently active folder, on a fine-pointer device — opening the sidebar shell. On a coarse-pointer device (`useIsCoarsePointer()` is true), selecting a different folder SHALL NOT open the panel; the panel is opened for that folder only via the "View details" item in the folder's context menu, per `folder-management`. If the panel happens to already be open (e.g. left open from a previous "View details" action) when the user selects a different folder, it SHALL update to show the newly selected folder's content rather than closing, on either pointer type. Selecting the currently active folder again SHALL be a no-op — the panel's existing content, whatever it is currently displaying, SHALL remain unchanged.
 
-#### Scenario: Selecting a different folder opens or updates the panel with folder content
+#### Scenario: Selecting a different folder opens or updates the panel with folder content on a fine-pointer device
 
-- **WHEN** the authenticated user clicks a sidebar folder that is not the currently active folder, at or above the `sm` breakpoint
-- **THEN** the right panel becomes visible (or updates, if already visible)
+- **WHEN** a user on a fine-pointer device selects a sidebar folder that is not the currently active folder
+- **THEN** the right panel becomes visible (or updates, if already visible) in the sidebar shell
 - **AND** the panel displays that folder's metadata via `FolderPanelContent`
+
+#### Scenario: Selecting a different folder does not open the panel on a coarse-pointer device
+
+- **WHEN** a user on a coarse-pointer device selects a sidebar folder that is not the currently active folder
+- **AND** the right panel is not currently open
+- **THEN** the right panel remains closed
+- **AND** the panel can be opened for that folder via "View details" in the folder's context menu, per `folder-management`
+
+#### Scenario: An already-open panel updates to the newly selected folder on a coarse-pointer device
+
+- **WHEN** the right panel is open on a coarse-pointer device, showing a previously selected folder's content
+- **AND** the user selects a different folder in the sidebar
+- **THEN** the right panel updates to show the newly selected folder's metadata
+- **AND** the panel does not close
 
 #### Scenario: Re-selecting the active folder leaves the panel untouched
 
-- **WHEN** the authenticated user clicks the sidebar folder that is already active
+- **WHEN** the authenticated user selects the sidebar folder that is already active
 - **THEN** the right panel's current content remains unchanged
 - **AND** no new panel state is set
 
 #### Scenario: Re-selecting the active folder while image content is shown leaves it untouched
 
 - **WHEN** the right panel is currently showing image content
-- **AND** the authenticated user clicks the sidebar folder that is already active
+- **AND** the authenticated user selects the sidebar folder that is already active
 - **THEN** the right panel continues showing the same image content
 - **AND** the panel does not switch to folder content
 
-#### Scenario: Panel stays hidden below the breakpoint when a folder is selected
+---
 
-- **WHEN** the viewport width is below the `sm` breakpoint
-- **AND** the user selects a sidebar folder
-- **THEN** the right panel is not rendered, even though that folder is now selected
+### Requirement: Right panel renders as a bottom drawer on coarse-pointer devices
+
+On coarse-pointer devices, the system SHALL render the right panel's content (`ImagePanelBody` or `FolderPanelContent`, unchanged from the fine-pointer sidebar) inside a fixed bottom-anchored drawer with a backdrop, instead of the 320px sidebar. The drawer SHALL be binary (open/close only) — no swipe-to-dismiss or snap-point gestures. The drawer SHALL close when the user activates its close control or taps the backdrop, calling the same `onClose` callback used by the sidebar shell.
+
+#### Scenario: Right panel renders as a bottom drawer on a coarse-pointer device
+
+- **WHEN** the right panel is open on a coarse-pointer device
+- **THEN** the panel renders as a fixed bottom-anchored drawer with a backdrop
+- **AND** the panel does not render as a 320px sidebar
+
+#### Scenario: Tapping the backdrop closes the drawer
+
+- **WHEN** the bottom drawer is open
+- **AND** the user taps the backdrop
+- **THEN** the drawer closes via the same `onClose` callback the sidebar shell uses
+
+#### Scenario: Drawer content is identical to sidebar content
+
+- **WHEN** the right panel is open for a given image or folder
+- **THEN** the content rendered inside the bottom drawer (on coarse-pointer devices) is the same `ImagePanelBody`/`FolderPanelContent` component used inside the sidebar (on fine-pointer devices)
 
 ---
 
@@ -329,3 +366,86 @@ The system SHALL ensure that selecting an image card always results in the right
 - **AND** the authenticated user clicks an image card in the gallery
 - **THEN** the right panel switches to displaying that image's metadata
 - **AND** the folder content is no longer shown
+
+---
+
+### Requirement: Right panel shows a selection-actions mode when images are selected
+
+The system SHALL render the right panel in a `selection` mode whenever `selectedIds` is non-empty, regardless of whether focus mode is active. This mode SHALL take priority over the `image` and `folder` panel modes — while `selectedIds` is non-empty, the panel SHALL show selection content even if a `selectedImage` or active folder would otherwise apply. The panel SHALL be hidden when `selectedIds` is empty, the same as the existing "hidden when no image is selected" rule for the `image` mode.
+
+The selection panel SHALL display:
+- The current count of selected images.
+- An "Add to folder" action that opens a single-select folder picker; choosing a folder immediately calls `POST /images/bulk/add-to-folder` with the current `selectedIds` and the chosen folder.
+- A "Move to trash" action that immediately calls `POST /images/bulk/trash` with the current `selectedIds`, with no confirmation step.
+
+Unlike the `image`/`folder` modes, the selection panel SHALL remain visible while focus mode is active; the user dismisses it manually (e.g. via a close control) rather than it being hidden automatically.
+
+#### Scenario: Selection panel appears once at least one image is selected
+
+- **WHEN** the user is in select mode and selects one image
+- **THEN** the right panel renders in `selection` mode showing a count of 1
+
+#### Scenario: Selection panel is hidden when selection is empty
+
+- **WHEN** select mode is active but no images are currently selected
+- **THEN** the right panel is not rendered
+
+#### Scenario: Selection panel takes priority over the image panel
+
+- **WHEN** `selectedIds` is non-empty
+- **THEN** the right panel shows `selection` mode content, not `image` mode content, even if a `selectedImage` value is set
+
+#### Scenario: Selection panel stays visible during focus mode
+
+- **WHEN** focus mode is active
+- **AND** at least one image is selected
+- **THEN** the right panel remains visible in `selection` mode
+
+#### Scenario: Choosing a folder from the Add to folder picker triggers the bulk request
+
+- **WHEN** the user has 3 images selected and picks a folder from the "Add to folder" picker
+- **THEN** the app calls `POST /images/bulk/add-to-folder` with `image_ids` containing the 3 selected IDs and the chosen `folder_id`
+
+#### Scenario: Move to trash triggers the bulk request immediately
+
+- **WHEN** the user has 3 images selected and clicks "Move to trash"
+- **THEN** the app calls `POST /images/bulk/trash` with `image_ids` containing the 3 selected IDs, without any confirmation dialog
+
+#### Scenario: A successful bulk action exits select mode entirely
+
+- **WHEN** a bulk add-to-folder or bulk trash request completes successfully
+- **THEN** `selectedIds` and the anchor are cleared, `selectMode` is turned off, and the selection panel is hidden
+- **AND** the right panel does not fall back to showing a previously-selected image or folder as a result
+
+---
+
+### Requirement: Entering select mode clears any open image or folder panel
+
+The system SHALL clear `selectedImage` and `folderPanelOpen` (the same way `handleImageSelect`/`handleFolderViewDetails` already clear each other) at the moment select mode is turned on. This prevents a previously-open `image`/`folder` panel from resurfacing once the selection later empties, by whatever means (closing the selection panel, or a successful bulk action).
+
+#### Scenario: Entering select mode while the image panel is open closes it
+
+- **WHEN** the `image` mode right panel is open for a selected image
+- **AND** the user turns select mode on
+- **THEN** the right panel closes (no `image` mode content is shown)
+- **AND** it does not reopen once the user later empties their multi-select
+
+#### Scenario: Entering select mode while the folder panel is open closes it
+
+- **WHEN** the `folder` mode right panel is open
+- **AND** the user turns select mode on
+- **THEN** the right panel closes (no `folder` mode content is shown)
+- **AND** it does not reopen once the user later empties their multi-select
+
+---
+
+### Requirement: Closing the selection panel exits select mode entirely
+
+The system SHALL, when the user dismisses the selection panel via its close control, perform the same full reset as a successful bulk action or the toolbar toggle-off: clear `selectedIds` and the anchor, and turn `selectMode` off. The user must re-enter select mode via the toolbar toggle to select again.
+
+#### Scenario: Closing the selection panel turns select mode off
+
+- **WHEN** select mode is active with one or more images selected
+- **AND** the user clicks the close control on the selection panel
+- **THEN** `selectedIds` and the anchor are cleared, and `selectMode` is turned off
+- **AND** the select-mode toolbar toggle reflects the off state

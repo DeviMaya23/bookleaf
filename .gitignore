@@ -42,3 +42,4 @@ go.work.sum
 # Local make overrides (machine-specific/secrets)
 Makefile.local
 
+.ignore/

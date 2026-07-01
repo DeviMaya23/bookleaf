@@ -130,3 +130,21 @@ func (f *fakeFolderShareRepo) DeleteByFolderID(_ context.Context, folderID uuid.
 	}
 	return nil
 }
+
+// fakeCategorisationLogRepo is an in-memory categorisationLogRepository.
+// GetByImageID returns pre-seeded state; Create captures the written entry.
+// Use it when the test pre-seeds an existing log and then asserts what was
+// (or was not) written afterwards.
+type fakeCategorisationLogRepo struct {
+	existing *domain.CategorisationLog
+	created  *domain.CategorisationLog
+}
+
+func (f *fakeCategorisationLogRepo) GetByImageID(_ context.Context, _ uuid.UUID) (*domain.CategorisationLog, error) {
+	return f.existing, nil
+}
+
+func (f *fakeCategorisationLogRepo) Create(_ context.Context, log *domain.CategorisationLog) error {
+	f.created = log
+	return nil
+}

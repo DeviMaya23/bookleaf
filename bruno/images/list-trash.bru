@@ -14,6 +14,8 @@ params:query {
   ~cursor: {{trashCursor}}
   ~limit: 2
   ~name: heartopia
+  ~sort: deleted_at
+  ~direction: asc
 }
 
 script:post-response {

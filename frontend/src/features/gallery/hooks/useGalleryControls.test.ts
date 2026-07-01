@@ -37,6 +37,16 @@ describe('useGalleryControls defaults', () => {
     expect(result.current.sortFieldOptions).toEqual(['manual', 'created_at', 'title'])
     expect(result.current.filterSections).toEqual(['tags', 'mimeTypes'])
   })
+
+  it('defaults the trash view to Date deleted / newest first, offering deleted_at and title only', () => {
+    const { result } = render({ type: 'trash' })
+
+    expect(result.current.sortBy).toBe('deleted_at')
+    expect(result.current.sortDir).toBe('desc')
+    expect(result.current.sortActive).toBe(false)
+    expect(result.current.sortFieldOptions).toEqual(['deleted_at', 'title'])
+    expect(result.current.filterSections).toEqual([])
+  })
 })
 
 describe('useGalleryControls sort handlers', () => {

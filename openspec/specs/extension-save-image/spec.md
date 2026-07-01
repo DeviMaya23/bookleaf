@@ -33,7 +33,7 @@ When the user clicks "Save to Bookleaf", the extension SHALL:
 3. Determine the effective `srcUrl` to fetch:
    a. If `info.srcUrl` is present (the "image" context menu item was clicked), use it as the base `srcUrl`.
    b. Otherwise (the link-context menu item was clicked), use the `srcUrl` from the content-script-resolved card context for the tab, if one was reported before the click. If no resolved `srcUrl` is available, the save SHALL fail per the Save failure notification requirement, without attempting to fetch `info.linkUrl` as an image.
-4. Determine the effective `source_url`: if `info.linkUrl` is present and matches a registered link permalink rule, use `info.linkUrl` as `source_url`; otherwise use `info.pageUrl` as today.
+4. Determine the effective `source_url`: if `info.linkUrl` is present and matches a registered link permalink rule, use `info.linkUrl` as the raw `source_url`; otherwise use `info.pageUrl` as the raw `source_url`. The raw `source_url` SHALL then be passed through `cleanUrl()` before being sent to the backend.
 5. Determine the effective `title`:
    a. If `info.linkUrl` is present and matches the Twitter status permalink rule, and the content-script-resolved card context for the tab contains a `title` (resolved tweet text), set the title to `@<handle>: <tweet text, truncated to 100 characters>...`, where `<handle>` is parsed from `info.linkUrl`'s path segment preceding `/status/`.
    b. Otherwise, if `info.linkUrl` matches the Twitter status permalink rule but no resolved tweet text is available, set the title to `@<handle>` (no colon, no text).
@@ -50,7 +50,7 @@ When the user clicks "Save to Bookleaf", the extension SHALL:
    d. `POST /images/:id/complete` with a JSON body containing `file_size` (the byte length of the uploaded image blob), and `width`/`height` when they were captured in step (b)
 8. Send a success toast to the active tab with title "Saved to Bookleaf." and body "Added to Unsorted."
 
-The image title SHALL be set per step 5 above (the current tab's title, `tab.title`, for saves with no matching Twitter permalink and no resolved Imgur/Instagram/Facebook text). The `source_url` SHALL be set per step 4 above. No `folder_id` SHALL be sent (image saves to root). The `tabId` from the context menu event SHALL be threaded into the save handler and used for all `browser.tabs.sendMessage` calls.
+The image title SHALL be set per step 5 above (the current tab's title, `tab.title`, for saves with no matching Twitter permalink and no resolved Imgur/Instagram/Facebook text). The `source_url` sent to the backend SHALL be the ClearURLs-cleaned URL produced by `cleanUrl()` per step 4 above. No `folder_id` SHALL be sent (image saves to root). The `tabId` from the context menu event SHALL be threaded into the save handler and used for all `browser.tabs.sendMessage` calls.
 
 If thumbnail generation or the thumbnail PUT fails, the entire save SHALL fail (no partial save with a missing thumbnail).
 
@@ -59,8 +59,19 @@ If `OffscreenCanvas` is not available, the thumbnail PUT is skipped, no decode o
 #### Scenario: Successful save shows in-page success toast
 
 - **WHEN** the user clicks "Save to Bookleaf" while authenticated and the image is fetchable
-- **THEN** the image and thumbnail are uploaded to Bookleaf with the effective title (per step 5) and the effective `source_url` as its `source_url`
+- **THEN** the image and thumbnail are uploaded to Bookleaf with the effective title (per step 5) and the ClearURLs-cleaned `source_url` (per step 4) as its `source_url`
 - **AND** an in-page toast with title "Saved to Bookleaf." and body "Added to Unsorted." is shown in the active tab
+
+#### Scenario: source_url is cleaned before being sent to the backend
+
+- **WHEN** the user saves an image from a page whose URL contains tracking params matched by a ClearURLs provider rule (e.g. a Google Image Search URL with `ei`, `ved`, `biw` params)
+- **THEN** the `source_url` field in the `POST /images` body has those params stripped
+- **AND** the URL remains navigable
+
+#### Scenario: source_url from an unrecognised host is passed through unchanged
+
+- **WHEN** the user saves an image from a page whose host does not match any ClearURLs provider in the vendored subset
+- **THEN** the `source_url` field in the `POST /images` body is identical to the raw resolved URL
 
 #### Scenario: Dimensions are sent when OffscreenCanvas is available
 
@@ -104,7 +115,7 @@ If `OffscreenCanvas` is not available, the thumbnail PUT is skipped, no decode o
 
 - **WHEN** the user right-clicks a link matching a registered link-only card site pattern, the content script reported a resolved `srcUrl` for that tab before the click, and the user clicks "Save to Bookleaf"
 - **THEN** the extension uses the resolved `srcUrl` as the effective `srcUrl` for the remainder of the save flow
-- **AND** `source_url` is set to `info.linkUrl`
+- **AND** `source_url` is set to `cleanUrl(info.linkUrl)`
 
 #### Scenario: Link-context save with no resolved image fails gracefully
 
@@ -115,13 +126,13 @@ If `OffscreenCanvas` is not available, the thumbnail PUT is skipped, no decode o
 #### Scenario: Image-context save with a matching linkUrl rule overrides source_url
 
 - **WHEN** the user right-clicks an `<img>` element whose enclosing link's URL matches a registered link permalink rule (e.g. a Twitter or Facebook post permalink), and clicks "Save to Bookleaf"
-- **THEN** `source_url` is set to `info.linkUrl` instead of `info.pageUrl`
+- **THEN** `source_url` is set to `cleanUrl(info.linkUrl)` instead of `cleanUrl(info.pageUrl)`
 - **AND** the rest of the save flow (image fetch, high-res resolution, upload) is unchanged
 
 #### Scenario: Image-context save with no matching linkUrl rule keeps today's behavior
 
 - **WHEN** the user right-clicks an `<img>` element whose `info.linkUrl` is absent, or present but not matching any registered link permalink rule, and the tab is not an Imgur, Instagram, or Facebook URL with resolved text
-- **THEN** `source_url` is set to `info.pageUrl`, exactly as before this change
+- **THEN** `source_url` is set to `cleanUrl(info.pageUrl)`
 - **AND** title is set to `tab.title`, exactly as before this change
 
 #### Scenario: Twitter save with resolved tweet text uses the handle-and-text title

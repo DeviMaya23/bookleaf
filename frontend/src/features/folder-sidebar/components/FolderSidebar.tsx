@@ -33,11 +33,12 @@ type NameDialogState =
 interface FolderSidebarProps {
   view: AppView
   onFolderSelect?: () => void
+  onFolderViewDetails?: () => void
   mobileOpen?: boolean
   onMobileClose?: () => void
 }
 
-export default function FolderSidebar({ view, onFolderSelect, mobileOpen, onMobileClose }: FolderSidebarProps) {
+export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetails, mobileOpen, onMobileClose }: FolderSidebarProps) {
   const { getToken } = useKindeAuth()
   const navigate = useNavigate()
   const { active } = useDndContext()
@@ -74,6 +75,13 @@ export default function FolderSidebar({ view, onFolderSelect, mobileOpen, onMobi
     const isActive = view.type === 'folder' && view.id === folder.id
     if (!isActive) onFolderSelect?.()
     navigate(`/app/folders/${folder.id}`)
+    onMobileClose?.()
+  }
+
+  function handleViewDetails(folder: Folder) {
+    const isActive = view.type === 'folder' && view.id === folder.id
+    if (!isActive) navigate(`/app/folders/${folder.id}`)
+    onFolderViewDetails?.()
     onMobileClose?.()
   }
 
@@ -163,6 +171,7 @@ export default function FolderSidebar({ view, onFolderSelect, mobileOpen, onMobi
             onDelete={setDeleteTarget}
             onNewSubfolder={(parent) => setNameDialog({ mode: 'create-sub', parent })}
             onChangeIcon={(target, icon) => changeIconMutation.mutate({ id: target.id, icon })}
+            onViewDetails={handleViewDetails}
           />
         ))}
 

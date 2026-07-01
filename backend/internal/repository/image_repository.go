@@ -10,6 +10,7 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"roci.dev/fracdex"
 )
 
@@ -132,6 +133,50 @@ func (r *imageRepository) SetImageFolder(ctx context.Context, imageID uuid.UUID,
 		return fmt.Errorf("insert image folder: %w", err)
 	}
 	return nil
+}
+
+func (r *imageRepository) AddImageToFolder(ctx context.Context, imageID, folderID uuid.UUID) error {
+	var maxPos string
+	r.db.WithContext(ctx).
+		Model(&domain.ImageFolder{}).
+		Where("folder_id = ?", folderID).
+		Select("COALESCE(MAX(position), '')").
+		Scan(&maxPos)
+	position, err := fracdex.KeyBetween(maxPos, "")
+	if err != nil {
+		return fmt.Errorf("generate position key: %w", err)
+	}
+
+	row := domain.ImageFolder{
+		ImageID:  imageID,
+		FolderID: folderID,
+		Position: position,
+	}
+	if err := r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "image_id"}, {Name: "folder_id"}},
+			DoNothing: true,
+		}).
+		Create(&row).Error; err != nil {
+		return fmt.Errorf("insert image folder: %w", err)
+	}
+	return nil
+}
+
+func (r *imageRepository) FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID string) ([]uuid.UUID, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var owned []uuid.UUID
+	if err := r.db.WithContext(ctx).
+		Model(&domain.Image{}).
+		Where("id IN (?) AND user_id = ?", ids, userID).
+		Pluck("id", &owned).Error; err != nil {
+		return nil, fmt.Errorf("filter owned image ids: %w", err)
+	}
+
+	return owned, nil
 }
 
 func (r *imageRepository) SyncImageFolders(ctx context.Context, imageID uuid.UUID, folderIDs []uuid.UUID) error {
@@ -352,21 +397,29 @@ func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
+	dispatch := usecase.ResolveSort(sortField, direction)
 
 	query := r.db.WithContext(ctx).
 		Unscoped().
 		Where("deleted_at IS NOT NULL AND user_id = ?", userID).
-		Order("deleted_at ASC, id ASC").
+		Order(dispatch.OrderClause).
 		Limit(limit + 1)
 
 	if name != nil && *name != "" {
 		query = query.Where("images.title ILIKE ?", "%"+*name+"%")
 	}
 
-	if cursor != nil && cursor.DeletedAt != nil {
-		query = query.Where("(deleted_at, id) > (?, ?)", cursor.DeletedAt, cursor.ID)
+	if cursor != nil {
+		switch {
+		case dispatch.Column == "title" && cursor.Title != nil:
+			query = query.Where(fmt.Sprintf("(images.title, images.id) %s (?, ?)", dispatch.WhereOperator), *cursor.Title, cursor.ID)
+		case dispatch.Column == "deleted_at" && cursor.DeletedAt != nil:
+			query = query.Where(fmt.Sprintf("(images.deleted_at, images.id) %s (?, ?)", dispatch.WhereOperator), *cursor.DeletedAt, cursor.ID)
+		default:
+			query = query.Where(fmt.Sprintf("(images.created_at, images.id) %s (?, ?)", dispatch.WhereOperator), cursor.CreatedAt, cursor.ID)
+		}
 	}
 
 	if err := query.Find(&images).Error; err != nil {
@@ -465,6 +518,17 @@ func (r *imageRepository) ListUnhashed(ctx context.Context, limit int) ([]*domai
 		Limit(limit).
 		Find(&images).Error; err != nil {
 		return nil, fmt.Errorf("list unhashed images: %w", err)
+	}
+	return images, nil
+}
+
+func (r *imageRepository) ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error) {
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Unscoped().
+		Where("user_id = ? AND ai_labels IS NULL AND deleted_at IS NULL", userID).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("list unlabelled images: %w", err)
 	}
 	return images, nil
 }

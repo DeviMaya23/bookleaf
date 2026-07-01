@@ -4,6 +4,7 @@ import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
 import { extractTwitterHandle, resolveLinkPermalink } from "../lib/linkPermalinkRules";
 import { linkOnlyCardUrlPatterns } from "../lib/cardDomResolveRules";
+import { cleanUrl } from "../lib/urlCleaner";
 
 browser.action.setBadgeText({ text: "" });
 
@@ -81,6 +82,46 @@ export function handleVideoFrameCapturedMessage(
   handleCapture({ blob: msg.blob, mimeType: msg.mimeType, pageUrl, title, tabId: tab?.id });
 }
 
+interface PickerSaveMessage {
+  type: "picker-save";
+  images: Array<{ srcUrl: string }>;
+}
+
+export async function handlePickerSaveMessage(
+  msg: PickerSaveMessage,
+  tab: browser.Tabs.Tab | undefined,
+): Promise<void> {
+  const pageUrl = tab?.url ?? "";
+  const title = tab?.title ?? "Untitled";
+  const tabId = tab?.id;
+
+  const results = await Promise.allSettled(
+    msg.images.map((img) => handleSave({ srcUrl: img.srcUrl, pageUrl, title, tabId, silent: true })),
+  );
+
+  const succeeded = results.filter((r) => r.status === "fulfilled").length;
+  const failed = results.filter((r) => r.status === "rejected").length;
+  const total = results.length;
+
+  if (succeeded === total) {
+    await sendToast(
+      tabId,
+      "success",
+      "Saved to Bookleaf.",
+      `${total} ${total === 1 ? "image" : "images"} added to Unsorted.`,
+    );
+  } else if (failed === total) {
+    await sendToast(tabId, "error", "Couldn't save images.", "Check your connection and try again.");
+  } else {
+    await sendToast(
+      tabId,
+      "error",
+      "Partially saved.",
+      `${succeeded} saved, ${failed} failed. Check your connection.`,
+    );
+  }
+}
+
 browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime.MessageSender) => {
   const msg = message as {
     type?: string;
@@ -102,11 +143,17 @@ browser.runtime.onMessage.addListener((message: unknown, sender: browser.Runtime
     return;
   }
 
+  if (msg.type === "picker-save") {
+    void handlePickerSaveMessage(message as PickerSaveMessage, sender.tab);
+    return;
+  }
+
   if (!msg.resolved || sender.tab?.id === undefined) return;
   resolvedContextByTab.set(sender.tab.id, msg.resolved);
 });
 
 const SNIP_COMMAND = "snip-capture";
+const BROWSE_IMAGES_COMMAND = "browse-images";
 
 export async function handleSnipCommand(command: string): Promise<void> {
   if (command !== SNIP_COMMAND) return;
@@ -122,7 +169,23 @@ export async function handleSnipCommand(command: string): Promise<void> {
   }
 }
 
-browser.commands.onCommand.addListener(handleSnipCommand);
+export async function handleBrowseImagesCommand(command: string): Promise<void> {
+  if (command !== BROWSE_IMAGES_COMMAND) return;
+
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id === undefined) return;
+
+  try {
+    await browser.tabs.sendMessage(tab.id, { type: "open-image-picker" });
+  } catch {
+    // content script may not be injected on restricted pages — no-op
+  }
+}
+
+browser.commands.onCommand.addListener((command) => {
+  void handleSnipCommand(command);
+  void handleBrowseImagesCommand(command);
+});
 
 function resolveTitle(
   info: browser.Menus.OnClickData,
@@ -320,6 +383,7 @@ export async function persistImage({
   title,
   pageUrl,
   tabId,
+  silent,
 }: {
   blob: Blob;
   mimeType: string;
@@ -327,11 +391,12 @@ export async function persistImage({
   title: string;
   pageUrl: string;
   tabId: number | undefined;
+  silent?: boolean;
 }): Promise<void> {
   const auth = await getAuth();
 
   if (!isTokenValid(auth)) {
-    await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
+    if (!silent) await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
     return;
   }
 
@@ -358,9 +423,9 @@ export async function persistImage({
       width: dimensions?.width,
       height: dimensions?.height,
     });
-    await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
+    if (!silent) await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
   } catch {
-    await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
+    if (!silent) await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
     return;
   }
 
@@ -375,18 +440,20 @@ export async function handleSave({
   pageUrl,
   title,
   tabId,
+  silent,
 }: {
   srcUrl: string;
   pageUrl: string;
   title: string;
   tabId: number | undefined;
+  silent?: boolean;
 }): Promise<void> {
   activeSaves++;
   updateBadge();
   try {
     const auth = await getAuth();
     if (!isTokenValid(auth)) {
-      await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
+      if (!silent) await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
       return;
     }
 
@@ -394,11 +461,11 @@ export async function handleSave({
     try {
       fetched = await resolveImageBlob(srcUrl);
     } catch {
-      await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
+      if (!silent) await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
       return;
     }
 
-    await persistImage({ ...fetched, title, pageUrl, tabId });
+    await persistImage({ ...fetched, title, pageUrl: cleanUrl(pageUrl), tabId, silent });
   } finally {
     activeSaves--;
     updateBadge();

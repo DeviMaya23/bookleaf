@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -25,6 +26,10 @@ type mockTrashUsecase struct {
 	listTrashedResult     *usecase.ListTrashedResult
 	err                   error
 	lastListTrashedParams usecase.ListTrashedParams
+	bulkTrashResult       int
+	bulkTrashErr          error
+	lastBulkTrashUser     string
+	lastBulkTrashIDs      []uuid.UUID
 }
 
 func (m *mockTrashUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
@@ -52,6 +57,12 @@ func (m *mockTrashUsecase) DeleteFromTrash(_ context.Context, _ uuid.UUID, _ str
 
 func (m *mockTrashUsecase) EmptyTrash(_ context.Context, _ string) error {
 	return m.err
+}
+
+func (m *mockTrashUsecase) BulkTrash(_ context.Context, userID string, imageIDs []uuid.UUID) (int, error) {
+	m.lastBulkTrashUser = userID
+	m.lastBulkTrashIDs = imageIDs
+	return m.bulkTrashResult, m.bulkTrashErr
 }
 
 // --- SoftDelete ---
@@ -170,6 +181,133 @@ func TestTrashHandler_ListTrashed_BlankNameTreatedAsAbsent(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Nil(t, uc.lastListTrashedParams.Name)
+		})
+	}
+}
+
+func TestTrashHandler_ListTrashed_SortAndDirection(t *testing.T) {
+	tests := []struct {
+		name              string
+		queryParams       string
+		expectedStatus    int
+		wantErrStatus     int
+		expectedSort      *string
+		expectedDirection *string
+	}{
+		{
+			name:              "valid sort and direction",
+			queryParams:       "?sort=title&direction=desc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "valid sort created_at with direction",
+			queryParams:       "?sort=created_at&direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "valid sort deleted_at with direction",
+			queryParams:       "?sort=deleted_at&direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "direction without sort applies to the default deleted_at field",
+			queryParams:       "?direction=asc",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (title -> asc)",
+			queryParams:       "?sort=title",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("title"),
+			expectedDirection: strPtr("asc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (created_at -> desc)",
+			queryParams:       "?sort=created_at",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("created_at"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "sort without direction resolves default direction (deleted_at -> desc)",
+			queryParams:       "?sort=deleted_at",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("desc"),
+		},
+		{
+			name:              "omitting both defaults sort to deleted_at descending",
+			queryParams:       "",
+			expectedStatus:    http.StatusOK,
+			expectedSort:      strPtr("deleted_at"),
+			expectedDirection: strPtr("desc"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockTrashUsecase{}
+			h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, rec := newEchoContext(t, http.MethodGet, "/images/trash"+tt.queryParams, "")
+
+			err := h.ListTrashed(c)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+
+			params := uc.lastListTrashedParams
+			if tt.expectedSort != nil {
+				require.NotNil(t, params.Sort)
+				assert.Equal(t, *tt.expectedSort, *params.Sort)
+			} else {
+				assert.Nil(t, params.Sort)
+			}
+
+			if tt.expectedDirection != nil {
+				require.NotNil(t, params.Direction)
+				assert.Equal(t, *tt.expectedDirection, *params.Direction)
+			} else {
+				assert.Nil(t, params.Direction)
+			}
+		})
+	}
+}
+
+func TestTrashHandler_ListTrashed_InvalidSortOrDirection(t *testing.T) {
+	tests := []struct {
+		name          string
+		queryParams   string
+		wantErrStatus int
+	}{
+		{
+			name:          "invalid sort returns 400",
+			queryParams:   "?sort=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+		{
+			name:          "invalid direction returns 400",
+			queryParams:   "?sort=title&direction=invalid",
+			wantErrStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uc := &mockTrashUsecase{}
+			h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+			c, _ := newEchoContext(t, http.MethodGet, "/images/trash"+tt.queryParams, "")
+
+			err := h.ListTrashed(c)
+
+			assertHTTPError(t, err, tt.wantErrStatus)
 		})
 	}
 }
@@ -349,4 +487,33 @@ func TestTrashHandler_EmptyTrash_Error(t *testing.T) {
 	err := h.EmptyTrash(c)
 
 	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+// --- BulkTrash ---
+
+func TestTrashHandler_BulkTrash_ValidRequestReturnsCount(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockTrashUsecase{bulkTrashResult: 1}
+	h := NewTrashHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q]}`, imageID)
+	c, rec := newEchoContext(t, http.MethodPost, "/images/bulk/trash", body)
+
+	err := h.BulkTrash(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, float64(1), resp["succeeded_count"])
+	assert.Equal(t, []uuid.UUID{imageID}, uc.lastBulkTrashIDs)
+}
+
+func TestTrashHandler_BulkTrash_MalformedImageIDReturns400(t *testing.T) {
+	h := NewTrashHandler(&mockTrashUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	body := `{"image_ids": ["not-a-uuid"]}`
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/trash", body)
+
+	err := h.BulkTrash(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
 }

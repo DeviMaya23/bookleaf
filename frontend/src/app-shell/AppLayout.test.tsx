@@ -2,12 +2,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import AppLayout from './AppLayout'
 import { getFolders } from '@/lib/folders'
 import { getTags } from '@/lib/tags'
 import { setMaintenanceActive } from '@/lib/maintenanceStore'
-import type { Image } from '@/lib/images'
+import { bulkAddImagesToFolder, bulkTrashImages } from '@/lib/images'
+import type { Image, BulkActionResult } from '@/lib/images'
+import { toast } from 'sonner'
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
@@ -25,6 +27,17 @@ vi.mock('@/lib/tags', async (importOriginal) => ({
 
 vi.mock('./useVisionSuggestion', () => ({
   useVisionSuggestion: () => ({ checkVision: vi.fn() }),
+}))
+
+vi.mock('@/lib/images', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/images')>()),
+  bulkAddImagesToFolder: vi.fn(),
+  bulkTrashImages: vi.fn(),
+}))
+
+vi.mock('sonner', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('sonner')>()),
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 
 vi.mock('@/components/ui/dropdown-menu', async () => {
@@ -73,9 +86,10 @@ vi.mock('@/components/ui/scroll-area', async () => {
 })
 
 vi.mock('@/features/folder-sidebar/components/FolderSidebar', () => ({
-  default: ({ onFolderSelect }: { onFolderSelect?: () => void }) => (
+  default: ({ onFolderSelect, onFolderViewDetails }: { onFolderSelect?: () => void; onFolderViewDetails?: () => void }) => (
     <div data-testid="folder-sidebar">
       <button onClick={onFolderSelect}>Select folder</button>
+      <button onClick={() => onFolderViewDetails?.()}>View folder details</button>
     </div>
   ),
 }))
@@ -97,9 +111,25 @@ vi.mock('@/features/upload/components/BatchUploadModal', () => ({
 }))
 
 vi.mock('@/features/right-panel/components/RightPanel', () => ({
-  default: (props: { mode: 'image'; image: Image } | { mode: 'folder'; folder: { name: string } }) => (
+  default: (
+    props:
+      | { mode: 'image'; image: Image }
+      | { mode: 'folder'; folder: { name: string } }
+      | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onClose: () => void },
+  ) => (
     <div data-testid="right-panel" data-mode={props.mode}>
-      {props.mode === 'image' ? props.image.title : props.folder.name}
+      {props.mode === 'image' ? (
+        props.image.title
+      ) : props.mode === 'folder' ? (
+        props.folder.name
+      ) : (
+        <>
+          {props.selectedCount} selected
+          <button onClick={() => props.onAddToFolder('folder-1')}>Add selection to folder</button>
+          <button onClick={() => props.onMoveToTrash()}>Move selection to trash</button>
+          <button onClick={() => props.onClose()}>Close selection panel</button>
+        </>
+      )}
     </div>
   ),
 }))
@@ -125,7 +155,7 @@ function makeTestImage(overrides?: Partial<Image>): Image {
 }
 
 vi.mock('@/features/gallery/components/ImageGrid', () => ({
-  default: ({ sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, onImageSelect, onImageDoubleClick, onImageDeleted }: { sortBy: string; sortDir: string | undefined; filterTagIds?: string[]; filterMimeTypes?: string[]; filterFolderIds?: string[]; onImageSelect: (img: Image) => void; onImageDoubleClick: (img: Image) => void; onImageDeleted: (id: string) => void }) => (
+  default: ({ sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, onImageSelect, onImageDoubleClick, onImageDeleted, selectMode, onSelectionChange }: { sortBy: string; sortDir: string | undefined; filterTagIds?: string[]; filterMimeTypes?: string[]; filterFolderIds?: string[]; onImageSelect: (img: Image) => void; onImageDoubleClick: (img: Image) => void; onImageDeleted: (id: string) => void; selectMode?: boolean; onSelectionChange?: (ids: Set<string>, anchorId: string | null) => void }) => (
     <div
       data-testid="image-grid"
       data-sort-by={sortBy}
@@ -133,10 +163,12 @@ vi.mock('@/features/gallery/components/ImageGrid', () => ({
       data-filter-tag-ids={(filterTagIds ?? []).join(',')}
       data-filter-mime-types={(filterMimeTypes ?? []).join(',')}
       data-filter-folder-ids={(filterFolderIds ?? []).join(',')}
+      data-select-mode={String(!!selectMode)}
     >
       <button onClick={() => onImageSelect(makeTestImage())}>Select image</button>
       <button onDoubleClick={() => onImageDoubleClick(makeTestImage())}>Open image</button>
       <button onClick={() => onImageDeleted('img-1')}>Delete image</button>
+      <button onClick={() => onSelectionChange?.(new Set(['img-1']), 'img-1')}>Select img-1 in select mode</button>
     </div>
   ),
 }))
@@ -330,6 +362,80 @@ describe('AppLayout cross-feature integration', () => {
   })
 })
 
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
+describe('AppLayout folder selection — pointer-capability gating', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('selecting a folder still opens the right panel on a fine-pointer device', async () => {
+    mockPointer(false)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+  })
+
+  it('selecting a folder does not open the right panel on a coarse-pointer device', async () => {
+    mockPointer(true)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('"View folder details" opens the right panel on a coarse-pointer device', async () => {
+    mockPointer(true)
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'View folder details' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+  })
+
+  it('an already-open panel updates to the newly selected folder on a coarse-pointer device without closing', async () => {
+    mockPointer(true)
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation'), makeFolder('folder-2', 'Work')])
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'View folder details' }))
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveTextContent('Vacation'))
+
+    await userEvent.click(screen.getByRole('link', { name: 'Folder 2' }))
+
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveTextContent('Work'))
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument()
+  })
+})
+
 describe('AppLayout maintenance mode', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -363,5 +469,176 @@ describe('AppLayout maintenance mode', () => {
 
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
     expect(screen.queryByTestId('maintenance-page')).not.toBeInTheDocument()
+  })
+})
+
+function selectViaGrid() {
+  return screen.getByRole('button', { name: 'Select img-1 in select mode' })
+}
+
+describe('AppLayout selection mode — right panel priority and visibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  it('shows the selection panel once an image is selected via onSelectionChange', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(selectViaGrid())
+
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('takes priority over the image panel when a selectedImage is also set', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select image' }))
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
+
+    await userEvent.click(selectViaGrid())
+
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+  })
+
+  it('remains visible while focus mode is active', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(selectViaGrid())
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+
+    await userEvent.click(screen.getByRole('button', { name: /focus mode/i }))
+
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+  })
+
+  it('clears the selection when navigating to a different view', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(selectViaGrid())
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Folder 1' }))
+
+    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+  })
+
+  it('entering select mode closes an open image panel, and it does not resurface once the selection panel is closed', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select image' }))
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+
+    await userEvent.click(selectViaGrid())
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close selection panel' }))
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('entering select mode closes an open folder panel', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
+    renderApp('/app/folders/folder-1')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+  })
+
+  it('closing the selection panel turns select mode off entirely', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+    await userEvent.click(selectViaGrid())
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close selection panel' }))
+
+    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Select mode' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('turns select mode off entirely when navigating to a different view, not just clearing the selection', async () => {
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+    expect(screen.getByRole('button', { name: 'Select mode' })).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Folder 1' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Select mode' })).toHaveAttribute('aria-pressed', 'false'))
+  })
+
+  it('does not render the select-mode toggle while viewing the trash', async () => {
+    renderApp('/app/trash')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    expect(screen.queryByRole('button', { name: 'Select mode' })).not.toBeInTheDocument()
+  })
+})
+
+describe('AppLayout bulk selection actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([])
+    setMaintenanceActive(false)
+  })
+
+  it('exits select mode entirely after a successful add-to-folder', async () => {
+    vi.mocked(bulkAddImagesToFolder).mockResolvedValue({ succeeded_count: 1 } as BulkActionResult)
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+    await userEvent.click(selectViaGrid())
+    await userEvent.click(screen.getByRole('button', { name: 'Add selection to folder' }))
+
+    expect(bulkAddImagesToFolder).toHaveBeenCalledWith(expect.any(Function), ['img-1'], 'folder-1')
+    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+    expect(imageGrid()).toHaveAttribute('data-select-mode', 'false')
+  })
+
+  it('exits select mode entirely after a successful move-to-trash', async () => {
+    vi.mocked(bulkTrashImages).mockResolvedValue({ succeeded_count: 1 } as BulkActionResult)
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
+    await userEvent.click(selectViaGrid())
+    await userEvent.click(screen.getByRole('button', { name: 'Move selection to trash' }))
+
+    expect(bulkTrashImages).toHaveBeenCalledWith(expect.any(Function), ['img-1'])
+    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+    expect(imageGrid()).toHaveAttribute('data-select-mode', 'false')
+  })
+
+  it('shows a partial-success toast when succeeded_count is less than the selection size', async () => {
+    vi.mocked(bulkTrashImages).mockResolvedValue({ succeeded_count: 0 } as BulkActionResult)
+    renderApp('/app')
+    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
+
+    await userEvent.click(selectViaGrid())
+    await userEvent.click(screen.getByRole('button', { name: 'Move selection to trash' }))
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Moved 0 of 1 images to trash'))
   })
 })

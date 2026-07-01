@@ -28,11 +28,13 @@ const SORT_FIELD_LABELS: Record<SortBy, string> = {
   manual: 'Manual',
   created_at: 'Date added',
   title: 'Name',
+  deleted_at: 'Date deleted',
 }
 
-const DIR_LABELS: Record<'created_at' | 'title', Record<SortDir, string>> = {
+const DIR_LABELS: Record<'created_at' | 'title' | 'deleted_at', Record<SortDir, string>> = {
   created_at: { asc: 'Oldest first', desc: 'Newest first' },
   title: { asc: 'A → Z', desc: 'Z → A' },
+  deleted_at: { asc: 'Oldest deleted first', desc: 'Newest deleted first' },
 }
 
 interface GalleryToolbarProps {
@@ -42,9 +44,11 @@ interface GalleryToolbarProps {
   // toolbar only lays them out alongside the gallery search/sort/filter UI.
   focusToggle: ReactNode
   uploadActions: ReactNode
+  selectModeToggle?: ReactNode
+  controlsDisabled?: boolean
 }
 
-export default function GalleryToolbar({ view, controls, focusToggle, uploadActions }: GalleryToolbarProps) {
+export default function GalleryToolbar({ view, controls, focusToggle, uploadActions, selectModeToggle, controlsDisabled = false }: GalleryToolbarProps) {
   const {
     searchTerm,
     setSearchTerm,
@@ -84,14 +88,16 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search images by name…"
-                className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40"
+                disabled={controlsDisabled}
+                className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:pointer-events-none"
               />
             </div>
             <div className="hidden sm:flex">
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label="Sort"
-                  className={cn(buttonVariants({ variant: sortActive ? 'secondary' : 'outline', size: 'icon' }))}
+                  disabled={controlsDisabled}
+                  className={cn(buttonVariants({ variant: sortActive ? 'secondary' : 'outline', size: 'icon' }), controlsDisabled && 'opacity-50 pointer-events-none')}
                 >
                   <ArrowUpDown className="w-3.5 h-3.5" />
                 </DropdownMenuTrigger>
@@ -122,7 +128,8 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
           {view.type !== 'trash' && (
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={cn(buttonVariants({ variant: filterCount > 0 ? 'secondary' : 'outline' }))}
+                disabled={controlsDisabled}
+                className={cn(buttonVariants({ variant: filterCount > 0 ? 'secondary' : 'outline' }), controlsDisabled && 'opacity-50 pointer-events-none')}
               >
                 <Filter className="w-3.5 h-3.5" />
                 Filters
@@ -213,6 +220,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+          {selectModeToggle}
         </div>
         <div className="hidden sm:flex">{uploadActions}</div>
       </div>

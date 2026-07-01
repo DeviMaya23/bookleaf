@@ -16,6 +16,13 @@
         "mac": "Alt+Shift+S"
       },
       "description": "Snip to Bookleaf"
+    },
+    "browse-images": {
+      "suggested_key": {
+        "default": "Alt+Shift+I",
+        "mac": "Alt+Shift+I"
+      },
+      "description": "Browse images on this page"
     }
   },
   "content_scripts": [

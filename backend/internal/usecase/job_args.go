@@ -24,3 +24,11 @@ type AccountKindeDeletionArgs struct {
 
 func (AccountKindeDeletionArgs) Kind() string     { return "account_kinde_deletion" }
 func (AccountKindeDeletionArgs) MaxAttempts() int { return 5 }
+
+type CategoriseImageArgs struct {
+	ImageID uuid.UUID `json:"image_id"`
+	UserID  string    `json:"user_id"`
+}
+
+func (CategoriseImageArgs) Kind() string     { return "categorise_image" }
+func (CategoriseImageArgs) MaxAttempts() int { return 3 }

@@ -97,7 +97,7 @@ The system SHALL add `FindByName(ctx context.Context, userID, name string) (*dom
 
 ### Requirement: ProcessVisionLabelling Usecase Method
 
-The system SHALL add `ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error` to `imageUploadUsecase`. This is the method called by `VisionWorker` on each attempt.
+The system SHALL implement `ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error` on `imageUploadUsecase`. This is the method called by `VisionWorker` on each attempt.
 
 The method SHALL:
 1. Fetch the user record via `UserRepository.GetByID(ctx, userID)`; return nil (not an error) if `vision_enabled` is false or if `visionService` is nil
@@ -105,8 +105,9 @@ The method SHALL:
 3. Call `StorageService.GetObject(ctx, thumbnailPath)` to fetch the thumbnail bytes; return a non-nil error if `thumbnail_path` is nil
 4. Call `VisionService.AnnotateImage` with a 5-second context timeout
 5. Marshal the returned labels as JSON (empty array `[]` if Vision returned zero labels) and call `ImageRepository.UpdateAILabels(ctx, imageID, labelsJSON)`
+6. If `user.AICategorisationEnabled` is true, enqueue a `CategoriseImageArgs` job via the `enqueuer`
 
-Failures at steps 1–5 (except the early-return nil cases at step 1) SHALL return a non-nil error so River can retry. `UpdateAILabels` SHALL always be called after a successful Vision API call, even when zero labels are returned, so that `null` in the database reliably indicates the job has not yet run.
+Failures at steps 1–6 (except the early-return nil cases at step 1) SHALL return a non-nil error so River can retry. `UpdateAILabels` SHALL always be called after a successful Vision API call, even when zero labels are returned.
 
 #### Scenario: Vision enabled — labels saved successfully
 
@@ -131,6 +132,18 @@ Failures at steps 1–5 (except the early-return nil cases at step 1) SHALL retu
 
 - **WHEN** `VisionService.AnnotateImage` returns an error
 - **THEN** `ProcessVisionLabelling` returns a non-nil error
+
+#### Scenario: ai_categorisation_enabled true — categorise job enqueued after labels saved
+
+- **WHEN** `ProcessVisionLabelling` completes successfully and the user's `ai_categorisation_enabled` is true
+- **THEN** a `CategoriseImageArgs` job is inserted with the image ID and user ID
+- **AND** nil is returned
+
+#### Scenario: ai_categorisation_enabled false — categorise job not enqueued
+
+- **WHEN** `ProcessVisionLabelling` completes successfully and the user's `ai_categorisation_enabled` is false
+- **THEN** no `CategoriseImageArgs` job is inserted
+- **AND** nil is returned
 
 ---
 

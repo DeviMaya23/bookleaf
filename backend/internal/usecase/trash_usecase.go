@@ -78,7 +78,7 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 		name = params.Name
 	}
 
-	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, name, params.Cursor, limit)
+	rawImages, err := u.imageRepo.ListTrashed(ctx, userID, name, params.Sort, params.Direction, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -89,8 +89,19 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 	if len(rawImages) > limit {
 		rawImages = rawImages[:limit]
 		last := rawImages[limit-1]
-		deletedAt := last.DeletedAt.Time
-		nextCursor = &ImageCursor{DeletedAt: &deletedAt, ID: last.ID}
+
+		dispatch := ResolveSort(params.Sort, params.Direction)
+		var title *string
+		var deletedAt *time.Time
+		switch dispatch.Column {
+		case "title":
+			title = &last.Title
+		case "deleted_at":
+			t := last.DeletedAt.Time
+			deletedAt = &t
+		}
+
+		nextCursor = &ImageCursor{CreatedAt: last.CreatedAt, Title: title, DeletedAt: deletedAt, ID: last.ID}
 	}
 
 	items := make([]ImageItem, len(rawImages))
@@ -268,6 +279,56 @@ func (u *trashUsecase) EmptyTrash(ctx context.Context, userID string) error {
 	)
 
 	return nil
+}
+
+func (u *trashUsecase) BulkTrash(ctx context.Context, userID string, imageIDs []uuid.UUID) (int, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkTrash")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
+
+	ownedIDs, err := u.imageRepo.FilterOwnedImageIDs(ctx, imageIDs, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, err
+	}
+
+	ownedSet := make(map[uuid.UUID]struct{}, len(ownedIDs))
+	for _, id := range ownedIDs {
+		ownedSet[id] = struct{}{}
+	}
+
+	succeeded := 0
+	for _, imageID := range imageIDs {
+		if _, ok := ownedSet[imageID]; !ok {
+			logger.Info("skipping unowned image in bulk trash",
+				zap.String("event", "image.bulk_trash.skipped"),
+				zap.String("image_id", imageID.String()),
+				zap.String("user_id", userID),
+			)
+			continue
+		}
+
+		if err := u.imageRepo.SoftDelete(ctx, imageID, userID); err != nil {
+			logger.Info("skipping image in bulk trash",
+				zap.String("event", "image.bulk_trash.skipped"),
+				zap.String("image_id", imageID.String()),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+			continue
+		}
+		succeeded++
+	}
+
+	logger.Info("bulk trash complete",
+		zap.String("event", "image.bulk_trash.complete"),
+		zap.String("user_id", userID),
+		zap.Int("succeeded_count", succeeded),
+	)
+
+	return succeeded, nil
 }
 
 func (u *trashUsecase) ProcessR2Delete(ctx context.Context, r2Path string, thumbnailPath *string) error {

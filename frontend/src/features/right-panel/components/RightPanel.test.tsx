@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import RightPanel from './RightPanel'
 import type { Image } from '@/lib/images'
 
@@ -59,6 +59,20 @@ function renderPanel(image: Image, onClose = vi.fn()) {
   )
 }
 
+function mockPointer(isCoarse: boolean) {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: isCoarse,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+}
+
 describe('RightPanel — success scenario', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -77,6 +91,47 @@ describe('RightPanel — success scenario', () => {
     renderPanel(makeImage())
 
     expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
+  })
+})
+
+describe('RightPanel — pointer-capability shell', () => {
+  const originalMatchMedia = window.matchMedia
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(updateImage).mockResolvedValue(makeImage())
+  })
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia
+  })
+
+  it('renders the sidebar shell on a fine-pointer device', () => {
+    mockPointer(false)
+
+    renderPanel(makeImage())
+
+    expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
+    expect(screen.queryByTestId('mobile-drawer-shell-backdrop')).not.toBeInTheDocument()
+  })
+
+  it('renders the drawer shell on a coarse-pointer device', () => {
+    mockPointer(true)
+
+    renderPanel(makeImage())
+
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    expect(screen.getByTestId('mobile-drawer-shell-backdrop')).toBeInTheDocument()
+  })
+
+  it('renders the same content component in both shells', () => {
+    mockPointer(true)
+    renderPanel(makeImage())
+    expect(screen.getByDisplayValue('Sunset photo')).toBeInTheDocument()
+
+    mockPointer(false)
+    renderPanel(makeImage())
+    expect(screen.getAllByDisplayValue('Sunset photo').length).toBeGreaterThan(0)
   })
 })
 
@@ -154,6 +209,76 @@ describe('RightPanel folders — success scenario', () => {
         expect.objectContaining({ folder_ids: ['folder-1'] }),
       )
     })
+  })
+})
+
+describe('RightPanel selection mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
+  })
+
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onClose: () => void }> = {}) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel
+          mode="selection"
+          selectedCount={props.selectedCount ?? 1}
+          onAddToFolder={props.onAddToFolder ?? vi.fn()}
+          onMoveToTrash={props.onMoveToTrash ?? vi.fn()}
+          onClose={props.onClose ?? vi.fn()}
+        />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders the selected count', () => {
+    renderSelectionPanel({ selectedCount: 1 })
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument()
+  })
+
+  it('calls onAddToFolder with the chosen folder id', async () => {
+    const onAddToFolder = vi.fn()
+    renderSelectionPanel({ onAddToFolder })
+
+    const folderOption = await screen.findByText('Nature')
+    await userEvent.click(folderOption)
+
+    expect(onAddToFolder).toHaveBeenCalledWith('folder-1')
+  })
+
+  it('filters the folder list as the user types in the search input', async () => {
+    vi.mocked(getFolders).mockResolvedValue([
+      { id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
+      { id: 'folder-2', name: 'Work', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' },
+    ])
+    renderSelectionPanel()
+
+    await screen.findByText('Nature')
+    expect(screen.getByText('Work')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByPlaceholderText('Search folders…'), 'nat')
+
+    expect(screen.getByText('Nature')).toBeInTheDocument()
+    expect(screen.queryByText('Work')).not.toBeInTheDocument()
+  })
+
+  it('calls onMoveToTrash when the trash action is clicked', async () => {
+    const onMoveToTrash = vi.fn()
+    renderSelectionPanel({ onMoveToTrash })
+
+    await userEvent.click(screen.getByRole('button', { name: /move to trash/i }))
+
+    expect(onMoveToTrash).toHaveBeenCalled()
+  })
+
+  it('renders the sidebar shell on a fine-pointer device, taking priority over image mode', () => {
+    renderSelectionPanel({ selectedCount: 3 })
+
+    expect(screen.getByRole('complementary')).toBeInTheDocument()
+    expect(screen.getByText('3 selected')).toBeInTheDocument()
   })
 })
 

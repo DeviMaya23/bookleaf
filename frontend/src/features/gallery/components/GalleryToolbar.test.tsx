@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect } from 'vitest'
@@ -12,20 +13,20 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
   const RadioGroupContext = React.createContext<{ value?: string; onValueChange?: (value: string) => void }>({})
 
   return {
-    DropdownMenu: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenu: ({ children }: { children: ReactNode }) =>
       React.createElement(React.Fragment, null, children),
-    DropdownMenuTrigger: ({ children, className, ...props }: { children: React.ReactNode; className?: string }) =>
+    DropdownMenuTrigger: ({ children, className, ...props }: { children: ReactNode; className?: string }) =>
       React.createElement('button', { className, ...props }, children),
-    DropdownMenuContent: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuContent: ({ children }: { children: ReactNode }) =>
       React.createElement('div', { 'data-testid': 'dropdown-content' }, children),
-    DropdownMenuGroup: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuGroup: ({ children }: { children: ReactNode }) =>
       React.createElement(React.Fragment, null, children),
-    DropdownMenuItem: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) =>
+    DropdownMenuItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>
       React.createElement('button', { role: 'menuitem', onClick }, children),
     DropdownMenuSeparator: () => React.createElement('hr'),
-    DropdownMenuRadioGroup: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: (value: string) => void }) =>
+    DropdownMenuRadioGroup: ({ children, value, onValueChange }: { children: ReactNode; value?: string; onValueChange?: (value: string) => void }) =>
       React.createElement(RadioGroupContext.Provider, { value: { value, onValueChange } }, children),
-    DropdownMenuRadioItem: ({ children, value }: { children: React.ReactNode; value: string }) => {
+    DropdownMenuRadioItem: ({ children, value }: { children: ReactNode; value: string }) => {
       const ctx = React.useContext(RadioGroupContext)
       return React.createElement('button', {
         role: 'menuitemradio',
@@ -33,9 +34,9 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
         onClick: () => ctx.onValueChange?.(value),
       }, children)
     },
-    DropdownMenuLabel: ({ children }: { children: React.ReactNode }) =>
+    DropdownMenuLabel: ({ children }: { children: ReactNode }) =>
       React.createElement('div', null, children),
-    DropdownMenuCheckboxItem: ({ children, checked, onCheckedChange }: { children: React.ReactNode; checked?: boolean; onCheckedChange?: (checked: boolean) => void }) =>
+    DropdownMenuCheckboxItem: ({ children, checked, onCheckedChange }: { children: ReactNode; checked?: boolean; onCheckedChange?: (checked: boolean) => void }) =>
       React.createElement('button', {
         role: 'menuitemcheckbox',
         'aria-checked': !!checked,
@@ -48,7 +49,7 @@ function makeFolder(id: string, name: string): Folder {
   return { id, name, description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }
 }
 
-function Harness({ view, tags, folders }: { view: AppView; tags: Tag[]; folders: Folder[] }) {
+function Harness({ view, tags, folders, selectModeToggle, controlsDisabled }: { view: AppView; tags: Tag[]; folders: Folder[]; selectModeToggle?: ReactNode; controlsDisabled?: boolean }) {
   const controls = useGalleryControls(view, tags, folders)
   return (
     <>
@@ -57,6 +58,8 @@ function Harness({ view, tags, folders }: { view: AppView; tags: Tag[]; folders:
         controls={controls}
         focusToggle={<button aria-label="Focus mode">Focus</button>}
         uploadActions={<button>Image</button>}
+        selectModeToggle={selectModeToggle}
+        controlsDisabled={controlsDisabled}
       />
       <div
         data-testid="grid"
@@ -68,8 +71,8 @@ function Harness({ view, tags, folders }: { view: AppView; tags: Tag[]; folders:
   )
 }
 
-function renderToolbar(view: AppView, { tags = [], folders = [] }: { tags?: Tag[]; folders?: Folder[] } = {}) {
-  return render(<Harness view={view} tags={tags} folders={folders} />)
+function renderToolbar(view: AppView, { tags = [], folders = [], selectModeToggle, controlsDisabled }: { tags?: Tag[]; folders?: Folder[]; selectModeToggle?: ReactNode; controlsDisabled?: boolean } = {}) {
+  return render(<Harness view={view} tags={tags} folders={folders} selectModeToggle={selectModeToggle} controlsDisabled={controlsDisabled} />)
 }
 
 function grid() {
@@ -89,6 +92,14 @@ describe('GalleryToolbar sort control', () => {
     await userEvent.click(screen.getByRole('menuitemradio', { name: 'Name' }))
     expect(grid()).toHaveAttribute('data-sort-by', 'title')
     expect(screen.getByText('A → Z')).toBeInTheDocument()
+  })
+
+  it('offers Date deleted (not Date added) as the Trash sort field, with deleted_at-specific direction labels', () => {
+    renderToolbar({ type: 'trash' })
+    expect(grid()).toHaveAttribute('data-sort-by', 'deleted_at')
+    expect(screen.queryByRole('menuitemradio', { name: 'Date added' })).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitemradio', { name: 'Date deleted' })).toBeInTheDocument()
+    expect(screen.getByText('Newest deleted first')).toBeInTheDocument()
   })
 
   it('shows the sort trigger as active only when the selection differs from the view default', async () => {
@@ -198,5 +209,45 @@ describe('GalleryToolbar filter control', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() => expect(grid()).toHaveAttribute('data-filter-tag-ids', ''))
     expect(screen.queryByText('Clear all')).not.toBeInTheDocument()
+  })
+})
+
+describe('GalleryToolbar select mode', () => {
+  it('renders the select-mode toggle when provided (fine-pointer)', () => {
+    renderToolbar({ type: 'folder', id: 'folder-1' }, { selectModeToggle: <button aria-label="Select mode">Select</button> })
+
+    expect(screen.getByRole('button', { name: 'Select mode' })).toBeInTheDocument()
+  })
+
+  it('does not render a select-mode toggle when none is provided (coarse-pointer)', () => {
+    renderToolbar({ type: 'folder', id: 'folder-1' })
+
+    expect(screen.queryByRole('button', { name: 'Select mode' })).not.toBeInTheDocument()
+  })
+
+  it('disables the sort and filter triggers when controlsDisabled is true', () => {
+    renderToolbar({ type: 'folder', id: 'folder-1' }, { controlsDisabled: true })
+
+    expect(screen.getByRole('button', { name: /sort/i })).toBeDisabled()
+  })
+
+  it('disables the name search input when controlsDisabled is true', () => {
+    renderToolbar({ type: 'folder', id: 'folder-1' }, { controlsDisabled: true })
+
+    expect(screen.getByPlaceholderText('Search images by name…')).toBeDisabled()
+  })
+
+  it('disables the Filters trigger when controlsDisabled is true', () => {
+    renderToolbar({ type: 'all' }, { controlsDisabled: true })
+
+    expect(screen.getByRole('button', { name: /filters/i })).toBeDisabled()
+  })
+
+  it('re-enables the sort, filter, and search controls when controlsDisabled is false', () => {
+    renderToolbar({ type: 'all' }, { controlsDisabled: false })
+
+    expect(screen.getByRole('button', { name: /sort/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /filters/i })).not.toBeDisabled()
+    expect(screen.getByPlaceholderText('Search images by name…')).not.toBeDisabled()
   })
 })

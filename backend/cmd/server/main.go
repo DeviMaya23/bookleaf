@@ -9,6 +9,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
+	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/devi/bookleaf/internal/agent"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
@@ -246,6 +250,16 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
+	if cfg.AnthropicAPIKey != "" {
+		aiClient := anthropic.NewClient(
+			anthropicOption.WithAPIKey(cfg.AnthropicAPIKey),
+		)
+		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
+		categorisationLogRepo := repository.NewCategorisationLogRepository(db)
+		categorisationUsecase := usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, categorisationLogRepo, tel)
+		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase))
+	}
+
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 10},
@@ -309,6 +323,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.GET("/me", meHandler.GetMe)
 	protected.PATCH("/me", meHandler.UpdateMe)
 	protected.DELETE("/me", meHandler.DeleteMe)
+	protected.POST("/me/vision/backfill", uploadHandler.BackfillVision)
 	protected.POST("/folders", folderHandler.CreateFolder)
 	protected.GET("/folders", folderHandler.ListFolders)
 	protected.GET("/folders/:id", folderHandler.GetFolder)
@@ -328,6 +343,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.GET("/images/trash", trashHandler.ListTrashed)
 	protected.DELETE("/images/trash", trashHandler.EmptyTrash)
 	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)
+	protected.POST("/images/bulk/add-to-folder", imageHandler.BulkAddToFolder)
+	protected.POST("/images/bulk/trash", trashHandler.BulkTrash)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/in-folder/:id", imageHandler.ListFolderImages)
 	protected.GET("/images/:id", imageHandler.GetImage)
