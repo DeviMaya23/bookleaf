@@ -1,11 +1,13 @@
 import { defineConfig } from "vite";
 import webExtension from "vite-plugin-web-extension";
 
+const FIREFOX_UPDATE_URL = "https://bookleaf-files.evimay.me/bookleaf-extension-updates.json";
+
 export default defineConfig(({ mode }) => {
   const isFirefox = mode === "firefox" || mode === "firefox-production";
+  const isFirefoxProduction = mode === "firefox-production";
   const isProduction = mode === "chrome-production" || mode === "firefox-production";
-  const geckoId =
-    mode === "firefox-production" ? "bookleaf@evimay.me" : "bookleaf-dev@evimay.me";
+  const geckoId = isFirefoxProduction ? "bookleaf@evimay.me" : "bookleaf-dev@evimay.me";
   return {
     build: {
       outDir: isFirefox ? "dist/firefox" : "dist/chrome",
@@ -26,7 +28,10 @@ export default defineConfig(({ mode }) => {
                 scripts: [typed.background.service_worker],
               },
               browser_specific_settings: {
-                gecko: { id: geckoId },
+                gecko: {
+                  id: geckoId,
+                  ...(isFirefoxProduction && { update_url: FIREFOX_UPDATE_URL }),
+                },
               },
             }),
           };
