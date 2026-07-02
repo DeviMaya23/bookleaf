@@ -1,6 +1,6 @@
 -include Makefile.local
 
-.PHONY: tidy run test-cover-repository rebuild fe-install fe-dev fe-test ext-install ext-build ext-build-firefox ext-build-all ext-build-prod
+.PHONY: tidy run test-cover-repository rebuild fe-install fe-dev fe-test ext-install ext-build ext-build-firefox ext-build-all ext-build-prod ext-release-firefox ext-release-chrome
 
 tidy:
 	@cd backend && go mod tidy
@@ -40,6 +40,13 @@ ext-build:
 
 ext-build-prod:
 	@cd extensions && npm run build:chrome:prod && npm run build:firefox:prod
+
+ext-release-firefox:
+	@cd extensions && npm run release:firefox
+
+ext-release-chrome:
+	@cd extensions && npm run release:chrome
+
 update-clearurls:
 	@curl -fsSL https://rules2.clearurls.xyz/data.min.json -o extensions/vendor/clearurls-data.min.json
 	@jq '{"_comment": "Taken from ClearURLs provider rules (https://gitlab.com/ClearURLs/rules). Do not edit manually, update with make commands.", providers: {google: .providers.google, duckduckgo: .providers.duckduckgo, twitter: .providers.twitter, instagram: .providers.instagram, facebook: .providers.facebook, reddit: .providers.reddit}}' extensions/vendor/clearurls-data.min.json > extensions/src/lib/clearUrlsProviders.json
