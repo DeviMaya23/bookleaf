@@ -67,7 +67,13 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
 
   function handleDelete() {
     if (!deleteTarget) return
-    deleteMutation.mutate(deleteTarget.id)
+    const targetId = deleteTarget.id
+    const isViewingTarget = view.type === 'folder' && view.id === targetId
+    deleteMutation.mutate(targetId, {
+      onSuccess: () => {
+        if (isViewingTarget) navigate('/app')
+      },
+    })
     setDeleteTarget(null)
   }
 
