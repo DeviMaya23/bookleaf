@@ -37,12 +37,13 @@ export function useImageDetailsData(image: Image) {
 
   useEffect(() => {
     if (!allFolders) return
-    const resolved = image.folder_ids
+    const folderIds = imageDetail?.folder_ids ?? image.folder_ids
+    const resolved = folderIds
       .map((id) => allFolders.find((f) => f.id === id))
       .filter((f): f is Folder => f !== undefined)
     setSelectedFolders(resolved)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image.id, allFolders])
+  }, [image.id, imageDetail?.folder_ids, allFolders])
 
   const folderSaveMutation = useMutation({
     mutationFn: (folderIds: string[]) =>
