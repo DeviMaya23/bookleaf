@@ -33,7 +33,7 @@ type UploadImageRepository interface {
 	Create(ctx context.Context, image *domain.Image) (*domain.Image, error)
 	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
-	UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error
+	UpdateLabels(ctx context.Context, id uuid.UUID, rawJSON json.RawMessage, labels []domain.ImageLabel) error
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error
 	FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error)
 	ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error)
@@ -481,7 +481,16 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 		return fmt.Errorf("marshal labels: %w", err)
 	}
 
-	if err := u.imageRepo.UpdateAILabels(ctx, imageID, labelsJSON); err != nil {
+	imageLabels := make([]domain.ImageLabel, len(labels))
+	for i, l := range labels {
+		imageLabels[i] = domain.ImageLabel{
+			ImageID: imageID,
+			Label:   l.Description,
+			Score:   l.Score,
+		}
+	}
+
+	if err := u.imageRepo.UpdateLabels(ctx, imageID, labelsJSON, imageLabels); err != nil {
 		return fmt.Errorf("save labels: %w", err)
 	}
 

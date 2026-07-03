@@ -337,19 +337,29 @@ func (r *imageRepository) UpdateThumbnailPath(ctx context.Context, id uuid.UUID,
 	return nil
 }
 
-func (r *imageRepository) UpdateAILabels(ctx context.Context, id uuid.UUID, labels json.RawMessage) error {
-	result := r.db.WithContext(ctx).
-		Model(&domain.Image{}).
-		Where("id = ?", id).
-		Update("ai_labels", labels)
-	if result.Error != nil {
-		return fmt.Errorf("update image ai_labels: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("update image ai_labels: %w", gorm.ErrRecordNotFound)
-	}
 
-	return nil
+func (r *imageRepository) UpdateLabels(ctx context.Context, id uuid.UUID, rawJSON json.RawMessage, labels []domain.ImageLabel) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&domain.Image{}).Where("id = ?", id).Update("ai_labels", rawJSON)
+		if result.Error != nil {
+			return fmt.Errorf("update image ai_labels: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("update image ai_labels: %w", gorm.ErrRecordNotFound)
+		}
+
+		if err := tx.Where("image_id = ?", id).Delete(&domain.ImageLabel{}).Error; err != nil {
+			return fmt.Errorf("delete image labels: %w", err)
+		}
+
+		if len(labels) > 0 {
+			if err := tx.Create(&labels).Error; err != nil {
+				return fmt.Errorf("insert image labels: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
@@ -545,6 +555,141 @@ func (r *imageRepository) UpdatePHash(ctx context.Context, id uuid.UUID, phash s
 		return fmt.Errorf("update image phash: %w", gorm.ErrRecordNotFound)
 	}
 	return nil
+}
+
+func (r *imageRepository) GetImageWithLabels(ctx context.Context, id uuid.UUID, userID string, threshold float64) (*domain.Image, []string, error) {
+	type row struct {
+		domain.Image
+		LabelText *string  `gorm:"column:il_label"`
+		LabelScore *float32 `gorm:"column:il_score"`
+	}
+
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT i.*, il.label AS il_label, il.score AS il_score
+		FROM images i
+		LEFT JOIN image_labels il ON il.image_id = i.id AND il.score >= ?
+		WHERE i.id = ? AND i.user_id = ? AND i.deleted_at IS NULL
+		ORDER BY il.score DESC NULLS LAST
+	`, threshold, id, userID).Scan(&rows).Error
+	if err != nil {
+		return nil, nil, fmt.Errorf("get image with labels: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil, fmt.Errorf("get image with labels: %w", gorm.ErrRecordNotFound)
+	}
+
+	img := rows[0].Image
+	labels := make([]string, 0)
+	for _, row := range rows {
+		if row.LabelText != nil {
+			labels = append(labels, *row.LabelText)
+		}
+	}
+
+	return &img, labels, nil
+}
+
+func (r *imageRepository) GetFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error) {
+	type nameRow struct {
+		Name string `gorm:"column:name"`
+	}
+
+	db := r.db.WithContext(ctx)
+
+	var countResult struct {
+		Count int `gorm:"column:count"`
+	}
+	if err := db.Raw(`
+		SELECT COUNT(DISTINCT i.id) AS count
+		FROM images i
+		JOIN image_folders imf ON imf.image_id = i.id AND imf.folder_id = ?
+		WHERE i.user_id = ? AND i.deleted_at IS NULL
+	`, folderID, userID).Scan(&countResult).Error; err != nil {
+		return nil, fmt.Errorf("get folder image count: %w", err)
+	}
+
+	var labelRows []nameRow
+	if err := db.Raw(`
+		SELECT il.label AS name
+		FROM image_labels il
+		JOIN image_folders imf ON imf.image_id = il.image_id AND imf.folder_id = ?
+		JOIN images i ON i.id = il.image_id AND i.user_id = ? AND i.deleted_at IS NULL
+		WHERE il.score >= ?
+		GROUP BY il.label
+		ORDER BY COUNT(*) DESC, il.label ASC
+		LIMIT ?
+	`, folderID, userID, threshold, topN).Scan(&labelRows).Error; err != nil {
+		return nil, fmt.Errorf("get folder top vision labels: %w", err)
+	}
+
+	var tagRows []nameRow
+	if err := db.Raw(`
+		SELECT t.name AS name
+		FROM tags t
+		JOIN image_tags it ON it.tag_id = t.id
+		JOIN image_folders imf ON imf.image_id = it.image_id AND imf.folder_id = ?
+		JOIN images i ON i.id = it.image_id AND i.user_id = ? AND i.deleted_at IS NULL
+		GROUP BY t.name
+		ORDER BY COUNT(*) DESC, t.name ASC
+		LIMIT ?
+	`, folderID, userID, topN).Scan(&tagRows).Error; err != nil {
+		return nil, fmt.Errorf("get folder top user tags: %w", err)
+	}
+
+	agg := &domain.FolderAggregate{
+		ImageCount:      countResult.Count,
+		TopVisionLabels: make([]string, len(labelRows)),
+		TopUserTags:     make([]string, len(tagRows)),
+	}
+	for i, row := range labelRows {
+		agg.TopVisionLabels[i] = row.Name
+	}
+	for i, row := range tagRows {
+		agg.TopUserTags[i] = row.Name
+	}
+	return agg, nil
+}
+
+func (r *imageRepository) GetFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error) {
+	var images []*domain.Image
+	err := r.db.WithContext(ctx).
+		Joins("JOIN image_folders imf ON imf.image_id = images.id AND imf.folder_id = ?", folderID).
+		Where("images.user_id = ? AND images.deleted_at IS NULL", userID).
+		Order("images.created_at DESC").
+		Limit(limit).
+		Find(&images).Error
+	if err != nil {
+		return nil, nil, fmt.Errorf("get folder image samples: %w", err)
+	}
+
+	labelMap := make(map[uuid.UUID][]string, len(images))
+	for _, img := range images {
+		labelMap[img.ID] = []string{}
+	}
+
+	if len(images) == 0 {
+		return images, labelMap, nil
+	}
+
+	ids := make([]uuid.UUID, len(images))
+	for i, img := range images {
+		ids[i] = img.ID
+	}
+
+	var labelRows []domain.ImageLabel
+	err = r.db.WithContext(ctx).
+		Where("image_id IN ? AND score >= ?", ids, threshold).
+		Find(&labelRows).Error
+	if err != nil {
+		return nil, nil, fmt.Errorf("get folder image sample labels: %w", err)
+	}
+
+	for _, l := range labelRows {
+		labelMap[l.ImageID] = append(labelMap[l.ImageID], l.Label)
+	}
+
+	return images, labelMap, nil
 }
 
 var _ usecase.ImageRepository = (*imageRepository)(nil)

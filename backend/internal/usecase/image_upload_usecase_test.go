@@ -453,11 +453,15 @@ func TestImageUploadUsecase_ProcessVisionLabelling_SavesLabels(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, visionSvc.calls)
-	assert.Equal(t, 1, imageRepo.updateAILabelsCalls)
+	assert.Equal(t, 1, imageRepo.updateLabelsCalls)
 	var saved []domain.Label
 	require.NoError(t, json.Unmarshal(imageRepo.lastAILabels, &saved))
 	require.Len(t, saved, 1)
 	assert.Equal(t, "Nature", saved[0].Description)
+	require.Len(t, imageRepo.lastImageLabels, 1)
+	assert.Equal(t, "Nature", imageRepo.lastImageLabels[0].Label)
+	assert.Equal(t, float32(0.98), imageRepo.lastImageLabels[0].Score)
+	assert.Equal(t, imageID, imageRepo.lastImageLabels[0].ImageID)
 }
 
 func TestImageUploadUsecase_ProcessVisionLabelling_ZeroLabelsWritesEmpty(t *testing.T) {
@@ -472,8 +476,9 @@ func TestImageUploadUsecase_ProcessVisionLabelling_ZeroLabelsWritesEmpty(t *test
 	err := uc.ProcessVisionLabelling(context.Background(), imageID, "kp_abc123")
 
 	require.NoError(t, err)
-	assert.Equal(t, 1, imageRepo.updateAILabelsCalls)
+	assert.Equal(t, 1, imageRepo.updateLabelsCalls)
 	assert.Equal(t, "[]", string(imageRepo.lastAILabels))
+	assert.Empty(t, imageRepo.lastImageLabels)
 }
 
 func TestImageUploadUsecase_ProcessVisionLabelling_VisionDisabledReturnsNil(t *testing.T) {
