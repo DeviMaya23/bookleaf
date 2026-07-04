@@ -205,29 +205,6 @@ func TestImageRepository_UpdateThumbnailPath_NotFound(t *testing.T) {
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
-func TestImageRepository_UpdateAILabels_Success(t *testing.T) {
-	repo, userID := setupImageTest(t)
-
-	created, err := repo.Create(context.Background(), newTestImage(userID))
-	require.NoError(t, err)
-
-	labels := json.RawMessage(`[{"description":"Nature","score":0.98}]`)
-	err = repo.UpdateAILabels(context.Background(), created.ID, labels)
-	require.NoError(t, err)
-
-	found, err := repo.GetByID(context.Background(), created.ID, userID)
-	require.NoError(t, err)
-	assert.JSONEq(t, string(labels), string(found.AILabels))
-}
-
-func TestImageRepository_UpdateAILabels_NotFound(t *testing.T) {
-	repo, _ := setupImageTest(t)
-
-	err := repo.UpdateAILabels(context.Background(), uuid.New(), json.RawMessage(`[]`))
-
-	require.Error(t, err)
-	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
-}
 
 func TestImageRepository_ListUnlabelled_ReturnsOnlyUnlabelledNonDeleted(t *testing.T) {
 	repo, userID := setupImageTest(t)
@@ -237,7 +214,7 @@ func TestImageRepository_ListUnlabelled_ReturnsOnlyUnlabelledNonDeleted(t *testi
 
 	labelled, err := repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
-	require.NoError(t, repo.UpdateAILabels(context.Background(), labelled.ID, json.RawMessage(`[]`)))
+	require.NoError(t, repo.UpdateLabels(context.Background(), labelled.ID, json.RawMessage(`[]`), nil))
 
 	deleted, err := repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
@@ -272,7 +249,7 @@ func TestImageRepository_ListUnlabelled_Empty(t *testing.T) {
 
 	created, err := repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
-	require.NoError(t, repo.UpdateAILabels(context.Background(), created.ID, json.RawMessage(`[]`)))
+	require.NoError(t, repo.UpdateLabels(context.Background(), created.ID, json.RawMessage(`[]`), nil))
 
 	images, err := repo.ListUnlabelled(context.Background(), userID)
 

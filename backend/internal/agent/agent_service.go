@@ -16,8 +16,9 @@ import (
 const VISION_LABEL_SCORE_THRESHOLD = 0.75
 
 type AgentImageRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
-	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
+	GetImageWithLabels(ctx context.Context, id uuid.UUID, userID string, threshold float64) (*domain.Image, []string, error)
+	GetFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error)
+	GetFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error)
 }
 
 type AgentFolderRepository interface {
@@ -70,14 +71,14 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 		tools[i] = anthropic.ToolUnionParam{OfTool: &tp}
 	}
 
-	img, err := u.imageRepo.GetByID(ctx, imageID, userID)
+	img, labels, err := u.imageRepo.GetImageWithLabels(ctx, imageID, userID, VISION_LABEL_SCORE_THRESHOLD)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return res, err
 	}
 
-	imageMetadata, err := formatImageLabels(img, VISION_LABEL_SCORE_THRESHOLD)
+	imageMetadata, err := formatImageLabels(img.Title, labels)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -221,18 +222,18 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 
 
 func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, folder *domain.Folder) (string, error) {
-	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, nil)
+	agg, err := a.imageRepo.GetFolderTopLabels(ctx, userID, folderID, VISION_LABEL_SCORE_THRESHOLD, 5)
 	if err != nil {
 		return "", err
 	}
-	return formatFolderTopLabels(folderID, folder, images, VISION_LABEL_SCORE_THRESHOLD)
+
+	return formatFolderTopLabels(folderID, folder, agg.ImageCount, agg.TopVisionLabels, agg.TopUserTags)
 }
 
 func (a *AgentService) getFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
-	direction := "desc"
-	images, err := a.imageRepo.ListByFolder(ctx, userID, folderID, nil, &direction)
+	images, labelMap, err := a.imageRepo.GetFolderImageSamples(ctx, userID, folderID, VISION_LABEL_SCORE_THRESHOLD, 5)
 	if err != nil {
 		return "", err
 	}
-	return formatFolderImageSamples(images, VISION_LABEL_SCORE_THRESHOLD)
+	return formatFolderImageSamples(images, labelMap)
 }

@@ -38,8 +38,9 @@ type mockImageRepository struct {
 	lastMoveImageID       uuid.UUID
 	lastMoveFromFolderID  *uuid.UUID
 	lastMoveToFolderID    *uuid.UUID
-	updateAILabelsCalls   int
-	lastAILabels          json.RawMessage
+	updateLabelsCalls    int
+	lastAILabels         json.RawMessage
+	lastImageLabels      []domain.ImageLabel
 	lastListName          *string
 	lastListSort          *string
 	lastListDirection     *string
@@ -90,9 +91,10 @@ func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) 
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockImageRepository) UpdateAILabels(_ context.Context, _ uuid.UUID, labels json.RawMessage) error {
-	m.updateAILabelsCalls++
-	m.lastAILabels = labels
+func (m *mockImageRepository) UpdateLabels(_ context.Context, _ uuid.UUID, rawJSON json.RawMessage, labels []domain.ImageLabel) error {
+	m.updateLabelsCalls++
+	m.lastAILabels = rawJSON
+	m.lastImageLabels = labels
 	return m.err
 }
 func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {

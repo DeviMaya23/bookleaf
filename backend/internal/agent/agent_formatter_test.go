@@ -10,62 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func rawLabels(t *testing.T, labels []domain.Label) json.RawMessage {
-	t.Helper()
-	b, err := json.Marshal(labels)
-	require.NoError(t, err)
-	return b
-}
-
-func TestExtractLabels_AboveThresholdReturned(t *testing.T) {
-	input := rawLabels(t, []domain.Label{
-		{Description: "Sunset", Score: 0.90},
-		{Description: "Sky", Score: 0.80},
-		{Description: "Cloud", Score: 0.60},
-	})
-
-	result, err := extractLabels(input, 0.75)
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{"Sunset", "Sky"}, result)
-}
-
-func TestExtractLabels_AllBelowThresholdReturnsEmpty(t *testing.T) {
-	input := rawLabels(t, []domain.Label{
-		{Description: "Cloud", Score: 0.50},
-	})
-
-	result, err := extractLabels(input, 0.75)
-
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestExtractLabels_InvalidJSONReturnsError(t *testing.T) {
-	_, err := extractLabels(json.RawMessage(`not-json`), 0.75)
-
-	assert.Error(t, err)
-}
-
 func TestFormatFolderTopLabels_CorrectTopCounts(t *testing.T) {
 	folderID := uuid.New()
-	images := []*domain.Image{
-		{
-			AILabels: rawLabels(t, []domain.Label{
-				{Description: "Nature", Score: 0.90},
-				{Description: "Sky", Score: 0.80},
-			}),
-			Tags: []domain.Tag{{Name: "outdoors"}, {Name: "travel"}},
-		},
-		{
-			AILabels: rawLabels(t, []domain.Label{
-				{Description: "Nature", Score: 0.85},
-			}),
-			Tags: []domain.Tag{{Name: "outdoors"}},
-		},
-	}
+	topVisionLabels := []string{"Nature", "Sky"}
+	topUserTags := []string{"outdoors", "travel"}
 
-	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, 2, topVisionLabels, topUserTags)
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -80,17 +30,9 @@ func TestFormatFolderTopLabels_CorrectTopCounts(t *testing.T) {
 
 func TestFormatFolderTopLabels_BelowThresholdExcluded(t *testing.T) {
 	folderID := uuid.New()
-	images := []*domain.Image{
-		{
-			AILabels: rawLabels(t, []domain.Label{
-				{Description: "Nature", Score: 0.90},
-				{Description: "Fog", Score: 0.50},
-			}),
-			Tags: []domain.Tag{},
-		},
-	}
+	topVisionLabels := []string{"Nature"}
 
-	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, 1, topVisionLabels, []string{})
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -101,17 +43,9 @@ func TestFormatFolderTopLabels_BelowThresholdExcluded(t *testing.T) {
 
 func TestFormatFolderTopLabels_FewerThan5LabelsReturnsAllAvailable(t *testing.T) {
 	folderID := uuid.New()
-	images := []*domain.Image{
-		{
-			AILabels: rawLabels(t, []domain.Label{
-				{Description: "Nature", Score: 0.90},
-				{Description: "Sky", Score: 0.80},
-			}),
-			Tags: []domain.Tag{{Name: "outdoors"}},
-		},
-	}
+	topVisionLabels := []string{"Nature", "Sky"}
 
-	result, err := formatFolderTopLabels(folderID, nil, images, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, 1, topVisionLabels, []string{"outdoors"})
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -123,7 +57,7 @@ func TestFormatFolderTopLabels_FewerThan5LabelsReturnsAllAvailable(t *testing.T)
 func TestFormatFolderTopLabels_NoImagesReturnsZeroCounts(t *testing.T) {
 	folderID := uuid.New()
 
-	result, err := formatFolderTopLabels(folderID, nil, []*domain.Image{}, 0.75)
+	result, err := formatFolderTopLabels(folderID, nil, 0, []string{}, []string{})
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -138,7 +72,7 @@ func TestFormatFolderTopLabels_IncludesFolderNameAndDescription(t *testing.T) {
 	desc := "mood shots"
 	folder := &domain.Folder{ID: folderID, Name: "Photography", Description: &desc}
 
-	result, err := formatFolderTopLabels(folderID, folder, []*domain.Image{}, 0.75)
+	result, err := formatFolderTopLabels(folderID, folder, 0, []string{}, []string{})
 
 	require.NoError(t, err)
 	var out map[string]any
@@ -147,30 +81,28 @@ func TestFormatFolderTopLabels_IncludesFolderNameAndDescription(t *testing.T) {
 	assert.Equal(t, "mood shots", out["folder_description"])
 }
 
-func TestFormatFolderImageSamples_MoreThan5ReturnsOnly5(t *testing.T) {
-	images := make([]*domain.Image, 7)
+func TestFormatFolderImageSamples_ReturnsAllPassedImages(t *testing.T) {
+	images := make([]*domain.Image, 3)
+	labelMap := map[uuid.UUID][]string{}
 	for i := range images {
-		images[i] = &domain.Image{
-			Title:    "img",
-			AILabels: rawLabels(t, []domain.Label{}),
-		}
+		images[i] = &domain.Image{ID: uuid.New(), Title: "img"}
+		labelMap[images[i].ID] = []string{}
 	}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples(images, labelMap)
 
 	require.NoError(t, err)
 	var out []any
 	require.NoError(t, json.Unmarshal([]byte(result), &out))
-	assert.Len(t, out, 5)
+	assert.Len(t, out, 3)
 }
 
 func TestFormatFolderImageSamples_FewerThan5ImagesReturnsAll(t *testing.T) {
-	images := []*domain.Image{
-		{Title: "a.jpg", AILabels: rawLabels(t, []domain.Label{})},
-		{Title: "b.jpg", AILabels: rawLabels(t, []domain.Label{})},
-	}
+	img1 := &domain.Image{ID: uuid.New(), Title: "a.jpg"}
+	img2 := &domain.Image{ID: uuid.New(), Title: "b.jpg"}
+	labelMap := map[uuid.UUID][]string{img1.ID: {}, img2.ID: {}}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples([]*domain.Image{img1, img2}, labelMap)
 
 	require.NoError(t, err)
 	var out []any
@@ -179,16 +111,10 @@ func TestFormatFolderImageSamples_FewerThan5ImagesReturnsAll(t *testing.T) {
 }
 
 func TestFormatFolderImageSamples_NilDescriptionAndSourceURLSerialiseAsEmpty(t *testing.T) {
-	images := []*domain.Image{
-		{
-			Title:       "photo.jpg",
-			Description: nil,
-			SourceURL:   nil,
-			AILabels:    rawLabels(t, []domain.Label{}),
-		},
-	}
+	img := &domain.Image{ID: uuid.New(), Title: "photo.jpg", Description: nil, SourceURL: nil}
+	labelMap := map[uuid.UUID][]string{img.ID: {}}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples([]*domain.Image{img}, labelMap)
 
 	require.NoError(t, err)
 	var out []map[string]any
@@ -197,18 +123,11 @@ func TestFormatFolderImageSamples_NilDescriptionAndSourceURLSerialiseAsEmpty(t *
 	assert.Equal(t, "", out[0]["image_source_url"])
 }
 
-func TestFormatFolderImageSamples_BelowThresholdLabelsExcluded(t *testing.T) {
-	images := []*domain.Image{
-		{
-			Title: "photo.jpg",
-			AILabels: rawLabels(t, []domain.Label{
-				{Description: "Nature", Score: 0.90},
-				{Description: "Blur", Score: 0.40},
-			}),
-		},
-	}
+func TestFormatFolderImageSamples_LabelsFromMapUsedPerImage(t *testing.T) {
+	img := &domain.Image{ID: uuid.New(), Title: "photo.jpg"}
+	labelMap := map[uuid.UUID][]string{img.ID: {"Nature"}}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples([]*domain.Image{img}, labelMap)
 
 	require.NoError(t, err)
 	var out []map[string]any
@@ -217,13 +136,23 @@ func TestFormatFolderImageSamples_BelowThresholdLabelsExcluded(t *testing.T) {
 	assert.Equal(t, []any{"Nature"}, labels)
 }
 
+func TestFormatFolderImageSamples_ImageAbsentFromLabelMapReturnsEmpty(t *testing.T) {
+	img := &domain.Image{ID: uuid.New(), Title: "photo.jpg"}
+
+	result, err := formatFolderImageSamples([]*domain.Image{img}, map[uuid.UUID][]string{})
+
+	require.NoError(t, err)
+	var out []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(result), &out))
+	assert.Empty(t, out[0]["image_vision_labels"].([]any))
+}
+
 func TestFormatFolderImageSamples_SearchEngineSourceURLReturnsEmpty(t *testing.T) {
 	googleURL := "https://www.google.com/search?q=heather+honey&udm=2"
-	images := []*domain.Image{
-		{Title: "photo.jpg", SourceURL: &googleURL, AILabels: rawLabels(t, []domain.Label{})},
-	}
+	img := &domain.Image{ID: uuid.New(), Title: "photo.jpg", SourceURL: &googleURL}
+	labelMap := map[uuid.UUID][]string{img.ID: {}}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples([]*domain.Image{img}, labelMap)
 
 	require.NoError(t, err)
 	var out []map[string]any
@@ -233,11 +162,10 @@ func TestFormatFolderImageSamples_SearchEngineSourceURLReturnsEmpty(t *testing.T
 
 func TestFormatFolderImageSamples_NonDeniedSourceURLPassesThrough(t *testing.T) {
 	sourceURL := "https://unsplash.com/photos/abc123"
-	images := []*domain.Image{
-		{Title: "photo.jpg", SourceURL: &sourceURL, AILabels: rawLabels(t, []domain.Label{})},
-	}
+	img := &domain.Image{ID: uuid.New(), Title: "photo.jpg", SourceURL: &sourceURL}
+	labelMap := map[uuid.UUID][]string{img.ID: {}}
 
-	result, err := formatFolderImageSamples(images, 0.75)
+	result, err := formatFolderImageSamples([]*domain.Image{img}, labelMap)
 
 	require.NoError(t, err)
 	var out []map[string]any
@@ -246,14 +174,7 @@ func TestFormatFolderImageSamples_NonDeniedSourceURLPassesThrough(t *testing.T) 
 }
 
 func TestFormatImageLabels_CorrectOutput(t *testing.T) {
-	rawLabels, err := json.Marshal([]domain.Label{
-		{Description: "Nature", Score: 0.98},
-		{Description: "Forest", Score: 0.91},
-	})
-	require.NoError(t, err)
-	img := &domain.Image{Title: "sunset.jpg", AILabels: rawLabels}
-
-	result, err := formatImageLabels(img, 0.9)
+	result, err := formatImageLabels("sunset.jpg", []string{"Nature", "Forest"})
 
 	require.NoError(t, err)
 	var out map[string]any

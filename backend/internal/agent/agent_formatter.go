@@ -3,7 +3,6 @@ package agent
 import (
 	"encoding/json"
 	"net/url"
-	"sort"
 	"strings"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -39,13 +38,9 @@ func formatFolderList(folders []*domain.Folder) (string, error) {
 	return string(str), nil
 }
 
-func formatImageLabels(image *domain.Image, threshold float64) (string, error) {
-	labels, err := extractLabels(image.AILabels, threshold)
-	if err != nil {
-		return "", err
-	}
+func formatImageLabels(title string, labels []string) (string, error) {
 	metadata := map[string]interface{}{
-		"image_name":     image.Title,
+		"image_name":     title,
 		"vision_results": labels,
 	}
 	metadataJSON, err := json.Marshal(metadata)
@@ -64,48 +59,7 @@ func findFolder(folders []*domain.Folder, id uuid.UUID) *domain.Folder {
 	return nil
 }
 
-func formatFolderTopLabels(folderID uuid.UUID, folder *domain.Folder, images []*domain.Image, threshold float64) (string, error) {
-	labelCount := map[string]int{}
-	tagCount := map[string]int{}
-
-	for _, img := range images {
-		labels, err := extractLabels(img.AILabels, threshold)
-		if err != nil {
-			return "", err
-		}
-		for _, l := range labels {
-			labelCount[l]++
-		}
-		for _, t := range img.Tags {
-			tagCount[t.Name]++
-		}
-	}
-
-	type entry struct {
-		name  string
-		count int
-	}
-	topN := func(counts map[string]int, n int) []string {
-		entries := make([]entry, 0, len(counts))
-		for name, count := range counts {
-			entries = append(entries, entry{name, count})
-		}
-		sort.Slice(entries, func(i, j int) bool {
-			if entries[i].count != entries[j].count {
-				return entries[i].count > entries[j].count
-			}
-			return entries[i].name < entries[j].name
-		})
-		if len(entries) > n {
-			entries = entries[:n]
-		}
-		result := make([]string, len(entries))
-		for i, e := range entries {
-			result[i] = e.name
-		}
-		return result
-	}
-
+func formatFolderTopLabels(folderID uuid.UUID, folder *domain.Folder, imageCount int, topVisionLabels []string, topUserTags []string) (string, error) {
 	name, desc := "", ""
 	if folder != nil {
 		name = folder.Name
@@ -115,9 +69,9 @@ func formatFolderTopLabels(folderID uuid.UUID, folder *domain.Folder, images []*
 		"folder_id":          folderID.String(),
 		"folder_name":        name,
 		"folder_description": desc,
-		"image_count":        len(images),
-		"top_vision_labels":  topN(labelCount, 5),
-		"top_user_tags":      topN(tagCount, 5),
+		"image_count":        imageCount,
+		"top_vision_labels":  topVisionLabels,
+		"top_user_tags":      topUserTags,
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
@@ -126,10 +80,7 @@ func formatFolderTopLabels(folderID uuid.UUID, folder *domain.Folder, images []*
 	return string(b), nil
 }
 
-func formatFolderImageSamples(images []*domain.Image, threshold float64) (string, error) {
-	if len(images) > 5 {
-		images = images[:5]
-	}
+func formatFolderImageSamples(images []*domain.Image, labelMap map[uuid.UUID][]string) (string, error) {
 	type imageSample struct {
 		Title        string   `json:"image_name"`
 		Notes        string   `json:"image_notes"`
@@ -138,9 +89,9 @@ func formatFolderImageSamples(images []*domain.Image, threshold float64) (string
 	}
 	samples := make([]imageSample, 0, len(images))
 	for _, img := range images {
-		labels, err := extractLabels(img.AILabels, threshold)
-		if err != nil {
-			return "", err
+		labels := labelMap[img.ID]
+		if labels == nil {
+			labels = []string{}
 		}
 		sourceURL := util.DerefOr(img.SourceURL, "")
 		if isDeniedSourceURL(sourceURL) {
@@ -195,18 +146,4 @@ func isDeniedSourceURL(rawURL string) bool {
 		}
 	}
 	return false
-}
-
-func extractLabels(aiLabels json.RawMessage, threshold float64) ([]string, error) {
-	var labels []domain.Label
-	if err := json.Unmarshal(aiLabels, &labels); err != nil {
-		return nil, err
-	}
-	result := make([]string, 0, len(labels))
-	for _, l := range labels {
-		if float64(l.Score) >= threshold {
-			result = append(result, l.Description)
-		}
-	}
-	return result, nil
 }

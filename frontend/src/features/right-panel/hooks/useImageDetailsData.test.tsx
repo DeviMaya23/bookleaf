@@ -64,6 +64,11 @@ describe('useImageDetailsData', () => {
   })
 
   it('resolves selectedFolders from the image folder_ids once folders load', async () => {
+    vi.mocked(getImage).mockResolvedValue({
+      ...makeImage({ folder_ids: ['f2'] }),
+      image_url: 'https://example.com/full.jpg',
+      suggested_folder_name: null,
+    })
     const { result } = renderData(makeImage({ folder_ids: ['f2'] }))
 
     await waitFor(() => {
@@ -73,6 +78,15 @@ describe('useImageDetailsData', () => {
   })
 
   it('re-syncs selectedFolders when the image changes', async () => {
+    vi.mocked(getImage).mockImplementation((_getToken, id) => {
+      const folderIds = id === 'img-1' ? ['f1'] : ['f2']
+      return Promise.resolve({
+        ...makeImage({ id: id as string, folder_ids: folderIds }),
+        image_url: 'https://example.com/full.jpg',
+        suggested_folder_name: null,
+      })
+    })
+
     const { result, rerender } = renderData(makeImage({ folder_ids: ['f1'] }))
 
     await waitFor(() => {
