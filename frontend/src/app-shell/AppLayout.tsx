@@ -30,6 +30,7 @@ import type { Folder } from '@/lib/folders'
 import { useMaintenanceActive } from '@/lib/maintenanceStore'
 import MaintenancePage from '@/components/MaintenancePage'
 import { useVisionSuggestion } from './useVisionSuggestion'
+import { useSSEEvents } from './useSSEEvents'
 import { handleFileAutoUpload } from './lib/dragHandlers'
 import { bulkAddImagesToFolder, bulkTrashImages } from '@/lib/images'
 import type { Image } from '@/lib/images'
@@ -175,6 +176,7 @@ export default function AppLayout() {
     : null
 
   const { checkVision } = useVisionSuggestion()
+  useSSEEvents()
 
   const handleImageSelect = useCallback((img: Image) => {
     if (isCoarsePointer) {

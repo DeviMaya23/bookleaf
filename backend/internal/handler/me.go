@@ -58,9 +58,10 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                   user.ID,
-		"vision_enabled":       user.VisionEnabled,
-		"folder_icons_enabled": user.FolderIconsEnabled,
+		"id":                       user.ID,
+		"vision_enabled":           user.VisionEnabled,
+		"folder_icons_enabled":     user.FolderIconsEnabled,
+		"ai_categorisation_enabled": user.AICategorisationEnabled,
 	})
 }
 
@@ -108,9 +109,10 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                   user.ID,
-		"vision_enabled":       user.VisionEnabled,
-		"folder_icons_enabled": user.FolderIconsEnabled,
+		"id":                       user.ID,
+		"vision_enabled":           user.VisionEnabled,
+		"folder_icons_enabled":     user.FolderIconsEnabled,
+		"ai_categorisation_enabled": user.AICategorisationEnabled,
 	})
 }
 
