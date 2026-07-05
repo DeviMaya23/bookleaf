@@ -37,7 +37,7 @@ vi.mock('@/lib/images', async (importOriginal) => ({
 }))
 
 vi.mock('@/features/auth/lib/me', () => ({
-  getMe: vi.fn().mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true }),
+  getMe: vi.fn().mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true, ai_categorisation_enabled: false, ai_categorisation_count_this_month: 0 }),
 }))
 
 vi.mock('@/components/ui/context-menu', async () => {
@@ -171,7 +171,7 @@ describe('FolderSidebar new folder controls', () => {
 describe('FolderSidebar folder icons', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true, ai_categorisation_enabled: false })
+    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: true, ai_categorisation_enabled: false, ai_categorisation_count_this_month: 0 })
   })
 
   it('renders icons for All, Unsorted, Trash, and user folders when folder_icons_enabled is true', async () => {
@@ -187,7 +187,7 @@ describe('FolderSidebar folder icons', () => {
   })
 
   it('renders no icons when folder_icons_enabled is false', async () => {
-    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: false, ai_categorisation_enabled: false })
+    vi.mocked(getMe).mockResolvedValue({ id: 'kp_abc123', vision_enabled: false, folder_icons_enabled: false, ai_categorisation_enabled: false, ai_categorisation_count_this_month: 0 })
     vi.mocked(getFolders).mockResolvedValue([makeFolder('1')])
 
     renderSidebar()

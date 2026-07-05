@@ -136,8 +136,10 @@ func (f *fakeFolderShareRepo) DeleteByFolderID(_ context.Context, folderID uuid.
 // Use it when the test pre-seeds an existing log and then asserts what was
 // (or was not) written afterwards.
 type fakeCategorisationLogRepo struct {
-	existing *domain.CategorisationLog
-	created  *domain.CategorisationLog
+	existing    *domain.CategorisationLog
+	created     *domain.CategorisationLog
+	monthCount  int
+	countErr    error
 }
 
 func (f *fakeCategorisationLogRepo) GetByImageID(_ context.Context, _ uuid.UUID) (*domain.CategorisationLog, error) {
@@ -147,4 +149,8 @@ func (f *fakeCategorisationLogRepo) GetByImageID(_ context.Context, _ uuid.UUID)
 func (f *fakeCategorisationLogRepo) Create(_ context.Context, log *domain.CategorisationLog) error {
 	f.created = log
 	return nil
+}
+
+func (f *fakeCategorisationLogRepo) CountByUserAndMonth(_ context.Context, _ string, _, _ int) (int, error) {
+	return f.monthCount, f.countErr
 }

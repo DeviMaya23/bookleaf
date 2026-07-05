@@ -5,6 +5,7 @@ export interface Me {
   vision_enabled: boolean
   folder_icons_enabled: boolean
   ai_categorisation_enabled: boolean
+  ai_categorisation_count_this_month: number
 }
 
 type GetToken = () => Promise<string | undefined>
@@ -23,6 +24,7 @@ export async function deleteMe(getToken: GetToken): Promise<void> {
 export interface UpdateMeParams {
   vision_enabled?: boolean
   folder_icons_enabled?: boolean
+  ai_categorisation_enabled?: boolean
 }
 
 export async function updateMe(getToken: GetToken, params: UpdateMeParams): Promise<Me> {

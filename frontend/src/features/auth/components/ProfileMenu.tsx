@@ -11,11 +11,26 @@ import {
 } from '@/components/ui/dropdown-menu'
 import SettingsModal from '@/features/settings/components/SettingsModal'
 import { getInitials, getFullName } from '@/features/auth/lib/profile'
+import { getMe } from '@/features/auth/lib/me'
 import { ChevronUp } from 'lucide-react'
 
+function dismissalKey() {
+  const now = new Date()
+  const year = now.getUTCFullYear()
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+  return `categorisation_limit_dismissed_${year}-${month}`
+}
+
 export default function ProfileMenu() {
-  const { getUserProfile, logout } = useKindeAuth()
+  const { getUserProfile, getToken, logout } = useKindeAuth()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(dismissalKey()) !== null
+    } catch {
+      return false
+    }
+  })
 
   const { data: profile } = useQuery({
     queryKey: ['profile'],
@@ -23,16 +38,49 @@ export default function ProfileMenu() {
     staleTime: Infinity,
   })
 
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(getToken),
+    staleTime: Infinity,
+  })
+
+  const showBadge =
+    !dismissed &&
+    (me?.ai_categorisation_enabled ?? false) &&
+    (me?.ai_categorisation_count_this_month ?? 0) >= 50
+
+  function handleTriggerClick() {
+    if (showBadge) {
+      try {
+        localStorage.setItem(dismissalKey(), '1')
+      } catch {
+        // ignore
+      }
+      setDismissed(true)
+    }
+  }
+
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent text-left">
-          <Avatar className="h-7 w-7 shrink-0">
-            <AvatarImage src={profile?.picture ?? undefined} />
-            <AvatarFallback className="text-xs">
-              {profile ? getInitials(profile) : '…'}
-            </AvatarFallback>
-          </Avatar>
+        <DropdownMenuTrigger
+          onClick={handleTriggerClick}
+          className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent text-left"
+        >
+          <div className="relative shrink-0">
+            <Avatar className="h-7 w-7">
+              <AvatarImage src={profile?.picture ?? undefined} />
+              <AvatarFallback className="text-xs">
+                {profile ? getInitials(profile) : '…'}
+              </AvatarFallback>
+            </Avatar>
+            {showBadge && (
+              <span
+                data-testid="categorisation-limit-badge"
+                className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive"
+              />
+            )}
+          </div>
           <span className="truncate font-medium text-foreground">
             {profile ? getFullName(profile) : '…'}
           </span>
