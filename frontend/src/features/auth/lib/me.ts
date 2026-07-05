@@ -4,6 +4,7 @@ export interface Me {
   id: string
   vision_enabled: boolean
   folder_icons_enabled: boolean
+  ai_categorisation_enabled: boolean
 }
 
 type GetToken = () => Promise<string | undefined>

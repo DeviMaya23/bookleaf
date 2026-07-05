@@ -48,7 +48,7 @@ func (m *mockAccountUsecase) DeleteAccount(_ context.Context, userID string) err
 // --- GetMe ---
 
 func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: true}}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := NewMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: true, AICategorisationEnabled: true}}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/me", "")
 
 	err := h.GetMe(c)
@@ -60,6 +60,7 @@ func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
 	assert.Equal(t, "kp_abc123", resp["id"])
 	assert.Equal(t, true, resp["vision_enabled"])
 	assert.Equal(t, true, resp["folder_icons_enabled"])
+	assert.Equal(t, true, resp["ai_categorisation_enabled"])
 }
 
 func TestMeHandler_GetMe_GenericError(t *testing.T) {

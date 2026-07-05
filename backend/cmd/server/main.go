@@ -14,6 +14,7 @@ import (
 
 	"github.com/devi/bookleaf/internal/agent"
 	httphandler "github.com/devi/bookleaf/internal/handler"
+	"github.com/devi/bookleaf/internal/sse"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
 	"github.com/devi/bookleaf/internal/platform/config"
@@ -241,6 +242,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	kindeClient := kinde.NewClient(cfg.Kinde)
 	accountUsecase := usecase.NewAccountUsecase(accountRepository, userRepository, kindeClient, enqueuer, tel)
 
+	broadcaster := sse.NewEventBroadcaster()
+
 	workers := river.NewWorkers()
 	river.AddWorker(workers, worker.NewVisionWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewCleanupStaleUploadsWorker(uploadUsecase))
@@ -257,7 +260,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
 		categorisationLogRepo := repository.NewCategorisationLogRepository(db)
 		categorisationUsecase := usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, categorisationLogRepo, tel)
-		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase))
+		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase, broadcaster))
 	}
 
 	riverClient, err := river.NewClient(riverpgxv5.New(riverPool), &river.Config{
@@ -303,6 +306,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 		logger.Fatal("initialise auth middleware", zap.Error(err))
 	}
 
+	eventsHandler := httphandler.NewEventsHandler(broadcaster)
 	meHandler := httphandler.NewMeHandler(userUsecase, accountUsecase, tel)
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
@@ -320,6 +324,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.Use(authmiddleware.NewMaintenanceMiddleware(cfg.Maintenance))
 	protected.Use(authMiddleware)
 	protected.Use(observability.LoggingMiddleware(tel, authmiddleware.AuthenticatedUserIDFromContext))
+	protected.GET("/events", eventsHandler.GetEvents)
 	protected.GET("/me", meHandler.GetMe)
 	protected.PATCH("/me", meHandler.UpdateMe)
 	protected.DELETE("/me", meHandler.DeleteMe)
