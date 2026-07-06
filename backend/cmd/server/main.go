@@ -350,7 +350,6 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.DELETE("/tags/:id", tagHandler.DeleteTag)
 	protected.POST("/images", uploadHandler.InitiateUpload)
 	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
-	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
 	protected.GET("/images/trash", trashHandler.ListTrashed)
 	protected.DELETE("/images/trash", trashHandler.EmptyTrash)
 	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)

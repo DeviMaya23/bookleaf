@@ -29,7 +29,6 @@ import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import { useMaintenanceActive } from '@/lib/maintenanceStore'
 import MaintenancePage from '@/components/MaintenancePage'
-import { useVisionSuggestion } from './useVisionSuggestion'
 import { useSSEEvents } from './useSSEEvents'
 import { getMe } from '@/features/auth/lib/me'
 import { handleFileAutoUpload } from './lib/dragHandlers'
@@ -182,7 +181,6 @@ export default function AppLayout() {
     ? folders.find((f) => f.id === view.id) ?? null
     : null
 
-  const { checkVision } = useVisionSuggestion()
   useSSEEvents()
 
   const handleImageSelect = useCallback((img: Image) => {
@@ -253,7 +251,6 @@ export default function AppLayout() {
       if (duplicates.length > 0) {
         toast.warning(`Possible duplicate of "${duplicates[0].title}"`)
       }
-      checkVision(imageDetail.id)
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)
       setFolderPanelOpen(false)
@@ -268,7 +265,7 @@ export default function AppLayout() {
     } finally {
       setIsAutoUploading(false)
     }
-  }, [getToken, folderId, queryClient, checkVision])
+  }, [getToken, folderId, queryClient])
 
   if (maintenanceActive) {
     return <MaintenancePage />
@@ -444,7 +441,6 @@ export default function AppLayout() {
           }}
           folderId={folderId}
           initialFile={uploadInitialFile ?? undefined}
-          onUploadSuccess={checkVision}
         />
         <BatchUploadModal
           open={batchUploadOpen}

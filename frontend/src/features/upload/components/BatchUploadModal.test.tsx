@@ -47,8 +47,8 @@ describe('BatchUploadModal', () => {
     it('uploads all files successfully and invalidates the image query per file', async () => {
       const user = userEvent.setup()
       vi.mocked(uploadImageFile)
-        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
-        .mockResolvedValueOnce({ image_id: 'img-2', suggested_folder_name: 'Nature', duplicates: [] })
+        .mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
+        .mockResolvedValueOnce({ image_id: 'img-2', duplicates: [] })
 
       const file1 = makeFile('a.jpg')
       const file2 = makeFile('b.jpg')
@@ -93,7 +93,7 @@ describe('BatchUploadModal', () => {
       vi.mocked(uploadImageFile)
         .mockRejectedValueOnce(new Error('fail'))
         .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+        .mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
       renderModal({ initialFiles: [makeFile('d.jpg')] })
 
@@ -117,7 +117,6 @@ describe('BatchUploadModal', () => {
       const user = userEvent.setup()
       vi.mocked(uploadImageFile).mockResolvedValueOnce({
         image_id: 'img-1',
-        suggested_folder_name: null,
         duplicates: [{ id: 'dup-1', title: 'sunset.jpg', thumbnail_path: null }],
       })
 
@@ -133,7 +132,6 @@ describe('BatchUploadModal', () => {
       const user = userEvent.setup()
       vi.mocked(uploadImageFile).mockResolvedValueOnce({
         image_id: 'img-1',
-        suggested_folder_name: null,
         duplicates: [],
       })
 
@@ -148,7 +146,7 @@ describe('BatchUploadModal', () => {
 
     it('sends folder_id when a folder is active and omits it on non-folder routes', async () => {
       const user = userEvent.setup()
-      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', duplicates: [] })
 
       // With folder active
       renderModal({ folderId: 'folder-42', initialFiles: [makeFile('e.jpg')] })
@@ -174,7 +172,7 @@ describe('BatchUploadModal', () => {
 
     it('marks oversized files as Too large and unsupported types as Unsupported type, uploading valid files', async () => {
       const user = userEvent.setup()
-      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+      vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', duplicates: [] })
 
       const oversized = makeFile('big.jpg', 'image/jpeg', 51 * 1024 * 1024)
       const unsupported = makeFile('doc.pdf', 'application/pdf', 100)

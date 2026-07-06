@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -27,10 +26,9 @@ type UpdateImageParams struct {
 }
 
 type ImageDetail struct {
-	Image               *domain.Image
-	ImageURL            string
-	ThumbnailURL        *string
-	SuggestedFolderName *string
+	Image        *domain.Image
+	ImageURL     string
+	ThumbnailURL *string
 }
 
 type ImageItem struct {
@@ -171,23 +169,10 @@ func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string
 	}
 
 	return &ImageDetail{
-		Image:               image,
-		ImageURL:            imageURL,
-		ThumbnailURL:        u.thumbnailURL(ctx, image.ThumbnailPath),
-		SuggestedFolderName: suggestedFolderName(image.AILabels),
+		Image:        image,
+		ImageURL:     imageURL,
+		ThumbnailURL: u.thumbnailURL(ctx, image.ThumbnailPath),
 	}, nil
-}
-
-func suggestedFolderName(aiLabels json.RawMessage) *string {
-	if len(aiLabels) == 0 {
-		return nil
-	}
-	var labels []domain.Label
-	if err := json.Unmarshal(aiLabels, &labels); err != nil || len(labels) == 0 {
-		return nil
-	}
-	name := labels[0].Description
-	return &name
 }
 
 func (u *imageUsecase) DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error) {

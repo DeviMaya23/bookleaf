@@ -36,10 +36,6 @@ vi.mock('@/lib/tags', async (importOriginal) => ({
   getTags: vi.fn().mockResolvedValue([]),
 }))
 
-vi.mock('./useVisionSuggestion', () => ({
-  useVisionSuggestion: () => ({ checkVision: vi.fn() }),
-}))
-
 vi.mock('@/lib/images', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/images')>()),
   bulkAddImagesToFolder: vi.fn(),

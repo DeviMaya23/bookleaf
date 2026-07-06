@@ -454,52 +454,6 @@ func TestImageUsecase_GetImage_NoThumbnail(t *testing.T) {
 	assert.Nil(t, detail.ThumbnailURL)
 }
 
-func TestImageUsecase_GetImage_SuggestedFolderName(t *testing.T) {
-	imageID := uuid.New()
-
-	tests := []struct {
-		name     string
-		aiLabels json.RawMessage
-		wantName *string
-	}{
-		{
-			name:     "null ai_labels returns nil",
-			aiLabels: nil,
-			wantName: nil,
-		},
-		{
-			name:     "empty ai_labels returns nil",
-			aiLabels: json.RawMessage(`[]`),
-			wantName: nil,
-		},
-		{
-			name:     "populated ai_labels returns top label description",
-			aiLabels: json.RawMessage(`[{"Description":"Nature","Score":0.98},{"Description":"Outdoor","Score":0.75}]`),
-			wantName: strPtr("Nature"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockImageRepository{image: &domain.Image{ID: imageID, AILabels: tt.aiLabels}}
-			store := &mockStorageService{getURL: "https://r2.example.com/view"}
-			uc := newImageUsecase(repo, nil, store)
-
-			detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
-
-			require.NoError(t, err)
-			if tt.wantName == nil {
-				assert.Nil(t, detail.SuggestedFolderName)
-			} else {
-				require.NotNil(t, detail.SuggestedFolderName)
-				assert.Equal(t, *tt.wantName, *detail.SuggestedFolderName)
-			}
-		})
-	}
-}
-
-func strPtr(s string) *string { return &s }
-
 func TestImageUsecase_GetImage_PresignFails(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: uuid.New()}}
 	store := &mockStorageService{err: errors.New("presign failed")}

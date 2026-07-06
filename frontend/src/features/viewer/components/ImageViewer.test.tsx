@@ -69,7 +69,6 @@ describe('ImageViewer — full-res image', () => {
     vi.mocked(getImage).mockResolvedValue({
       ...makeImage(),
       image_url: 'https://r2.example.com/full.jpg',
-      suggested_folder_name: null,
     })
 
     renderViewer(makeImage())

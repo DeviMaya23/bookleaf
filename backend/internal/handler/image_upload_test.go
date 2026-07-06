@@ -19,20 +19,16 @@ import (
 // --- mock ---
 
 type mockUploadUsecase struct {
-	uploadResult        *usecase.UploadInitResult
-	completeResult      *usecase.CompleteUploadResult
-	err                 error
-	acceptSuggestionErr error
-	lastDescription     *string
-	lastWidth           *int
-	lastHeight          *int
-	lastFileSize        *int64
-	lastAcceptImageID   uuid.UUID
-	lastAcceptUserID    string
-	lastSuggestedFolder string
-	backfillEnqueued    int
-	backfillErr         error
-	lastBackfillUserID  string
+	uploadResult       *usecase.UploadInitResult
+	completeResult     *usecase.CompleteUploadResult
+	err                error
+	lastDescription    *string
+	lastWidth          *int
+	lastHeight         *int
+	lastFileSize       *int64
+	backfillEnqueued   int
+	backfillErr        error
+	lastBackfillUserID string
 }
 
 func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
@@ -45,16 +41,6 @@ func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ str
 	m.lastHeight = height
 	m.lastFileSize = fileSize
 	return m.completeResult, m.err
-}
-
-func (m *mockUploadUsecase) AcceptSuggestion(_ context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
-	m.lastAcceptImageID = imageID
-	m.lastAcceptUserID = userID
-	m.lastSuggestedFolder = suggestedFolderName
-	if m.acceptSuggestionErr != nil {
-		return m.acceptSuggestionErr
-	}
-	return m.err
 }
 
 func (m *mockUploadUsecase) BackfillVisionLabels(_ context.Context, userID string) (int, error) {
@@ -196,10 +182,6 @@ func TestUploadHandler_CompleteUpload(t *testing.T) {
 			var resp map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["image_id"])
-			_, hasSuggestion := resp["suggested_folder_name"]
-			assert.False(t, hasSuggestion)
-			_, hasWarning := resp["warning"]
-			assert.False(t, hasWarning)
 		})
 	}
 }
@@ -250,99 +232,6 @@ func TestUploadHandler_CompleteUpload_InvalidUUID(t *testing.T) {
 	c.SetParamValues("not-a-uuid")
 
 	err := h.CompleteUpload(c)
-
-	assertHTTPError(t, err, http.StatusBadRequest)
-}
-
-// --- AcceptSuggestion ---
-
-func TestUploadHandler_AcceptSuggestion(t *testing.T) {
-	imageID := uuid.New()
-
-	tests := []struct {
-		name          string
-		body          string
-		uc            *mockUploadUsecase
-		wantStatus    int
-		wantErrStatus int
-	}{
-		{
-			name:       "returns 204 and passes parsed params to usecase",
-			body:       `{"suggested_folder_name":"Nature"}`,
-			uc:         &mockUploadUsecase{},
-			wantStatus: http.StatusNoContent,
-		},
-		{
-			name:          "returns 404 when image not found",
-			body:          `{"suggested_folder_name":"Nature"}`,
-			uc:            &mockUploadUsecase{acceptSuggestionErr: gorm.ErrRecordNotFound},
-			wantErrStatus: http.StatusNotFound,
-		},
-		{
-			name:          "returns 500 on generic error",
-			body:          `{"suggested_folder_name":"Nature"}`,
-			uc:            &mockUploadUsecase{acceptSuggestionErr: errors.New("db error")},
-			wantErrStatus: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := NewUploadHandler(tt.uc, observability.NewTelemetry(nil, nil, nil))
-			c, rec := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", tt.body)
-			c.SetPath("/images/:id/accept-suggestion")
-			c.SetParamNames("id")
-			c.SetParamValues(imageID.String())
-
-			err := h.AcceptSuggestion(c)
-
-			if tt.wantErrStatus != 0 {
-				assertHTTPError(t, err, tt.wantErrStatus)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-			assert.Equal(t, imageID, tt.uc.lastAcceptImageID)
-			assert.Equal(t, "kp_abc123", tt.uc.lastAcceptUserID)
-			assert.Equal(t, "Nature", tt.uc.lastSuggestedFolder)
-		})
-	}
-}
-
-func TestUploadHandler_AcceptSuggestion_BlankFolderName(t *testing.T) {
-	h := NewUploadHandler(&mockUploadUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	imageID := uuid.New()
-	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", `{"suggested_folder_name":""}`)
-	c.SetPath("/images/:id/accept-suggestion")
-	c.SetParamNames("id")
-	c.SetParamValues(imageID.String())
-
-	err := h.AcceptSuggestion(c)
-
-	assertHTTPError(t, err, http.StatusBadRequest)
-}
-
-func TestUploadHandler_AcceptSuggestion_InvalidUUID(t *testing.T) {
-	h := NewUploadHandler(&mockUploadUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodPost, "/images/not-a-uuid/accept-suggestion", `{"suggested_folder_name":"Nature"}`)
-	c.SetPath("/images/:id/accept-suggestion")
-	c.SetParamNames("id")
-	c.SetParamValues("not-a-uuid")
-
-	err := h.AcceptSuggestion(c)
-
-	assertHTTPError(t, err, http.StatusBadRequest)
-}
-
-func TestUploadHandler_AcceptSuggestion_MalformedJSON(t *testing.T) {
-	imageID := uuid.New()
-	h := NewUploadHandler(&mockUploadUsecase{}, observability.NewTelemetry(nil, nil, nil))
-	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/accept-suggestion", `{not valid json}`)
-	c.SetPath("/images/:id/accept-suggestion")
-	c.SetParamNames("id")
-	c.SetParamValues(imageID.String())
-
-	err := h.AcceptSuggestion(c)
 
 	assertHTTPError(t, err, http.StatusBadRequest)
 }

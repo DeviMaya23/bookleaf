@@ -259,46 +259,6 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 	return result, nil
 }
 
-func (u *imageUploadUsecase) AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error {
-	ctx, span := u.tel.Tracer.Start(ctx, "usecase.AcceptSuggestion")
-	defer span.End()
-
-	if _, err := u.imageRepo.GetByID(ctx, imageID, userID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	suggestedFolderName = strings.TrimSpace(suggestedFolderName)
-
-	folder, err := u.folderRepo.FindByName(ctx, userID, suggestedFolderName)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	if folder == nil {
-		folder, err = u.folderRepo.Create(ctx, &domain.Folder{
-			UserID: userID,
-			Name:   suggestedFolderName,
-		})
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
-	}
-
-	if err := u.imageRepo.SetImageFolder(ctx, imageID, &folder.ID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-
-	return nil
-}
-
 func (u *imageUploadUsecase) CleanupStaleUploads(ctx context.Context, threshold time.Duration) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CleanupStaleUploads")
 	defer span.End()

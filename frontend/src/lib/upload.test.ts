@@ -77,7 +77,7 @@ describe('uploadImageFile', () => {
   it('completes the 4-step pipeline and returns the complete-upload result', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-new', duplicates: [] })
 
     const file = makeFile('sunset.jpg', 'image/jpeg')
     const result = await uploadImageFile(getToken, { file, folderId: 'folder-1' })
@@ -93,13 +93,13 @@ describe('uploadImageFile', () => {
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/upload', file)
     expect(putToR2).toHaveBeenCalledWith('https://r2.example.com/thumb', expect.any(Blob))
     expect(completeUpload).toHaveBeenCalledWith(getToken, 'upload-1', { width: 1920, height: 1080, fileSize: file.size })
-    expect(result).toEqual({ image_id: 'img-new', suggested_folder_name: null, duplicates: [] })
+    expect(result).toEqual({ image_id: 'img-new', duplicates: [] })
   })
 
   it('defaults title to the file base name when not provided', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     const file = makeFile('vacation-photo.jpg', 'image/jpeg')
     await uploadImageFile(getToken, { file, folderId: null })
@@ -110,7 +110,7 @@ describe('uploadImageFile', () => {
   it('uses the provided title, description, and sourceUrl when given', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     const file = makeFile('vacation-photo.jpg', 'image/jpeg')
     await uploadImageFile(getToken, {
@@ -133,7 +133,7 @@ describe('uploadImageFile', () => {
   it('accepts webp files', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     const file = makeFile('image.webp', 'image/webp')
     await uploadImageFile(getToken, { file, folderId: null })
@@ -144,7 +144,7 @@ describe('uploadImageFile', () => {
   it('accepts avif files', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     const file = makeFile('image.avif', 'image/avif')
     await uploadImageFile(getToken, { file, folderId: null })
@@ -155,7 +155,7 @@ describe('uploadImageFile', () => {
   it('converts HEIC files to JPEG before uploading', async () => {
     vi.mocked(initiateUpload).mockResolvedValueOnce(defaultInitiateResult)
     vi.mocked(putToR2).mockResolvedValue(undefined)
-    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(completeUpload).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     const file = makeFile('photo.heic', 'image/heic')
     await uploadImageFile(getToken, { file, folderId: null })

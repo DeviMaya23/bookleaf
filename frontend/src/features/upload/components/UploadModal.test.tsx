@@ -21,12 +21,12 @@ vi.mock('sonner', () => ({
 import { uploadImageFile, validateImageFile } from '@/lib/upload'
 import { toast } from 'sonner'
 
-function renderModal(folderId: string | null = null, onUploadSuccess?: (id: string) => void, initialFile?: File) {
+function renderModal(folderId: string | null = null, initialFile?: File) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const onOpenChange = vi.fn()
   render(
     <QueryClientProvider client={queryClient}>
-      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} onUploadSuccess={onUploadSuccess} initialFile={initialFile} />
+      <UploadModal open={true} onOpenChange={onOpenChange} folderId={folderId} initialFile={initialFile} />
     </QueryClientProvider>,
   )
   return { onOpenChange }
@@ -41,10 +41,9 @@ describe('UploadModal', () => {
 
   it('closes modal and shows success toast on successful upload', async () => {
     const user = userEvent.setup()
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
-    const onUploadSuccess = vi.fn()
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
-    const { onOpenChange } = renderModal(null, onUploadSuccess)
+    const { onOpenChange } = renderModal(null)
 
     const file = makeImageFile()
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -62,12 +61,11 @@ describe('UploadModal', () => {
       sourceUrl: undefined,
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
-    expect(onUploadSuccess).toHaveBeenCalledWith('img-1')
   })
 
   it('uploads with description and source_url when Add details is filled', async () => {
     const user = userEvent.setup()
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-1', duplicates: [] })
 
     renderModal('folder-1')
 
@@ -99,7 +97,7 @@ describe('UploadModal', () => {
 
   it('stages file and focuses title input when initialFile is provided', async () => {
     const file = makeImageFile('image.png', 'image/png')
-    renderModal(null, undefined, file)
+    renderModal(null, file)
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: 'image.png' })).toBeInTheDocument()
@@ -120,7 +118,7 @@ describe('UploadModal', () => {
     vi.mocked(validateImageFile).mockReturnValueOnce('unsupported_type')
     const file = makeImageFile('document.pdf', 'application/pdf')
 
-    renderModal(null, undefined, file)
+    renderModal(null, file)
 
     expect(screen.getByText('Unsupported file type.')).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: 'document.pdf' })).not.toBeInTheDocument()
