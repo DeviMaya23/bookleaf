@@ -46,6 +46,7 @@ export function useSSEEvents() {
               queryClient.invalidateQueries({ queryKey: ['images'] })
               queryClient.invalidateQueries({ queryKey: ['image', imageId] })
               queryClient.invalidateQueries({ queryKey: ['folder'], exact: false })
+              queryClient.invalidateQueries({ queryKey: ['me'] })
             }
           } catch {
             // malformed event — ignore
