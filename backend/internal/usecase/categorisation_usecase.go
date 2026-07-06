@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-const categorisationMonthlyLimit = 50
+const categorisationMonthlyLimit = 500
 
 type CategorisationUsecase struct {
 	imageRepo    categorisationImageRepository
