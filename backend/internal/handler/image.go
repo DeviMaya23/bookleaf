@@ -123,6 +123,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	unfiled := c.QueryParam("unfiled") == "true"
+	searchLabels := c.QueryParam("search_labels") == "true"
 
 	var name *string
 	if trimmed := strings.TrimSpace(c.QueryParam("name")); trimmed != "" {
@@ -169,15 +170,16 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
-		Unfiled:   unfiled,
-		FolderIDs: folderIDs,
-		TagIDs:    tagIDs,
-		MIMETypes: mimeTypes,
-		Name:      name,
-		Sort:      sortField,
-		Direction: direction,
-		Cursor:    cursor,
-		Limit:     limit,
+		Unfiled:      unfiled,
+		FolderIDs:    folderIDs,
+		TagIDs:       tagIDs,
+		MIMETypes:    mimeTypes,
+		Name:         name,
+		SearchLabels: searchLabels,
+		Sort:         sortField,
+		Direction:    direction,
+		Cursor:       cursor,
+		Limit:        limit,
 	})
 	if err != nil {
 		span.RecordError(err)

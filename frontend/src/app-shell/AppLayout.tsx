@@ -31,6 +31,7 @@ import { useMaintenanceActive } from '@/lib/maintenanceStore'
 import MaintenancePage from '@/components/MaintenancePage'
 import { useVisionSuggestion } from './useVisionSuggestion'
 import { useSSEEvents } from './useSSEEvents'
+import { getMe } from '@/features/auth/lib/me'
 import { handleFileAutoUpload } from './lib/dragHandlers'
 import { bulkAddImagesToFolder, bulkTrashImages } from '@/lib/images'
 import type { Image } from '@/lib/images'
@@ -168,7 +169,13 @@ export default function AppLayout() {
     staleTime: 60_000,
   })
 
-  const gallery = useGalleryControls(view, tags, folders)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(getToken),
+    staleTime: Infinity,
+  })
+
+  const gallery = useGalleryControls(view, tags, folders, me?.vision_enabled ?? false)
   const { sensors, handleDragStart, handleDragEnd, sortEndTrigger, dragOverlay } = useAppDragAndDrop(folders)
 
   const activeFolder: Folder | null = view.type === 'folder'
@@ -391,6 +398,7 @@ export default function AppLayout() {
                   filterTagIds={gallery.filterTagIds}
                   filterMimeTypes={gallery.filterMimeTypes}
                   filterFolderIds={gallery.filterFolderIds}
+                  searchLabels={gallery.searchLabels}
                   onImageSelect={handleImageSelect}
                   onImageDoubleClick={handleImageDoubleClick}
                   onImageDeleted={handleImageDeleted}

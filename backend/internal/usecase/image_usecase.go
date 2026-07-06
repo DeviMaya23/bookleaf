@@ -90,7 +90,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 		limit = 200
 	}
 
-	rawImages, err := u.imageRepo.List(ctx, userID, params.Unfiled, params.FolderIDs, params.TagIDs, params.MIMETypes, name, params.Sort, params.Direction, params.Cursor, limit)
+	rawImages, err := u.imageRepo.List(ctx, userID, params.Unfiled, params.FolderIDs, params.TagIDs, params.MIMETypes, name, params.SearchLabels, params.Sort, params.Direction, params.Cursor, limit)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())

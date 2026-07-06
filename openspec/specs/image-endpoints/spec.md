@@ -12,7 +12,7 @@ The system SHALL define an `ImageRepository` interface in `internal/usecase/imag
 
 Methods:
 - `Create(ctx, image *domain.Image) (*domain.Image, error)`
-- `List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images for `userID`; fetches `limit + 1` rows; `cursor` applies a keyset filter on the active sort column; images are returned with `Tags` and `ImageFolders` preloaded. `unfiled` true limits to images with no entry in `image_folders` (LEFT JOIN + `IS NULL`, as before). `folderIDs` non-empty filters to images belonging to ANY of the given folders via a correlated `EXISTS` subquery against `image_folders`, so an image matching multiple supplied folder IDs is still returned at most once. `tagIDs` non-empty filters to images associated with ANY of the given tags via a correlated `EXISTS` subquery against `image_tags`, with the same at-most-once guarantee. `mimeTypes` non-empty filters to images whose `mime_type` matches any of the given values via `IN`. `name` non-nil and non-empty filters to images whose `title` contains the value, case-insensitively. All of `unfiled`/`folderIDs`/`tagIDs`/`mimeTypes`/`name` compose via `AND`; no validation rejects contradictory combinations (e.g. `unfiled=true` together with non-empty `folderIDs`) — such combinations simply yield an empty result, the same way an impossible `name`/`tagIDs` combination would (see `GET /images Multi-Value Filter Query Parameters`). `sortField`/`direction` select the ordering: when `sortField` is nil, results order by `created_at DESC, id DESC` (today's default, unchanged); when `sortField` is non-nil, results order by the selected column (with `id` as tiebreaker) in the selected direction (the field's default direction applies when `direction` is nil), and the keyset filter compares against that same column instead of `created_at` (see `image-list-pagination` for the keyset comparison rules). The single-folder, position-ordered, unpaginated "folder contents" query that this method previously served when `folderID` was non-nil is REMOVED from this method — it is now served by a dedicated method described in `folder-image-listing`.
+- `List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)` — returns non-deleted images for `userID`; fetches `limit + 1` rows; `cursor` applies a keyset filter on the active sort column; images are returned with `Tags` and `ImageFolders` preloaded. `unfiled` true limits to images with no entry in `image_folders` (LEFT JOIN + `IS NULL`, as before). `folderIDs` non-empty filters to images belonging to ANY of the given folders via a correlated `EXISTS` subquery against `image_folders`, so an image matching multiple supplied folder IDs is still returned at most once. `tagIDs` non-empty filters to images associated with ANY of the given tags via a correlated `EXISTS` subquery against `image_tags`, with the same at-most-once guarantee. `mimeTypes` non-empty filters to images whose `mime_type` matches any of the given values via `IN`. `name` non-nil and non-empty filters to images whose `title` contains the value, case-insensitively; when `searchLabels` is also `true`, the filter is widened to `(images.title ILIKE '%<term>%' OR EXISTS (SELECT 1 FROM image_labels WHERE image_id = images.id AND label ILIKE '%<term>%' AND score >= 0.75))`. When `name` is nil or empty, `searchLabels` has no effect. All of `unfiled`/`folderIDs`/`tagIDs`/`mimeTypes`/`name` (including the OR EXISTS expansion) compose via `AND`; no validation rejects contradictory combinations (e.g. `unfiled=true` together with non-empty `folderIDs`) — such combinations simply yield an empty result, the same way an impossible `name`/`tagIDs` combination would (see `GET /images Multi-Value Filter Query Parameters`). `sortField`/`direction` select the ordering: when `sortField` is nil, results order by `created_at DESC, id DESC` (today's default, unchanged); when `sortField` is non-nil, results order by the selected column (with `id` as tiebreaker) in the selected direction (the field's default direction applies when `direction` is nil), and the keyset filter compares against that same column instead of `created_at` (see `image-list-pagination` for the keyset comparison rules). The single-folder, position-ordered, unpaginated "folder contents" query that this method previously served when `folderID` was non-nil is REMOVED from this method — it is now served by a dedicated method described in `folder-image-listing`.
 - `GetByID(ctx, id uuid.UUID, userID string) (*domain.Image, error)` — returns non-deleted images only; result has `Tags` and `ImageFolders` preloaded
 - `Update(ctx, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error)` — selectively updates the supplied scalar fields for the image owned by `userID`; `folder_id` is NOT a valid key in the map (folder assignment is handled by `SetImageFolder`); result has `Tags` and `ImageFolders` preloaded
 - `SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error` — see `image-folders` spec for full behaviour
@@ -80,9 +80,20 @@ Trash lifecycle methods (`GetDeletedByID`, `SoftDelete`, `Restore`, `ListTrashed
 
 #### Scenario: List filters by name
 
-- **WHEN** `List` is called with a non-nil, non-empty `name`
-- **THEN** the query includes a case-insensitive substring match (`ILIKE '%<name>%'`) against `images.title`
+- **WHEN** `List` is called with a non-nil, non-empty `name` and `searchLabels = false`
+- **THEN** the query includes a case-insensitive substring match (`ILIKE '%<name>%'`) against `images.title` only
 - **AND** this filter composes with any `unfiled`, `folderIDs`, `tagIDs`, `mimeTypes`, sort, and cursor conditions already present
+
+#### Scenario: List with searchLabels=true widens name filter to include AI labels above score threshold
+
+- **WHEN** `List` is called with a non-nil, non-empty `name` and `searchLabels = true`
+- **THEN** the query matches images whose title contains the name OR that have a label in `image_labels` containing the name case-insensitively with `score >= 0.75`
+- **AND** this combined condition composes with other active filters via AND
+
+#### Scenario: List with searchLabels=true and empty name ignores label filter
+
+- **WHEN** `List` is called with `searchLabels = true` but `name` is nil or empty
+- **THEN** no label subquery is added — results are identical to calling with `searchLabels = false`
 
 ---
 
@@ -206,25 +217,28 @@ type CompleteUploadResult struct {
 }
 ```
 
-`ListImagesParams` SHALL include `Unfiled`, `FolderIDs`, `TagIDs`, `MIMETypes`, `Name`, `Sort`, and `Direction` fields:
+`ListImagesParams` SHALL include `Unfiled`, `FolderIDs`, `TagIDs`, `MIMETypes`, `Name`, `SearchLabels`, `Sort`, and `Direction` fields:
 
 ```go
 type ListImagesParams struct {
-    Unfiled   bool
-    FolderIDs []uuid.UUID
-    TagIDs    []uuid.UUID
-    MIMETypes []string
-    Name      *string
-    Sort      *string
-    Direction *string
-    Cursor    *ImageCursor
-    Limit     int
+    Unfiled      bool
+    FolderIDs    []uuid.UUID
+    TagIDs       []uuid.UUID
+    MIMETypes    []string
+    Name         *string
+    SearchLabels bool
+    Sort         *string
+    Direction    *string
+    Cursor       *ImageCursor
+    Limit        int
 }
 ```
 
 The single-value `FolderID *uuid.UUID` and `TagID *uuid.UUID` fields are REMOVED from `ListImagesParams`. There is no longer a folder-view mode reachable through `ListImages`/`ListImagesParams` — fetching a single folder's contents in custom order is handled by a dedicated method described in `folder-image-listing`.
 
-`Name`, when non-nil and non-empty, filters results to images whose title contains the value, case-insensitively.
+`Name`, when non-nil and non-empty, filters results to images whose title contains the value, case-insensitively. When `SearchLabels` is also `true`, the filter is widened to include AI label matches (see `image-label-search`).
+
+`SearchLabels`, when `true`, has no effect unless `Name` is also non-nil and non-empty.
 
 `FolderIDs`, `TagIDs`, and `MIMETypes`, when non-empty, filter results to images matching ANY of the supplied values for that dimension (match-any); see `GET /images Multi-Value Filter Query Parameters` for the full contract.
 
@@ -310,6 +324,11 @@ Trash lifecycle methods (`SoftDelete`, `ListTrashed`, `Restore`, `DeleteFromTras
 
 - **WHEN** `ListImages` is called with `Name` pointing to an empty string
 - **THEN** the name filter is not applied and results are unaffected
+
+#### Scenario: ListImages passes SearchLabels to repository
+
+- **WHEN** `ListImages` is called with `SearchLabels = true`
+- **THEN** the repository's `List` is invoked with `searchLabels = true`
 
 #### Scenario: ListImages passes Sort and Direction through to the repository unchanged
 

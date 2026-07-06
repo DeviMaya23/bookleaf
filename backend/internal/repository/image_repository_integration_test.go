@@ -59,7 +59,7 @@ func TestImageRepository_List_Success(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 2)
@@ -76,7 +76,7 @@ func TestImageRepository_List_ExcludesOtherUserImages(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(owner.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), other.ID, false, nil, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), other.ID, false, nil, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Empty(t, images)
@@ -102,7 +102,7 @@ func TestImageRepository_List_FilterByFolderIDs_SingleValue(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
@@ -136,7 +136,7 @@ func TestImageRepository_List_FilterByFolderIDs_MatchAny(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folderA.ID, folderB.ID}, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folderA.ID, folderB.ID}, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	require.Len(t, images, 2, "inBoth must appear exactly once despite matching both supplied folder IDs")
@@ -444,7 +444,7 @@ func TestImageRepository_List_Pagination_FirstPage(t *testing.T) {
 	require.NoError(t, err)
 
 	// limit=2 → repo should return limit+1=3 rows, signalling more data exists
-	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 2)
+	images, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, false, nil, nil, nil, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 3)
@@ -461,7 +461,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	require.NoError(t, err)
 
 	// first page: returns 3 rows (limit+1), ordered created_at DESC, id DESC
-	firstPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 2)
+	firstPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, false, nil, nil, nil, 2)
 	require.NoError(t, err)
 	require.Len(t, firstPage, 3)
 
@@ -470,7 +470,7 @@ func TestImageRepository_List_Pagination_WithCursor(t *testing.T) {
 	cursor := &usecase.ImageCursor{CreatedAt: cursorItem.CreatedAt, ID: cursorItem.ID}
 
 	// second page: should return only items after the cursor
-	secondPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, cursor, 2)
+	secondPage, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, false, nil, nil, cursor, 2)
 
 	require.NoError(t, err)
 	assert.Len(t, secondPage, 1)
@@ -762,7 +762,7 @@ func TestImageRepository_List_Unfiled(t *testing.T) {
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, true, nil, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, true, nil, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Len(t, images, 1)
@@ -783,7 +783,7 @@ func TestImageRepository_List_PreloadsTags(t *testing.T) {
 	err = tagRepo.ReplaceImageTags(context.Background(), img.ID, []uuid.UUID{tag.ID})
 	require.NoError(t, err)
 
-	images, err := imageRepo.List(context.Background(), userID, false, nil, nil, nil, nil, nil, nil, nil, 200)
+	images, err := imageRepo.List(context.Background(), userID, false, nil, nil, nil, nil, false, nil, nil, nil, 200)
 	require.NoError(t, err)
 
 	var found *domain.Image
@@ -812,7 +812,7 @@ func TestImageRepository_List_FilterByTagIDs_SingleValue(t *testing.T) {
 	err = tagRepo.ReplaceImageTags(context.Background(), tagged.ID, []uuid.UUID{tag.ID})
 	require.NoError(t, err)
 
-	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tag.ID}, nil, nil, nil, nil, nil, 200)
+	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tag.ID}, nil, nil, false, nil, nil, nil, 200)
 	require.NoError(t, err)
 	require.Len(t, images, 1)
 	assert.Equal(t, tagged.ID, images[0].ID)
@@ -837,7 +837,7 @@ func TestImageRepository_List_FilterByTagIDs_MatchAny(t *testing.T) {
 	_, err = imageRepo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tagX.ID, tagY.ID}, nil, nil, nil, nil, nil, 200)
+	images, err := imageRepo.List(context.Background(), userID, false, nil, []uuid.UUID{tagX.ID, tagY.ID}, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	require.Len(t, images, 2, "withBoth must appear exactly once despite matching both supplied tag IDs")
@@ -866,7 +866,7 @@ func TestImageRepository_List_FilterByMIMETypes_MatchAny(t *testing.T) {
 	_, err = repo.Create(context.Background(), gif)
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, false, nil, nil, []string{"image/jpeg", "image/png"}, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, false, nil, nil, []string{"image/jpeg", "image/png"}, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	require.Len(t, images, 2)
@@ -906,7 +906,7 @@ func TestImageRepository_List_ComposesFolderAndTagFiltersWithAND(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), tagOnly.ID, []uuid.UUID{tag.ID}))
 
-	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, []uuid.UUID{tag.ID}, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, false, []uuid.UUID{folder.ID}, []uuid.UUID{tag.ID}, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	require.Len(t, images, 1)
@@ -933,7 +933,7 @@ func TestImageRepository_List_UnfiledWithFolderIDs_YieldsEmptyResult(t *testing.
 	_, err = repo.Create(context.Background(), newTestImage(user.ID))
 	require.NoError(t, err)
 
-	images, err := repo.List(context.Background(), user.ID, true, []uuid.UUID{folder.ID}, nil, nil, nil, nil, nil, nil, 200)
+	images, err := repo.List(context.Background(), user.ID, true, []uuid.UUID{folder.ID}, nil, nil, nil, false, nil, nil, nil, 200)
 
 	require.NoError(t, err)
 	assert.Empty(t, images)
@@ -1080,7 +1080,7 @@ func listAllPages(t *testing.T, repo *imageRepository, userID string, sortField,
 	seen := map[uuid.UUID]bool{}
 
 	for {
-		page, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, &sortField, &direction, cursor, pageLimit)
+		page, err := repo.List(context.Background(), userID, false, nil, nil, nil, nil, false, &sortField, &direction, cursor, pageLimit)
 		require.NoError(t, err)
 
 		take := page

@@ -42,6 +42,7 @@ export async function getImages(
   tagIds?: string[],
   mimeTypes?: string[],
   folderIds?: string[],
+  searchLabels?: boolean,
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   params.set('unfiled', 'true')
@@ -52,6 +53,7 @@ export async function getImages(
   if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
   if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
   if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
+  if (searchLabels) params.set('search_labels', 'true')
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
@@ -81,6 +83,7 @@ export async function getAllImages(
   tagIds?: string[],
   mimeTypes?: string[],
   folderIds?: string[],
+  searchLabels?: boolean,
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
@@ -90,6 +93,7 @@ export async function getAllImages(
   if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
   if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
   if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
+  if (searchLabels) params.set('search_labels', 'true')
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()

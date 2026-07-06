@@ -13,7 +13,7 @@ type ImageRepository interface {
 	// unfiled filters images with no image_folders row via LEFT JOIN; folderIDs/tagIDs filter via
 	// correlated EXISTS subqueries (match-any, at most once per image); mimeTypes filters via IN.
 	// Results include Tags and ImageFolders preloaded.
-	List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
+	List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, cursor *ImageCursor, limit int) ([]*domain.Image, error)
 	// ListByFolder returns all non-deleted images in folderID owned by userID, ordered by
 	// image_folders.position ASC (or by sortField/direction when provided). No cursor or limit.
 	// Results include Tags and ImageFolders preloaded.

@@ -50,7 +50,7 @@ function makeFolder(id: string, name: string): Folder {
 }
 
 function Harness({ view, tags, folders, selectModeToggle, controlsDisabled }: { view: AppView; tags: Tag[]; folders: Folder[]; selectModeToggle?: ReactNode; controlsDisabled?: boolean }) {
-  const controls = useGalleryControls(view, tags, folders)
+  const controls = useGalleryControls(view, tags, folders, false)
   return (
     <>
       <GalleryToolbar

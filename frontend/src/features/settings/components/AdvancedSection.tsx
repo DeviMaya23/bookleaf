@@ -45,7 +45,7 @@ export default function AdvancedSection() {
   return (
     <div>
       <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        AI
+        Smart Features
       </p>
       <div className="flex items-start justify-between gap-4 border-b border-border py-3">
         <div>

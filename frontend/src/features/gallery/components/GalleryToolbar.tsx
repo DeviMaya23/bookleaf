@@ -74,6 +74,8 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
     filteredFolders,
     activeFilterChips,
     clearAllFilters,
+    searchLabels,
+    setSearchLabels,
   } = controls
 
   return (
@@ -87,7 +89,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search images by name…"
+                placeholder={searchLabels ? 'Search via name or labels' : 'Search images by name…'}
                 disabled={controlsDisabled}
                 className="w-full rounded-md border bg-background pl-8 pr-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary/40 disabled:opacity-50 disabled:pointer-events-none"
               />
@@ -140,6 +142,18 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
                 )}
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">
+                {filterSections.includes('labelSearch') && (
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Search Toggle</DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem
+                      checked={searchLabels}
+                      onCheckedChange={(checked) => setSearchLabels(checked)}
+                    >
+                      Smart Search
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                  </DropdownMenuGroup>
+                )}
                 {filterSections.includes('mimeTypes') && (
                   <DropdownMenuGroup>
                     <DropdownMenuLabel>File type</DropdownMenuLabel>

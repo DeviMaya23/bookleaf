@@ -20,25 +20,26 @@ export interface GalleryQueryParams {
   filterTagIds: string[]
   filterMimeTypes: string[]
   filterFolderIds: string[]
+  searchLabels: boolean
 }
 
-export function queryKeyFor({ view, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: GalleryQueryParams): unknown[] {
+export function queryKeyFor({ view, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels }: GalleryQueryParams): unknown[] {
   const sortKey = sortBy === 'manual' ? undefined : [sortBy, sortDir]
   switch (view.type) {
-    case 'all': return ['images', 'all', debouncedSearch, sortKey, filterTagIds, filterMimeTypes, filterFolderIds]
-    case 'unsorted': return ['images', 'unsorted', debouncedSearch, sortKey, filterTagIds, filterMimeTypes]
+    case 'all': return ['images', 'all', debouncedSearch, sortKey, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels]
+    case 'unsorted': return ['images', 'unsorted', debouncedSearch, sortKey, filterTagIds, filterMimeTypes, searchLabels]
     case 'trash': return ['images', 'trash', debouncedSearch, sortKey]
     case 'folder': return ['images', 'folder', view.id, sortKey]
   }
 }
 
-export function fetcherFor({ view, getToken, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }: GalleryQueryParams & { getToken: () => Promise<string | undefined> }) {
+export function fetcherFor({ view, getToken, debouncedSearch, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels }: GalleryQueryParams & { getToken: () => Promise<string | undefined> }) {
   const { sort, direction } = sortParamsFor(sortBy, sortDir)
   return ({ pageParam }: { pageParam: string | undefined }) => {
     switch (view.type) {
       // sortBy never resolves to 'deleted_at' for these views (sortFieldOptions excludes it).
-      case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes, filterFolderIds)
-      case 'unsorted': return getImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes)
+      case 'all': return getAllImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels)
+      case 'unsorted': return getImages(getToken, pageParam, debouncedSearch, sort as 'created_at' | 'title' | undefined, direction, filterTagIds, filterMimeTypes, undefined, searchLabels)
       // sortBy never resolves to 'created_at' for Trash (sortFieldOptions excludes it).
       case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch, sort as 'deleted_at' | 'title' | undefined, direction)
       case 'folder': return getFolderImages(getToken, view.id, sort as 'created_at' | 'title' | undefined, direction)
@@ -55,6 +56,7 @@ export interface UseGalleryImagesParams {
   filterTagIds: string[]
   filterMimeTypes: string[]
   filterFolderIds: string[]
+  searchLabels: boolean
 }
 
 export function useGalleryImages({
@@ -66,11 +68,12 @@ export function useGalleryImages({
   filterTagIds,
   filterMimeTypes,
   filterFolderIds,
+  searchLabels,
 }: UseGalleryImagesParams) {
   const { getToken } = useKindeAuth()
   const isFolderView = view.type === 'folder'
 
-  const queryParams: GalleryQueryParams = { view, debouncedSearch: debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds }
+  const queryParams: GalleryQueryParams = { view, debouncedSearch: debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels }
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: queryKeyFor(queryParams),

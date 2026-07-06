@@ -42,6 +42,7 @@ type mockImageRepository struct {
 	lastAILabels         json.RawMessage
 	lastImageLabels      []domain.ImageLabel
 	lastListName          *string
+	lastListSearchLabels  bool
 	lastListSort          *string
 	lastListDirection     *string
 	lastListUnfiled       bool
@@ -68,12 +69,13 @@ func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*dom
 	m.createdImage = img
 	return m.image, m.err
 }
-func (m *mockImageRepository) List(_ context.Context, _ string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastListUnfiled = unfiled
 	m.lastListFolderIDs = folderIDs
 	m.lastListTagIDs = tagIDs
 	m.lastListMIMETypes = mimeTypes
 	m.lastListName = name
+	m.lastListSearchLabels = searchLabels
 	m.lastListSort = sortField
 	m.lastListDirection = direction
 	return m.images, m.err
@@ -370,6 +372,17 @@ func TestImageUsecase_ListImages_SkipsBlankName(t *testing.T) {
 			assert.Nil(t, repo.lastListName)
 		})
 	}
+}
+
+func TestImageUsecase_ListImages_PassesSearchLabelsToRepository(t *testing.T) {
+	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
+	name := "sunset"
+
+	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Name: &name, SearchLabels: true})
+
+	require.NoError(t, err)
+	assert.True(t, repo.lastListSearchLabels)
 }
 
 // --- ListFolderImages ---
