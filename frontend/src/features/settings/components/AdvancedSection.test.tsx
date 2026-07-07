@@ -6,7 +6,9 @@ import AdvancedSection from './AdvancedSection'
 
 const mockGetMe = vi.fn()
 const mockUpdateMe = vi.fn()
+const mockBackfillVisionLabels = vi.fn()
 const mockToastError = vi.fn()
+const mockToastWarning = vi.fn()
 
 vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({
@@ -17,11 +19,13 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/features/auth/lib/me', () => ({
   getMe: () => mockGetMe(),
   updateMe: (...args: unknown[]) => mockUpdateMe(...args),
+  backfillVisionLabels: (...args: unknown[]) => mockBackfillVisionLabels(...args),
 }))
 
 vi.mock('sonner', () => ({
   toast: {
     error: (...args: unknown[]) => mockToastError(...args),
+    warning: (...args: unknown[]) => mockToastWarning(...args),
   },
 }))
 
@@ -97,47 +101,22 @@ describe('AdvancedSection', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
-  it('enables vision via PATCH /me and updates the displayed state', async () => {
+  it('clicking the vision switch when off opens the confirm modal and does not immediately call PATCH /me', async () => {
     mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
-    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
 
     renderAdvancedSection()
 
     await waitFor(() => {
       expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
-    const initialDescription = screen.getByTestId('vision-description').textContent
 
     await userEvent.click(screen.getByTestId('vision-switch'))
 
-    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: true })
-    await waitFor(() => {
-      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
-    })
-    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(mockUpdateMe).not.toHaveBeenCalled()
   })
 
-  it('disables vision via PATCH /me and updates the displayed state', async () => {
-    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
-    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
-
-    renderAdvancedSection()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
-    })
-    const initialDescription = screen.getByTestId('vision-description').textContent
-
-    await userEvent.click(screen.getByTestId('vision-switch'))
-
-    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: false })
-    await waitFor(() => {
-      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
-    })
-    expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
-  })
-
-  it('disables the switch while the update is pending', async () => {
+  it('Enable button is disabled while the enable+backfill requests are in flight', async () => {
     mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
     let resolveUpdate: (value: { id: string; vision_enabled: boolean }) => void = () => {}
     mockUpdateMe.mockImplementation(
@@ -151,21 +130,18 @@ describe('AdvancedSection', () => {
     })
 
     await userEvent.click(screen.getByTestId('vision-switch'))
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('vision-switch')).toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByRole('button', { name: 'Enable' })).toBeDisabled()
     })
 
     resolveUpdate({ id: 'kp_1', vision_enabled: true })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('vision-switch')).not.toHaveAttribute('aria-disabled')
-    })
+    mockBackfillVisionLabels.mockResolvedValue({ enqueued: 0 })
   })
 
-  it('shows an error toast and leaves the toggle unchanged when the update fails', async () => {
+  it('cancelling the confirm modal closes it and leaves vision_enabled false with no API call', async () => {
     mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
-    mockUpdateMe.mockRejectedValue(new Error('boom'))
 
     renderAdvancedSection()
 
@@ -174,11 +150,125 @@ describe('AdvancedSection', () => {
     })
 
     await userEvent.click(screen.getByTestId('vision-switch'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(mockUpdateMe).not.toHaveBeenCalled()
+    expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+  })
+
+  it('confirming calls PATCH /me then POST /me/vision/backfill in sequence; on full success modal closes and switch reflects enabled', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    mockBackfillVisionLabels.mockResolvedValue({ enqueued: 3 })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByTestId('vision-switch'))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: true })
+    await waitFor(() => {
+      expect(mockBackfillVisionLabels).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
+  })
+
+  it('when PATCH /me fails, error toast is shown, modal closes, switch remains off', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    mockUpdateMe.mockRejectedValue(new Error('network error'))
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByTestId('vision-switch'))
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith('Failed to update settings')
     })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
     expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+  })
+
+  it('when PATCH /me succeeds but backfill fails, warning toast is shown, modal closes, switch reflects enabled', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    mockBackfillVisionLabels.mockRejectedValue(new Error('backfill error'))
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByTestId('vision-switch'))
+    await userEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    await waitFor(() => {
+      expect(mockToastWarning).toHaveBeenCalledWith(
+        'Smart Features enabled, but existing images could not be queued for processing. Try again later.',
+      )
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
+  })
+
+  it('clicking the vision switch when on calls PATCH /me with vision_enabled false directly with no modal', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    mockUpdateMe.mockResolvedValue({ id: 'kp_1', vision_enabled: false })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByTestId('vision-switch'))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: false })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+    })
+  })
+
+  it('shows an error toast and leaves the toggle unchanged when disabling vision fails', async () => {
+    mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
+    mockUpdateMe.mockRejectedValue(new Error('boom'))
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByTestId('vision-switch'))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Failed to update settings')
+    })
+    expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
     expect(screen.getByTestId('vision-switch')).not.toHaveAttribute('aria-disabled')
   })
 
