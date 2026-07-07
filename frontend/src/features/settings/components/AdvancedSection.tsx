@@ -3,18 +3,43 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
-import { getMe, updateMe } from '@/features/auth/lib/me'
+import { getMe, updateMe, backfillVisionLabels } from '@/features/auth/lib/me'
+import VisionBackfillConfirmDialog from './VisionBackfillConfirmDialog'
 
 export default function AdvancedSection() {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [tooltipOpen, setTooltipOpen] = useState(false)
   const [categorisationTooltipOpen, setCategorisationTooltipOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => getMe(getToken),
     staleTime: Infinity,
+  })
+
+  const enableWithBackfillMutation = useMutation({
+    mutationFn: async () => {
+      const updatedMe = await updateMe(getToken, { vision_enabled: true })
+      try {
+        await backfillVisionLabels(getToken)
+      } catch {
+        return { updatedMe, backfillFailed: true }
+      }
+      return { updatedMe, backfillFailed: false }
+    },
+    onSuccess: ({ updatedMe, backfillFailed }) => {
+      setConfirmOpen(false)
+      queryClient.setQueryData(['me'], updatedMe)
+      if (backfillFailed) {
+        toast.warning('Smart Features enabled, but existing images could not be queued for processing. Try again later.')
+      }
+    },
+    onError: () => {
+      setConfirmOpen(false)
+      toast.error('Failed to update settings')
+    },
   })
 
   const updateMutation = useMutation({
@@ -78,8 +103,14 @@ export default function AdvancedSection() {
         <Switch
           data-testid="vision-switch"
           checked={visionEnabled}
-          onCheckedChange={(checked) => updateMutation.mutate(checked)}
-          disabled={updateMutation.isPending}
+          onCheckedChange={(checked) => {
+            if (checked) {
+              setConfirmOpen(true)
+            } else {
+              updateMutation.mutate(false)
+            }
+          }}
+          disabled={updateMutation.isPending || enableWithBackfillMutation.isPending}
         />
       </div>
       <div className={`ml-3 flex items-start justify-between gap-4 border-l border-border pl-3 pb-3 transition-opacity${!visionEnabled ? ' opacity-50' : ''}`}>
@@ -122,6 +153,12 @@ export default function AdvancedSection() {
           disabled={updateCategorisationMutation.isPending || !visionEnabled}
         />
       </div>
+      <VisionBackfillConfirmDialog
+        open={confirmOpen}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => enableWithBackfillMutation.mutate()}
+        isPending={enableWithBackfillMutation.isPending}
+      />
     </div>
   )
 }

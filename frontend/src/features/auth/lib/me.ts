@@ -36,3 +36,9 @@ export async function updateMe(getToken: GetToken, params: UpdateMeParams): Prom
   if (!res.ok) throw new Error('Failed to update user profile')
   return res.json()
 }
+
+export async function backfillVisionLabels(getToken: GetToken): Promise<{ enqueued: number }> {
+  const res = await apiFetch('/me/vision/backfill', getToken, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to queue vision backfill')
+  return res.json()
+}
