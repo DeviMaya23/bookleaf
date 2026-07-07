@@ -15,7 +15,7 @@ const folders: Folder[] = [
 ]
 
 function render(view: AppView) {
-  return renderHook(({ v }) => useGalleryControls(v, tags, folders), { initialProps: { v: view } })
+  return renderHook(({ v }) => useGalleryControls(v, tags, folders, false), { initialProps: { v: view } })
 }
 
 describe('useGalleryControls defaults', () => {

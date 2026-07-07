@@ -45,10 +45,26 @@ func (m *mockAccountUsecase) DeleteAccount(_ context.Context, userID string) err
 	return m.err
 }
 
+type mockCategorisationCountUsecase struct {
+	count int
+	err   error
+}
+
+func (m *mockCategorisationCountUsecase) CountThisMonth(_ context.Context, _ string) (int, error) {
+	return m.count, m.err
+}
+
+func newMeHandler(userUc *mockUserUsecase, countUc *mockCategorisationCountUsecase) *MeHandler {
+	if countUc == nil {
+		countUc = &mockCategorisationCountUsecase{}
+	}
+	return NewMeHandler(userUc, &mockAccountUsecase{}, countUc, observability.NewTelemetry(nil, nil, nil))
+}
+
 // --- GetMe ---
 
 func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: true, AICategorisationEnabled: true}}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: true, AICategorisationEnabled: true}}, &mockCategorisationCountUsecase{count: 14})
 	c, rec := newEchoContext(t, http.MethodGet, "/me", "")
 
 	err := h.GetMe(c)
@@ -61,10 +77,11 @@ func TestMeHandler_GetMe_ReturnsUser(t *testing.T) {
 	assert.Equal(t, true, resp["vision_enabled"])
 	assert.Equal(t, true, resp["folder_icons_enabled"])
 	assert.Equal(t, true, resp["ai_categorisation_enabled"])
+	assert.Equal(t, float64(14), resp["ai_categorisation_count_this_month"])
 }
 
 func TestMeHandler_GetMe_GenericError(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{err: errors.New("db error")}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{err: errors.New("db error")}, nil)
 	c, _ := newEchoContext(t, http.MethodGet, "/me", "")
 
 	err := h.GetMe(c)
@@ -76,7 +93,7 @@ func TestMeHandler_GetMe_GenericError(t *testing.T) {
 
 func TestMeHandler_UpdateMe_EnablesVision(t *testing.T) {
 	uc := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true}}
-	h := NewMeHandler(uc, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(uc, nil)
 	c, rec := newEchoContext(t, http.MethodPatch, "/me", `{"vision_enabled": true}`)
 
 	err := h.UpdateMe(c)
@@ -94,7 +111,7 @@ func TestMeHandler_UpdateMe_EnablesVision(t *testing.T) {
 
 func TestMeHandler_UpdateMe_DisablesVision(t *testing.T) {
 	uc := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: false}}
-	h := NewMeHandler(uc, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(uc, nil)
 	c, rec := newEchoContext(t, http.MethodPatch, "/me", `{"vision_enabled": false}`)
 
 	err := h.UpdateMe(c)
@@ -111,7 +128,7 @@ func TestMeHandler_UpdateMe_DisablesVision(t *testing.T) {
 
 func TestMeHandler_UpdateMe_DisablesFolderIcons(t *testing.T) {
 	uc := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", VisionEnabled: true, FolderIconsEnabled: false}}
-	h := NewMeHandler(uc, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(uc, nil)
 	c, rec := newEchoContext(t, http.MethodPatch, "/me", `{"folder_icons_enabled": false}`)
 
 	err := h.UpdateMe(c)
@@ -128,7 +145,7 @@ func TestMeHandler_UpdateMe_DisablesFolderIcons(t *testing.T) {
 }
 
 func TestMeHandler_UpdateMe_NonBooleanFolderIconsEnabled(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{}, nil)
 	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{"folder_icons_enabled": "yes"}`)
 
 	err := h.UpdateMe(c)
@@ -137,7 +154,7 @@ func TestMeHandler_UpdateMe_NonBooleanFolderIconsEnabled(t *testing.T) {
 }
 
 func TestMeHandler_UpdateMe_MissingField(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{}, nil)
 	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{}`)
 
 	err := h.UpdateMe(c)
@@ -146,7 +163,7 @@ func TestMeHandler_UpdateMe_MissingField(t *testing.T) {
 }
 
 func TestMeHandler_UpdateMe_NonBooleanField(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{}, nil)
 	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{"vision_enabled": "yes"}`)
 
 	err := h.UpdateMe(c)
@@ -155,7 +172,7 @@ func TestMeHandler_UpdateMe_NonBooleanField(t *testing.T) {
 }
 
 func TestMeHandler_UpdateMe_UsecaseError(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{err: errors.New("db error")}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{err: errors.New("db error")}, nil)
 	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{"vision_enabled": true}`)
 
 	err := h.UpdateMe(c)
@@ -163,11 +180,37 @@ func TestMeHandler_UpdateMe_UsecaseError(t *testing.T) {
 	assertHTTPError(t, err, http.StatusInternalServerError)
 }
 
+func TestMeHandler_UpdateMe_EnablesAICategorisation(t *testing.T) {
+	uc := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", AICategorisationEnabled: true}}
+	h := newMeHandler(uc, &mockCategorisationCountUsecase{count: 5})
+	c, rec := newEchoContext(t, http.MethodPatch, "/me", `{"ai_categorisation_enabled": true}`)
+
+	err := h.UpdateMe(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, uc.lastUpdateParams.AICategorisationEnabled)
+	assert.True(t, *uc.lastUpdateParams.AICategorisationEnabled)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, true, resp["ai_categorisation_enabled"])
+	assert.Equal(t, float64(5), resp["ai_categorisation_count_this_month"])
+}
+
+func TestMeHandler_UpdateMe_NonBooleanAICategorisationEnabled(t *testing.T) {
+	h := newMeHandler(&mockUserUsecase{}, nil)
+	c, _ := newEchoContext(t, http.MethodPatch, "/me", `{"ai_categorisation_enabled": "yes"}`)
+
+	err := h.UpdateMe(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
 // --- DeleteMe ---
 
 func TestMeHandler_DeleteMe_Success(t *testing.T) {
 	accountUsecase := &mockAccountUsecase{}
-	h := NewMeHandler(&mockUserUsecase{}, accountUsecase, observability.NewTelemetry(nil, nil, nil))
+	h := NewMeHandler(&mockUserUsecase{}, accountUsecase, &mockCategorisationCountUsecase{}, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/me", "")
 
 	err := h.DeleteMe(c)
@@ -179,7 +222,7 @@ func TestMeHandler_DeleteMe_Success(t *testing.T) {
 }
 
 func TestMeHandler_DeleteMe_MissingAuthContext(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{}, observability.NewTelemetry(nil, nil, nil))
+	h := newMeHandler(&mockUserUsecase{}, nil)
 	c, _ := newEchoContext(t, http.MethodDelete, "/me", "")
 	c.Set(string(authmw.AuthenticatedUserIDContextKey), "")
 
@@ -189,7 +232,7 @@ func TestMeHandler_DeleteMe_MissingAuthContext(t *testing.T) {
 }
 
 func TestMeHandler_DeleteMe_GenericError(t *testing.T) {
-	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
+	h := NewMeHandler(&mockUserUsecase{}, &mockAccountUsecase{err: errors.New("db error")}, &mockCategorisationCountUsecase{}, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodDelete, "/me", "")
 
 	err := h.DeleteMe(c)

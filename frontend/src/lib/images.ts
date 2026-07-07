@@ -42,6 +42,7 @@ export async function getImages(
   tagIds?: string[],
   mimeTypes?: string[],
   folderIds?: string[],
+  searchLabels?: boolean,
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   params.set('unfiled', 'true')
@@ -52,6 +53,7 @@ export async function getImages(
   if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
   if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
   if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
+  if (searchLabels) params.set('search_labels', 'true')
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
@@ -81,6 +83,7 @@ export async function getAllImages(
   tagIds?: string[],
   mimeTypes?: string[],
   folderIds?: string[],
+  searchLabels?: boolean,
 ): Promise<ImagesPage> {
   const params = new URLSearchParams()
   if (cursor) params.set('cursor', cursor)
@@ -90,6 +93,7 @@ export async function getAllImages(
   if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
   if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
   if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
+  if (searchLabels) params.set('search_labels', 'true')
   const res = await apiFetch(`/images?${params}`, getToken)
   if (!res.ok) throw new Error('Failed to fetch images')
   return res.json()
@@ -173,7 +177,6 @@ export async function putToR2(uploadUrl: string, file: Blob | File): Promise<voi
 
 export interface CompleteUploadResult {
   image_id: string
-  suggested_folder_name: string | null
   duplicates: Array<{ id: string; title: string; thumbnail_path: string | null }>
 }
 
@@ -205,7 +208,6 @@ export async function completeUpload(
 
 export interface ImageDetail extends Image {
   image_url: string
-  suggested_folder_name: string | null
 }
 
 export async function getImage(getToken: GetToken, id: string): Promise<ImageDetail> {
@@ -310,15 +312,3 @@ export async function bulkTrashImages(
   return res.json()
 }
 
-export async function acceptSuggestion(
-  getToken: GetToken,
-  id: string,
-  suggestedFolderName: string,
-): Promise<void> {
-  const res = await apiFetch(`/images/${id}/accept-suggestion`, getToken, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ suggested_folder_name: suggestedFolderName }),
-  })
-  if (!res.ok) throw new Error('Failed to accept folder suggestion')
-}

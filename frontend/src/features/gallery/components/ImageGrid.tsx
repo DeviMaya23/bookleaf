@@ -132,6 +132,7 @@ interface ImageGridProps {
   filterTagIds?: string[]
   filterMimeTypes?: string[]
   filterFolderIds?: string[]
+  searchLabels?: boolean
   onImageSelect: (image: Image) => void
   onImageDoubleClick?: (image: Image) => void
   onImageDeleted?: (id: string) => void
@@ -143,7 +144,7 @@ interface ImageGridProps {
   onSelectionChange?: (ids: Set<string>, anchorId: string | null) => void
 }
 
-export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger, selectMode = false, selectedIds, mainSelectedId = null, onSelectionChange }: ImageGridProps) {
+export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, searchLabels = false, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger, selectMode = false, selectedIds, mainSelectedId = null, onSelectionChange }: ImageGridProps) {
   const isTrash = view.type === 'trash'
   const isFolderView = view.type === 'folder'
 
@@ -166,7 +167,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
   }, [])
 
   const { images, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useGalleryImages({ view, searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds })
+    useGalleryImages({ view, searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels })
 
   const { orderedImages, dragOverId, removeImage, sortableItems } =
     useManualReorder(view, sortBy, isFolderView, images, sortEndTrigger)

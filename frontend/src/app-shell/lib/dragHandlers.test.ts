@@ -178,7 +178,7 @@ describe('handleFileAutoUpload', () => {
   it('returns full ImageDetail via getImage on success with duplicates', async () => {
     const imageData = { id: 'img-new', title: 'sunset', folder_ids: ['folder-1'] }
     vi.mocked(validateImageFile).mockReturnValueOnce(null)
-    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-new', suggested_folder_name: null, duplicates: [] })
+    vi.mocked(uploadImageFile).mockResolvedValueOnce({ image_id: 'img-new', duplicates: [] })
     vi.mocked(getImage).mockResolvedValueOnce(imageData as never)
 
     const file = makeFile('sunset.jpg', 'image/jpeg')

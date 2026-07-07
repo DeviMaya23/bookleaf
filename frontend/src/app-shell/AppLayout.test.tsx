@@ -15,6 +15,17 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
   useKindeAuth: () => ({ getToken: vi.fn().mockResolvedValue('token') }),
 }))
 
+vi.mock('@/features/auth/lib/me', () => ({
+  getMe: vi.fn().mockResolvedValue({
+    id: 'kp_test',
+    vision_enabled: false,
+    folder_icons_enabled: false,
+    ai_categorisation_enabled: false,
+    ai_categorisation_count_this_month: 0,
+  }),
+  updateMe: vi.fn(),
+}))
+
 vi.mock('@/lib/folders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/folders')>()),
   getFolders: vi.fn().mockResolvedValue([]),
@@ -23,10 +34,6 @@ vi.mock('@/lib/folders', async (importOriginal) => ({
 vi.mock('@/lib/tags', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/tags')>()),
   getTags: vi.fn().mockResolvedValue([]),
-}))
-
-vi.mock('./useVisionSuggestion', () => ({
-  useVisionSuggestion: () => ({ checkVision: vi.fn() }),
 }))
 
 vi.mock('@/lib/images', async (importOriginal) => ({

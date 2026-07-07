@@ -59,8 +59,9 @@ func (u *userUsecase) GetByID(ctx context.Context, kindeID string) (*domain.User
 }
 
 type UpdateUserPreferencesParams struct {
-	VisionEnabled      *bool
-	FolderIconsEnabled *bool
+	VisionEnabled           *bool
+	FolderIconsEnabled      *bool
+	AICategorisationEnabled *bool
 }
 
 func (u *userUsecase) UpdatePreferences(ctx context.Context, id string, params UpdateUserPreferencesParams) (*domain.User, error) {
@@ -73,6 +74,9 @@ func (u *userUsecase) UpdatePreferences(ctx context.Context, id string, params U
 	}
 	if params.FolderIconsEnabled != nil {
 		fields["folder_icons_enabled"] = *params.FolderIconsEnabled
+	}
+	if params.AICategorisationEnabled != nil {
+		fields["ai_categorisation_enabled"] = *params.AICategorisationEnabled
 	}
 
 	user, err := u.userRepo.Update(ctx, id, fields)

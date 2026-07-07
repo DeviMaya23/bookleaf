@@ -447,8 +447,7 @@ func TestImageHandler_GetImage(t *testing.T) {
 						MIMEType: "image/jpeg",
 						Tags:     []domain.Tag{{ID: tagID, Name: "travel"}},
 					},
-					ImageURL:            "https://r2.example.com/view",
-					SuggestedFolderName: strPtr("Nature"),
+					ImageURL: "https://r2.example.com/view",
 				},
 			},
 			wantStatus: http.StatusOK,
@@ -485,7 +484,6 @@ func TestImageHandler_GetImage(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 			assert.Equal(t, imageID.String(), resp["id"])
 			assert.Equal(t, "https://r2.example.com/view", resp["image_url"])
-			assert.Equal(t, "Nature", resp["suggested_folder_name"])
 			tags, ok := resp["tags"].([]any)
 			require.True(t, ok)
 			require.Len(t, tags, 1)

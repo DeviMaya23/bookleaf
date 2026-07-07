@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
@@ -40,4 +41,19 @@ func (r *categorisationLogRepository) GetByImageID(ctx context.Context, imageID 
 		return nil, fmt.Errorf("get categorisation log by image id: %w", err)
 	}
 	return &log, nil
+}
+
+func (r *categorisationLogRepository) CountByUserAndMonth(ctx context.Context, userID string, year, month int) (int, error) {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("ai_categorisation_logs").
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start, end).
+		Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("count categorisation logs by user and month: %w", err)
+	}
+	return int(count), nil
 }

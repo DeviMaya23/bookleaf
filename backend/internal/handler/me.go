@@ -22,22 +22,29 @@ type AccountUsecase interface {
 	DeleteAccount(ctx context.Context, userID string) error
 }
 
+type CategorisationCountUsecase interface {
+	CountThisMonth(ctx context.Context, userID string) (int, error)
+}
+
 type MeHandler struct {
-	userUsecase    UserUsecase
-	accountUsecase AccountUsecase
-	tel            *observability.Telemetry
+	userUsecase            UserUsecase
+	accountUsecase         AccountUsecase
+	categorisationUsecase  CategorisationCountUsecase
+	tel                    *observability.Telemetry
 }
 
 type updateMeRequest struct {
-	VisionEnabled      json.RawMessage `json:"vision_enabled"`
-	FolderIconsEnabled json.RawMessage `json:"folder_icons_enabled"`
+	VisionEnabled           json.RawMessage `json:"vision_enabled"`
+	FolderIconsEnabled      json.RawMessage `json:"folder_icons_enabled"`
+	AICategorisationEnabled json.RawMessage `json:"ai_categorisation_enabled"`
 }
 
-func NewMeHandler(userUsecase UserUsecase, accountUsecase AccountUsecase, tel *observability.Telemetry) *MeHandler {
+func NewMeHandler(userUsecase UserUsecase, accountUsecase AccountUsecase, categorisationUsecase CategorisationCountUsecase, tel *observability.Telemetry) *MeHandler {
 	return &MeHandler{
-		userUsecase:    userUsecase,
-		accountUsecase: accountUsecase,
-		tel:            tel,
+		userUsecase:           userUsecase,
+		accountUsecase:        accountUsecase,
+		categorisationUsecase: categorisationUsecase,
+		tel:                   tel,
 	}
 }
 
@@ -57,11 +64,19 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch authenticated user")
 	}
 
+	count, err := h.categorisationUsecase.CountThisMonth(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch categorisation count")
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                       user.ID,
-		"vision_enabled":           user.VisionEnabled,
-		"folder_icons_enabled":     user.FolderIconsEnabled,
-		"ai_categorisation_enabled": user.AICategorisationEnabled,
+		"id":                                  user.ID,
+		"vision_enabled":                      user.VisionEnabled,
+		"folder_icons_enabled":                user.FolderIconsEnabled,
+		"ai_categorisation_enabled":           user.AICategorisationEnabled,
+		"ai_categorisation_count_this_month":  count,
 	})
 }
 
@@ -79,8 +94,8 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	if len(req.VisionEnabled) == 0 && len(req.FolderIconsEnabled) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled or folder_icons_enabled is required")
+	if len(req.VisionEnabled) == 0 && len(req.FolderIconsEnabled) == 0 && len(req.AICategorisationEnabled) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "vision_enabled, folder_icons_enabled, or ai_categorisation_enabled is required")
 	}
 
 	var params usecase.UpdateUserPreferencesParams
@@ -101,6 +116,14 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 		params.FolderIconsEnabled = &folderIconsEnabled
 	}
 
+	if len(req.AICategorisationEnabled) > 0 {
+		var aiCategorisationEnabled bool
+		if err := json.Unmarshal(req.AICategorisationEnabled, &aiCategorisationEnabled); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "ai_categorisation_enabled must be a boolean")
+		}
+		params.AICategorisationEnabled = &aiCategorisationEnabled
+	}
+
 	user, err := h.userUsecase.UpdatePreferences(ctx, userID, params)
 	if err != nil {
 		span.RecordError(err)
@@ -108,11 +131,19 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update user")
 	}
 
+	count, err := h.categorisationUsecase.CountThisMonth(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch categorisation count")
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                       user.ID,
-		"vision_enabled":           user.VisionEnabled,
-		"folder_icons_enabled":     user.FolderIconsEnabled,
-		"ai_categorisation_enabled": user.AICategorisationEnabled,
+		"id":                                  user.ID,
+		"vision_enabled":                      user.VisionEnabled,
+		"folder_icons_enabled":                user.FolderIconsEnabled,
+		"ai_categorisation_enabled":           user.AICategorisationEnabled,
+		"ai_categorisation_count_this_month":  count,
 	})
 }
 

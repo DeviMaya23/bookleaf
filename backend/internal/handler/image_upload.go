@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
@@ -48,14 +47,9 @@ type completeUploadResponse struct {
 	Duplicates []duplicateImageResponse `json:"duplicates"`
 }
 
-type acceptSuggestionRequest struct {
-	SuggestedFolderName string `json:"suggested_folder_name"`
-}
-
 type UploadUsecase interface {
 	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
-	AcceptSuggestion(ctx context.Context, imageID uuid.UUID, userID string, suggestedFolderName string) error
 	BackfillVisionLabels(ctx context.Context, userID string) (int, error)
 }
 
@@ -145,40 +139,6 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		ImageID:    result.ImageID,
 		Duplicates: duplicates,
 	})
-}
-
-func (h *UploadHandler) AcceptSuggestion(c echo.Context) error {
-	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.AcceptSuggestion")
-	defer span.End()
-
-	imageID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
-	}
-
-	var req acceptSuggestionRequest
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
-	}
-	if strings.TrimSpace(req.SuggestedFolderName) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "suggested_folder_name is required")
-	}
-
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
-		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
-	}
-
-	if err := h.uploadUsecase.AcceptSuggestion(ctx, imageID, userID, req.SuggestedFolderName); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return echo.NewHTTPError(http.StatusNotFound, "image not found")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to accept folder suggestion")
-	}
-
-	return c.NoContent(http.StatusNoContent)
 }
 
 func (h *UploadHandler) BackfillVision(c echo.Context) error {

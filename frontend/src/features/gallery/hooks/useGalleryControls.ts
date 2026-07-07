@@ -20,12 +20,12 @@ export function defaultSortForViewType(viewType: AppView['type']): { sortBy: Sor
   return { sortBy: 'created_at', sortDir: 'desc' }
 }
 
-export type FilterSection = 'tags' | 'mimeTypes' | 'folders'
+export type FilterSection = 'tags' | 'mimeTypes' | 'folders' | 'labelSearch'
 
-export function filterSectionsForViewType(viewType: AppView['type']): FilterSection[] {
+export function filterSectionsForViewType(viewType: AppView['type'], visionEnabled: boolean): FilterSection[] {
   switch (viewType) {
-    case 'all': return ['tags', 'mimeTypes', 'folders']
-    case 'unsorted': return ['tags', 'mimeTypes']
+    case 'all': return visionEnabled ? ['tags', 'mimeTypes', 'folders', 'labelSearch'] : ['tags', 'mimeTypes', 'folders']
+    case 'unsorted': return visionEnabled ? ['tags', 'mimeTypes', 'labelSearch'] : ['tags', 'mimeTypes']
     case 'folder': return ['tags', 'mimeTypes']
     case 'trash': return []
   }
@@ -39,7 +39,7 @@ export interface FilterChip {
 
 export type GalleryControls = ReturnType<typeof useGalleryControls>
 
-export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]) {
+export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[], visionEnabled: boolean) {
   const viewKey = view.type === 'folder' ? `folder:${view.id}` : view.type
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -51,6 +51,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
   const [filterFolderIds, setFilterFolderIds] = useState<string[]>([])
   const [filterTagSearch, setFilterTagSearch] = useState('')
   const [filterFolderSearch, setFilterFolderSearch] = useState('')
+  const [searchLabels, setSearchLabels] = useState(false)
 
   const viewDefaultSort = defaultSortForViewType(view.type)
   const sortFieldOptions: SortBy[] = view.type === 'folder'
@@ -60,7 +61,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
       : ['created_at', 'title']
   const sortActive = sortBy !== viewDefaultSort.sortBy
     || (sortBy !== 'manual' && sortDir !== FIELD_DEFAULT_DIRECTION[sortBy])
-  const filterSections = filterSectionsForViewType(view.type)
+  const filterSections = filterSectionsForViewType(view.type, visionEnabled)
   const filterCount = filterTagIds.length + filterMimeTypes.length + filterFolderIds.length
 
   useEffect(() => {
@@ -70,6 +71,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
     setFilterFolderIds([])
     setFilterTagSearch('')
     setFilterFolderSearch('')
+    setSearchLabels(false)
   }, [viewKey])
 
   useEffect(() => {
@@ -140,5 +142,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
     filteredFolders,
     activeFilterChips,
     clearAllFilters,
+    searchLabels,
+    setSearchLabels,
   }
 }

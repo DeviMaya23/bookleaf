@@ -17,15 +17,16 @@ type ImageCursor struct {
 }
 
 type ListImagesParams struct {
-	Unfiled   bool
-	FolderIDs []uuid.UUID
-	TagIDs    []uuid.UUID
-	MIMETypes []string
-	Name      *string
-	Sort      *string
-	Direction *string
-	Cursor    *ImageCursor
-	Limit     int
+	Unfiled      bool
+	FolderIDs    []uuid.UUID
+	TagIDs       []uuid.UUID
+	MIMETypes    []string
+	Name         *string
+	SearchLabels bool
+	Sort         *string
+	Direction    *string
+	Cursor       *ImageCursor
+	Limit        int
 }
 
 type ListImagesResult struct {

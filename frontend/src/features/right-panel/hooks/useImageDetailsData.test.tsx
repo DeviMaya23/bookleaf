@@ -57,7 +57,6 @@ describe('useImageDetailsData', () => {
     vi.mocked(getImage).mockResolvedValue({
       ...makeImage(),
       image_url: 'https://example.com/full.jpg',
-      suggested_folder_name: null,
     })
     vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'nature' }])
     vi.mocked(getFolders).mockResolvedValue([makeFolder('f1', 'Nature'), makeFolder('f2', 'Travel')])
@@ -67,7 +66,6 @@ describe('useImageDetailsData', () => {
     vi.mocked(getImage).mockResolvedValue({
       ...makeImage({ folder_ids: ['f2'] }),
       image_url: 'https://example.com/full.jpg',
-      suggested_folder_name: null,
     })
     const { result } = renderData(makeImage({ folder_ids: ['f2'] }))
 
@@ -83,8 +81,7 @@ describe('useImageDetailsData', () => {
       return Promise.resolve({
         ...makeImage({ id: id as string, folder_ids: folderIds }),
         image_url: 'https://example.com/full.jpg',
-        suggested_folder_name: null,
-      })
+        })
     })
 
     const { result, rerender } = renderData(makeImage({ folder_ids: ['f1'] }))

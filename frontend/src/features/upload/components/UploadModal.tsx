@@ -17,11 +17,10 @@ interface UploadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   folderId: string | null
-  onUploadSuccess?: (imageId: string) => void
   initialFile?: File
 }
 
-export default function UploadModal({ open, onOpenChange, folderId, onUploadSuccess, initialFile }: UploadModalProps) {
+export default function UploadModal({ open, onOpenChange, folderId, initialFile }: UploadModalProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
@@ -123,7 +122,6 @@ export default function UploadModal({ open, onOpenChange, folderId, onUploadSucc
       if (result.duplicates && result.duplicates.length > 0) {
         toast.warning(`Possible duplicate of "${result.duplicates[0].title}"`)
       }
-      onUploadSuccess?.(result.image_id)
       handleClose()
     },
     onError: () => {

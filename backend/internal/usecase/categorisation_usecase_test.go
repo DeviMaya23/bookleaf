@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/devi/bookleaf/internal/agent"
@@ -139,4 +140,30 @@ func TestCategorisationUsecase_CategoriseImage_EmptySuggestionReturnsError(t *te
 	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
 
 	require.ErrorContains(t, err, "agent returned suggestion with no folder id or new folder name")
+}
+
+func TestCategorisationUsecase_CategoriseImage_MonthlyLimitReached_SkipsAgent(t *testing.T) {
+	imageID := uuid.New()
+	logRepo := &fakeCategorisationLogRepo{monthCount: 50}
+	agentSvc := &spyCategorisationAgent{}
+	uc := NewCategorisationUsecase(agentSvc, &spyCategorisationImageRepo{}, &spyCategorisationFolderRepo{}, logRepo, noopTel())
+
+	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when monthly limit is reached")
+	assert.Nil(t, logRepo.created, "no log entry must be created when monthly limit is reached")
+}
+
+func TestCategorisationUsecase_CategoriseImage_CountQueryError_ReturnsError(t *testing.T) {
+	imageID := uuid.New()
+	countErr := errors.New("db error")
+	logRepo := &fakeCategorisationLogRepo{countErr: countErr}
+	agentSvc := &spyCategorisationAgent{}
+	uc := NewCategorisationUsecase(agentSvc, &spyCategorisationImageRepo{}, &spyCategorisationFolderRepo{}, logRepo, noopTel())
+
+	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+
+	require.ErrorContains(t, err, "db error")
+	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when count query errors")
 }

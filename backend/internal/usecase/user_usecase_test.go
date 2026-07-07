@@ -71,6 +71,9 @@ func (f *fakeUserRepo) Update(_ context.Context, id string, fields map[string]an
 	if enabled, ok := fields["folder_icons_enabled"].(bool); ok {
 		user.FolderIconsEnabled = enabled
 	}
+	if enabled, ok := fields["ai_categorisation_enabled"].(bool); ok {
+		user.AICategorisationEnabled = enabled
+	}
 	return user, nil
 }
 
@@ -145,6 +148,18 @@ func TestUserUsecase_UpdatePreferences_FolderIconsEnabledSuccess(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.False(t, user.FolderIconsEnabled)
+}
+
+func TestUserUsecase_UpdatePreferences_AICategorisationEnabledSuccess(t *testing.T) {
+	repo := newFakeUserRepo()
+	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", AICategorisationEnabled: false}
+	uc := newTestUserUsecase(repo)
+	enabled := true
+
+	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{AICategorisationEnabled: &enabled})
+
+	require.NoError(t, err)
+	assert.True(t, user.AICategorisationEnabled)
 }
 
 func TestUserUsecase_UpdatePreferences_RepoError(t *testing.T) {

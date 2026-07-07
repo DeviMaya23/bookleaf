@@ -635,38 +635,6 @@ func TestImageUploadUsecase_CompleteUpload_UploadCount_Error(t *testing.T) {
 	assert.Equal(t, "error", status.AsString())
 }
 
-// --- AcceptSuggestion ---
-
-func TestImageUploadUsecase_AcceptSuggestion_ExistingFolder(t *testing.T) {
-	imageID := uuid.New()
-	folderID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-	folderRepo := newFakeFolderRepo(&domain.Folder{ID: folderID, Name: "Nature", UserID: "kp_abc123"})
-	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, folderRepo, nil, &mockStorageService{}, nil)
-
-	err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-	require.NoError(t, err)
-	require.NotNil(t, imageRepo.setFolderFolderID)
-	assert.Equal(t, folderID, *imageRepo.setFolderFolderID)
-}
-
-func TestImageUploadUsecase_AcceptSuggestion_CreatesFolder(t *testing.T) {
-	imageID := uuid.New()
-	imageRepo := &mockImageRepository{image: &domain.Image{ID: imageID, UserID: "kp_abc123"}}
-	folderRepo := newFakeFolderRepo()
-	uc := newImageUploadUsecase(imageRepo, &mockPendingUploadRepository{}, folderRepo, nil, &mockStorageService{}, nil)
-
-	err := uc.AcceptSuggestion(context.Background(), imageID, "kp_abc123", "Nature")
-
-	require.NoError(t, err)
-	created, ok := folderRepo.folders["nature"]
-	require.True(t, ok)
-	assert.Equal(t, "Nature", created.Name)
-	require.NotNil(t, imageRepo.setFolderFolderID)
-	assert.Equal(t, created.ID, *imageRepo.setFolderFolderID)
-}
-
 // --- CleanupStaleUploads ---
 
 func TestImageUploadUsecase_CleanupStaleUploads_DeletesAll(t *testing.T) {

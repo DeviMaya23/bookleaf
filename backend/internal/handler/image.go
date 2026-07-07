@@ -85,16 +85,15 @@ type imageDetailResponse struct {
 	MIMEType            string        `json:"mime_type"`
 	SourceURL           *string       `json:"source_url"`
 	FolderIDs           []uuid.UUID   `json:"folder_ids"`
-	ThumbnailURL        *string       `json:"thumbnail_url"`
-	Width               *int          `json:"width"`
-	Height              *int          `json:"height"`
-	FileSize            *int64        `json:"file_size"`
-	Tags                []tagResponse `json:"tags"`
-	Position            *string       `json:"position"`
-	ImageURL            string        `json:"image_url"`
-	SuggestedFolderName *string       `json:"suggested_folder_name"`
-	CreatedAt           time.Time     `json:"created_at"`
-	UpdatedAt           time.Time     `json:"updated_at"`
+	ThumbnailURL *string       `json:"thumbnail_url"`
+	Width        *int          `json:"width"`
+	Height       *int          `json:"height"`
+	FileSize     *int64        `json:"file_size"`
+	Tags         []tagResponse `json:"tags"`
+	Position     *string       `json:"position"`
+	ImageURL     string        `json:"image_url"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }
 
 type downloadImageResponse struct {
@@ -123,6 +122,7 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	unfiled := c.QueryParam("unfiled") == "true"
+	searchLabels := c.QueryParam("search_labels") == "true"
 
 	var name *string
 	if trimmed := strings.TrimSpace(c.QueryParam("name")); trimmed != "" {
@@ -169,15 +169,16 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	}
 
 	result, err := h.imageUsecase.ListImages(ctx, userID, usecase.ListImagesParams{
-		Unfiled:   unfiled,
-		FolderIDs: folderIDs,
-		TagIDs:    tagIDs,
-		MIMETypes: mimeTypes,
-		Name:      name,
-		Sort:      sortField,
-		Direction: direction,
-		Cursor:    cursor,
-		Limit:     limit,
+		Unfiled:      unfiled,
+		FolderIDs:    folderIDs,
+		TagIDs:       tagIDs,
+		MIMETypes:    mimeTypes,
+		Name:         name,
+		SearchLabels: searchLabels,
+		Sort:         sortField,
+		Direction:    direction,
+		Cursor:       cursor,
+		Limit:        limit,
 	})
 	if err != nil {
 		span.RecordError(err)
@@ -290,9 +291,8 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		Height:               item.Height,
 		FileSize:            item.FileSize,
 		Tags:                item.Tags,
-		ImageURL:            result.ImageURL,
-		SuggestedFolderName: result.SuggestedFolderName,
-		CreatedAt:           item.CreatedAt,
+		ImageURL:  result.ImageURL,
+		CreatedAt: item.CreatedAt,
 		UpdatedAt:           item.UpdatedAt,
 	})
 }

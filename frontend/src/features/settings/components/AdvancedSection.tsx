@@ -9,6 +9,7 @@ export default function AdvancedSection() {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [tooltipOpen, setTooltipOpen] = useState(false)
+  const [categorisationTooltipOpen, setCategorisationTooltipOpen] = useState(false)
 
   const { data: me } = useQuery({
     queryKey: ['me'],
@@ -26,17 +27,30 @@ export default function AdvancedSection() {
     },
   })
 
+  const updateCategorisationMutation = useMutation({
+    mutationFn: (aiCategorisationEnabled: boolean) =>
+      updateMe(getToken, { ai_categorisation_enabled: aiCategorisationEnabled }),
+    onSuccess: (updatedMe) => {
+      queryClient.setQueryData(['me'], updatedMe)
+    },
+    onError: () => {
+      toast.error('Failed to update settings')
+    },
+  })
+
   const visionEnabled = me?.vision_enabled ?? false
+  const aiCategorisationEnabled = me?.ai_categorisation_enabled ?? false
+  const categorisationCount = me?.ai_categorisation_count_this_month ?? 0
 
   return (
     <div>
       <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        AI
+        Smart Features
       </p>
-      <div className="flex items-start justify-between gap-4 border-b border-border py-3">
+      <div className="flex items-start justify-between gap-4 py-3">
         <div>
           <div className="mb-1 flex items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">AI folder suggestions</span>
+            <span className="text-sm font-medium text-foreground">Smart Features</span>
             <div className="relative inline-flex">
               <button
                 type="button"
@@ -52,19 +66,60 @@ export default function AdvancedSection() {
                   role="tooltip"
                   className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-[230px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
                 >
-                  Enables folder suggestions on single-file upload, using Google's Vision API.
+                  Uses Google's Vision API to label your images, enabling smart search by image content.
                 </div>
               )}
             </div>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground" data-testid="vision-description">
-            {visionEnabled ? 'Gets folder suggestions on single-file upload' : 'Folder suggestions off'}
+            {visionEnabled ? 'Smart search available in filter option' : 'Smart features off'}
           </p>
         </div>
         <Switch
+          data-testid="vision-switch"
           checked={visionEnabled}
           onCheckedChange={(checked) => updateMutation.mutate(checked)}
           disabled={updateMutation.isPending}
+        />
+      </div>
+      <div className={`ml-3 flex items-start justify-between gap-4 border-l border-border pl-3 pb-3 transition-opacity${!visionEnabled ? ' opacity-50' : ''}`}>
+        <div>
+          <div className="mb-1 flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">AI auto-categorisation</span>
+            <div className="relative inline-flex">
+              <button
+                type="button"
+                onMouseEnter={() => setCategorisationTooltipOpen(true)}
+                onMouseLeave={() => setCategorisationTooltipOpen(false)}
+                className="flex size-[15px] items-center justify-center rounded-full border border-foreground/20 bg-muted text-[9px] font-bold leading-none text-muted-foreground"
+                aria-label="What does AI auto-categorisation do?"
+              >
+                ?
+              </button>
+              {categorisationTooltipOpen && (
+                <div
+                  role="tooltip"
+                  className="pointer-events-none absolute top-full left-0 z-50 mt-2 w-[230px] rounded-md bg-foreground px-3 py-2 text-xs leading-relaxed text-primary-foreground shadow-lg"
+                >
+                  {visionEnabled
+                    ? "Automatically categorises newly uploaded images using Anthropic's AI model with vision labels and folder metadata."
+                    : 'Requires Smart Features to be enabled.'}
+                </div>
+              )}
+            </div>
+          </div>
+          <p
+            className="text-xs leading-relaxed text-muted-foreground"
+            data-testid="categorisation-counter"
+          >
+            {categorisationCount} / 50 this month
+          </p>
+        </div>
+        <Switch
+          data-testid="ai-categorisation-switch"
+          checked={aiCategorisationEnabled}
+          onCheckedChange={(checked) => updateCategorisationMutation.mutate(checked)}
+          disabled={updateCategorisationMutation.isPending || !visionEnabled}
         />
       </div>
     </div>

@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/devi/bookleaf/internal/agent"
 	"github.com/devi/bookleaf/internal/domain"
@@ -11,15 +12,17 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
+const categorisationMonthlyLimit = 50
+
 type CategorisationUsecase struct {
 	imageRepo    categorisationImageRepository
 	folderRepo   categorisationFolderRepository
 	logRepo      categorisationLogRepository
-	agentService categorisationAgentService
+	agentService CategorisationAgentService
 	tel          *observability.Telemetry
 }
 
-type categorisationAgentService interface {
+type CategorisationAgentService interface {
 	GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (agent.Suggestion, error)
 }
 
@@ -35,9 +38,10 @@ type categorisationFolderRepository interface {
 type categorisationLogRepository interface {
 	Create(ctx context.Context, log *domain.CategorisationLog) error
 	GetByImageID(ctx context.Context, imageID uuid.UUID) (*domain.CategorisationLog, error)
+	CountByUserAndMonth(ctx context.Context, userID string, year, month int) (int, error)
 }
 
-func NewCategorisationUsecase(agentService categorisationAgentService,
+func NewCategorisationUsecase(agentService CategorisationAgentService,
 	imageRepo categorisationImageRepository,
 	folderRepo categorisationFolderRepository,
 	logRepo categorisationLogRepository,
@@ -51,9 +55,28 @@ func NewCategorisationUsecase(agentService categorisationAgentService,
 	}
 }
 
+func (u *CategorisationUsecase) CountThisMonth(ctx context.Context, userID string) (int, error) {
+	now := time.Now().UTC()
+	return u.logRepo.CountByUserAndMonth(ctx, userID, now.Year(), int(now.Month()))
+}
+
 func (u *CategorisationUsecase) CategoriseImage(ctx context.Context, userID string, imageID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CategoriseImage")
 	defer span.End()
+
+	if u.agentService == nil {
+		return fmt.Errorf("agent service not configured")
+	}
+
+	count, err := u.CountThisMonth(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if count >= categorisationMonthlyLimit {
+		return nil
+	}
 
 	var folderID *uuid.UUID
 	var newFolderName string

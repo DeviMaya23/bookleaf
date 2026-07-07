@@ -14,6 +14,8 @@ import (
 	"roci.dev/fracdex"
 )
 
+const labelSearchScoreThreshold float32 = 0.75
+
 type imageRepository struct {
 	db *gorm.DB
 }
@@ -32,7 +34,7 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 	dispatch := usecase.ResolveSort(sortField, direction)
 
@@ -62,7 +64,11 @@ func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool,
 	}
 
 	if name != nil && *name != "" {
-		query = query.Where("images.title ILIKE ?", "%"+*name+"%")
+		if searchLabels {
+			query = query.Where("(images.title ILIKE ? OR EXISTS (SELECT 1 FROM image_labels WHERE image_id = images.id AND label ILIKE ? AND score >= ?))", "%"+*name+"%", "%"+*name+"%", labelSearchScoreThreshold)
+		} else {
+			query = query.Where("images.title ILIKE ?", "%"+*name+"%")
+		}
 	}
 
 	if cursor != nil {

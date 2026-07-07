@@ -253,13 +253,19 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
+	categorisationLogRepo := repository.NewCategorisationLogRepository(db)
+
+	var agentService usecase.CategorisationAgentService
 	if cfg.AnthropicAPIKey != "" {
 		aiClient := anthropic.NewClient(
 			anthropicOption.WithAPIKey(cfg.AnthropicAPIKey),
 		)
-		agentTools := agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
-		categorisationLogRepo := repository.NewCategorisationLogRepository(db)
-		categorisationUsecase := usecase.NewCategorisationUsecase(agentTools, imageRepository, folderRepository, categorisationLogRepo, tel)
+		agentService = agent.NewAgentService(imageRepository, folderRepository, &aiClient, tel, cfg.AnthropicModel)
+	}
+
+	categorisationUsecase := usecase.NewCategorisationUsecase(agentService, imageRepository, folderRepository, categorisationLogRepo, tel)
+
+	if cfg.AnthropicAPIKey != "" {
 		river.AddWorker(workers, worker.NewCategorisationWorker(categorisationUsecase, broadcaster))
 	}
 
@@ -307,7 +313,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	}
 
 	eventsHandler := httphandler.NewEventsHandler(broadcaster)
-	meHandler := httphandler.NewMeHandler(userUsecase, accountUsecase, tel)
+	meHandler := httphandler.NewMeHandler(userUsecase, accountUsecase, categorisationUsecase, tel)
 	folderHandler := httphandler.NewFolderHandler(folderUsecase, tel)
 	tagHandler := httphandler.NewTagHandler(tagUsecase, tel)
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
@@ -344,7 +350,6 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.DELETE("/tags/:id", tagHandler.DeleteTag)
 	protected.POST("/images", uploadHandler.InitiateUpload)
 	protected.POST("/images/:id/complete", uploadHandler.CompleteUpload)
-	protected.POST("/images/:id/accept-suggestion", uploadHandler.AcceptSuggestion)
 	protected.GET("/images/trash", trashHandler.ListTrashed)
 	protected.DELETE("/images/trash", trashHandler.EmptyTrash)
 	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)

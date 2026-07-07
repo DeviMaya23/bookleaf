@@ -47,7 +47,7 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
     })
     expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
   })
@@ -58,7 +58,7 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
     expect(screen.getByTestId('vision-description')).not.toBeEmptyDOMElement()
   })
@@ -67,14 +67,14 @@ describe('AdvancedSection', () => {
     mockGetMe.mockResolvedValue({ id: 'kp_1', vision_enabled: true })
     renderAdvancedSection()
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+      expect(screen.getAllByTestId('vision-switch')[0]).toHaveAttribute('data-checked')
     })
-    const enabledText = screen.getByTestId('vision-description').textContent
+    const enabledText = screen.getAllByTestId('vision-description')[0].textContent
 
     mockGetMe.mockResolvedValue({ id: 'kp_2', vision_enabled: false })
     renderAdvancedSection()
     await waitFor(() => {
-      expect(screen.getAllByRole('switch')[1]).toHaveAttribute('data-unchecked')
+      expect(screen.getAllByTestId('vision-switch')[1]).toHaveAttribute('data-unchecked')
     })
     const disabledText = screen.getAllByTestId('vision-description')[1].textContent
 
@@ -86,7 +86,7 @@ describe('AdvancedSection', () => {
 
     renderAdvancedSection()
 
-    await waitFor(() => screen.getByRole('switch'))
+    await waitFor(() => screen.getByTestId('vision-switch'))
 
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
 
@@ -104,15 +104,15 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
     const initialDescription = screen.getByTestId('vision-description').textContent
 
-    await userEvent.click(screen.getByRole('switch'))
+    await userEvent.click(screen.getByTestId('vision-switch'))
 
     expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: true })
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
     })
     expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
   })
@@ -124,15 +124,15 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-checked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-checked')
     })
     const initialDescription = screen.getByTestId('vision-description').textContent
 
-    await userEvent.click(screen.getByRole('switch'))
+    await userEvent.click(screen.getByTestId('vision-switch'))
 
     expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { vision_enabled: false })
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
     expect(screen.getByTestId('vision-description').textContent).not.toEqual(initialDescription)
   })
@@ -147,19 +147,19 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
 
-    await userEvent.click(screen.getByRole('switch'))
+    await userEvent.click(screen.getByTestId('vision-switch'))
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('aria-disabled', 'true')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('aria-disabled', 'true')
     })
 
     resolveUpdate({ id: 'kp_1', vision_enabled: true })
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).not.toHaveAttribute('aria-disabled')
+      expect(screen.getByTestId('vision-switch')).not.toHaveAttribute('aria-disabled')
     })
   })
 
@@ -170,15 +170,142 @@ describe('AdvancedSection', () => {
     renderAdvancedSection()
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
+      expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
     })
 
-    await userEvent.click(screen.getByRole('switch'))
+    await userEvent.click(screen.getByTestId('vision-switch'))
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith('Failed to update settings')
     })
-    expect(screen.getByRole('switch')).toHaveAttribute('data-unchecked')
-    expect(screen.getByRole('switch')).not.toHaveAttribute('aria-disabled')
+    expect(screen.getByTestId('vision-switch')).toHaveAttribute('data-unchecked')
+    expect(screen.getByTestId('vision-switch')).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('renders the AI auto-categorisation toggle reflecting ai_categorisation_enabled from the me cache', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: false,
+      ai_categorisation_enabled: true,
+      ai_categorisation_count_this_month: 10,
+    })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-checked')
+    })
+  })
+
+  it('toggling the AI auto-categorisation switch fires PATCH /me with the new value', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: false,
+      ai_categorisation_count_this_month: 0,
+    })
+    mockUpdateMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: true,
+      ai_categorisation_count_this_month: 0,
+    })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-unchecked')
+    })
+
+    await userEvent.click(screen.getByTestId('ai-categorisation-switch'))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { ai_categorisation_enabled: true })
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-checked')
+    })
+  })
+
+  it('disables the AI auto-categorisation switch when vision_enabled is false', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: false,
+      ai_categorisation_enabled: false,
+      ai_categorisation_count_this_month: 0,
+    })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('aria-disabled', 'true')
+    })
+    await userEvent.click(screen.getByTestId('ai-categorisation-switch'))
+    expect(mockUpdateMe).not.toHaveBeenCalled()
+  })
+
+  it('disables AI auto-categorisation via PATCH /me and updates the displayed state', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: true,
+      ai_categorisation_count_this_month: 0,
+    })
+    mockUpdateMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: false,
+      ai_categorisation_count_this_month: 0,
+    })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByTestId('ai-categorisation-switch'))
+
+    expect(mockUpdateMe).toHaveBeenCalledWith(expect.anything(), { ai_categorisation_enabled: false })
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-unchecked')
+    })
+  })
+
+  it('shows an error toast and leaves the categorisation toggle unchanged when the update fails', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: true,
+      ai_categorisation_count_this_month: 0,
+    })
+    mockUpdateMe.mockRejectedValue(new Error('boom'))
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-checked')
+    })
+
+    await userEvent.click(screen.getByTestId('ai-categorisation-switch'))
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Failed to update settings')
+    })
+    expect(screen.getByTestId('ai-categorisation-switch')).toHaveAttribute('data-checked')
+    expect(screen.getByTestId('ai-categorisation-switch')).not.toHaveAttribute('aria-disabled')
+  })
+
+  it('renders the categorisation counter showing current month usage', async () => {
+    mockGetMe.mockResolvedValue({
+      id: 'kp_1',
+      vision_enabled: true,
+      ai_categorisation_enabled: true,
+      ai_categorisation_count_this_month: 10,
+    })
+
+    renderAdvancedSection()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('categorisation-counter').textContent).toBe('10 / 50 this month')
+    })
   })
 })

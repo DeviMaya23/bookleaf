@@ -11,7 +11,7 @@ const USAGE2 =
   "Identity information (name, e-mail, profile picture) are stored by Bookleaf’s OAuth provider Kinde. All uploaded images and generated thumbnails are stored in Cloudflare R2. Image metadata is stored in Neon’s PostgreSQL."
 
 const USAGE3 =
-  "Uploaded images are not shared to any third parties, unless you choose to share them, or you have AI features enabled (a thumbnail version of your image will be sent to Google's Vision API for processing)."
+  "Uploaded images are not shared to any third parties, unless you choose to share them, or you have AI features enabled (see below)."
 
 const RETENTION =
   'We keep your identity information as long as your account exists. Uploaded images and their metadata are kept until you delete them or your account.'
@@ -19,6 +19,11 @@ const RETENTION =
 const DELETE = 
   'To delete your account, go to Settings → Account → Delete Account. This will delete all your data from our databases and storage, including your identity information, uploaded images, and metadata. This action is irreversible.'
 
+const AIUSAGE =
+  "If you have smart features/AI features enabled, a thumbnail version of your uploaded image will be sent to Google's Vision API for processing. The Vision API will return labels and scores that describes the image, and this data is stored in our database."
+
+const AIUSAGE2 =
+   "In order to auto-categorise images, the application sends the results of Vision API and your folder list and metadata (folder name, folder description) to Antrophic’s AI model. The actual images and thumbnails are not used in this process."
 export default function PrivacyPolicyPage() {
   return (
     <SimplePageLayout title="Privacy Policy">
@@ -34,6 +39,13 @@ export default function PrivacyPolicyPage() {
         <p className="text-muted-foreground">{USAGE2}</p>
         <br></br>
         <p className="text-muted-foreground">{USAGE3}</p>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-2 font-serif text-xl font-semibold">Smart-features specific data usage</h2>
+        <p className="text-muted-foreground">{AIUSAGE}</p>
+        <br></br>
+        <p className="text-muted-foreground">{AIUSAGE2}</p>
       </section>
 
       <section className="mb-8">
