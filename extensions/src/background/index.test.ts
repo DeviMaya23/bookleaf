@@ -14,7 +14,7 @@ vi.mock("../lib/highResFetch", () => ({
   resolveHighResReferrer: vi.fn(),
   validateCandidate: vi.fn(),
 }));
-vi.mock("../lib/storage", () => ({ getAuth: vi.fn(), addRecentSave: vi.fn() }));
+vi.mock("../lib/storage", () => ({ getAuth: vi.fn(), addRecentSave: vi.fn(), getDefaultFolder: vi.fn() }));
 
 import {
   blobToDataUrl,
