@@ -14,3 +14,9 @@ export async function apiFetch(
 
   return fetch(`${baseUrl}${path}`, { ...options, headers });
 }
+
+export async function getFolders(): Promise<Array<{ id: string; name: string }>> {
+  const res = await apiFetch("/folders");
+  if (!res.ok) throw new Error(`GET /folders failed: ${res.status}`);
+  return res.json() as Promise<Array<{ id: string; name: string }>>;
+}
