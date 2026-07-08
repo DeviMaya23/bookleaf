@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { getAuth, addRecentSave, type BookleafAuth } from "../lib/storage";
+import { getAuth, addRecentSave, getDefaultFolder, type BookleafAuth } from "../lib/storage";
 import { login } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import { resolveHighResReferrer, resolveHighResUrl, validateCandidate } from "../lib/highResFetch";
@@ -96,8 +96,12 @@ export async function handlePickerSaveMessage(
   const title = tab?.title ?? "Untitled";
   const tabId = tab?.id;
 
+  const folder = await getDefaultFolder();
+
   const results = await Promise.allSettled(
-    msg.images.map((img) => handleSave({ srcUrl: img.srcUrl, pageUrl, title, tabId, silent: true })),
+    msg.images.map((img) =>
+      handleSave({ srcUrl: img.srcUrl, pageUrl, title, tabId, silent: true, folderId: folder?.id }),
+    ),
   );
 
   const succeeded = results.filter((r) => r.status === "fulfilled").length;
@@ -105,11 +109,12 @@ export async function handlePickerSaveMessage(
   const total = results.length;
 
   if (succeeded === total) {
+    const destination = folder ? `to ${folder.name}` : "to Unsorted";
     await sendToast(
       tabId,
       "success",
       "Saved to Bookleaf.",
-      `${total} ${total === 1 ? "image" : "images"} added to Unsorted.`,
+      `${total} ${total === 1 ? "image" : "images"} added ${destination}.`,
     );
   } else if (failed === total) {
     await sendToast(tabId, "error", "Couldn't save images.", "Check your connection and try again.");
@@ -340,6 +345,7 @@ export async function saveImage({
   mimeType,
   title,
   pageUrl,
+  folderId,
   thumbnailBlob,
   width,
   height,
@@ -348,7 +354,7 @@ export async function saveImage({
   mimeType: string;
   title: string;
   pageUrl: string;
-  accessToken: string;
+  folderId?: string;
   thumbnailBlob?: Blob;
   width?: number;
   height?: number;
@@ -360,6 +366,7 @@ export async function saveImage({
       title,
       mime_type: mimeType,
       source_url: pageUrl || undefined,
+      ...(folderId ? { folder_id: folderId } : {}),
     }),
   });
   if (!initRes.ok) throw new Error(`POST /images failed: ${initRes.status}`);
@@ -417,6 +424,7 @@ export async function persistImage({
   pageUrl,
   tabId,
   silent,
+  folderId,
 }: {
   blob: Blob;
   mimeType: string;
@@ -425,6 +433,7 @@ export async function persistImage({
   pageUrl: string;
   tabId: number | undefined;
   silent?: boolean;
+  folderId?: string;
 }): Promise<void> {
   const auth = await getAuth();
 
@@ -432,6 +441,10 @@ export async function persistImage({
     if (!silent) await sendToast(tabId, "error", "Bookleaf", "Please log in first.");
     return;
   }
+
+  const folder = folderId ? null : await getDefaultFolder();
+  const effectiveFolderId = folderId ?? folder?.id;
+  const folderName = folder?.name;
 
   let imageId: string | null = null;
   let thumbnailBlob: Blob | null = null;
@@ -451,12 +464,18 @@ export async function persistImage({
       mimeType,
       title,
       pageUrl,
-      accessToken: auth.accessToken,
+      folderId: effectiveFolderId,
       thumbnailBlob: thumbnailBlob ?? undefined,
       width: dimensions?.width,
       height: dimensions?.height,
     });
-    if (!silent) await sendToast(tabId, "success", "Saved to Bookleaf.", "Added to Unsorted.");
+    if (!silent)
+      await sendToast(
+        tabId,
+        "success",
+        "Saved to Bookleaf.",
+        folderName ? `Added to ${folderName}.` : "Added to Unsorted.",
+      );
   } catch {
     if (!silent) await sendToast(tabId, "error", "Couldn't save image.", "Check your connection and try again.");
     return;
@@ -474,12 +493,14 @@ export async function handleSave({
   title,
   tabId,
   silent,
+  folderId,
 }: {
   srcUrl: string;
   pageUrl: string;
   title: string;
   tabId: number | undefined;
   silent?: boolean;
+  folderId?: string;
 }): Promise<void> {
   activeSaves++;
   updateBadge();
@@ -498,7 +519,7 @@ export async function handleSave({
       return;
     }
 
-    await persistImage({ ...fetched, title, pageUrl: cleanUrl(pageUrl), tabId, silent });
+    await persistImage({ ...fetched, title, pageUrl: cleanUrl(pageUrl), tabId, silent, folderId });
   } finally {
     activeSaves--;
     updateBadge();

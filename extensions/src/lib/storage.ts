@@ -19,6 +19,7 @@ const DARK_MODE_KEY = "bookleaf_dark_mode";
 const DRAG_ENABLED_KEY = "bookleaf_drag_enabled";
 const USERNAME_KEY = "bookleaf_username";
 const AVATAR_KEY = "bookleaf_avatar";
+const DEFAULT_FOLDER_KEY = "bookleaf_default_folder";
 
 const MAX_RECENT_SAVES = 5;
 
@@ -80,4 +81,17 @@ export async function getAvatar(): Promise<string | null> {
 
 export async function setAvatar(url: string): Promise<void> {
   await browser.storage.local.set({ [AVATAR_KEY]: url });
+}
+
+export async function getDefaultFolder(): Promise<{ id: string; name: string } | null> {
+  const result = await browser.storage.local.get(DEFAULT_FOLDER_KEY);
+  return (result[DEFAULT_FOLDER_KEY] as { id: string; name: string }) ?? null;
+}
+
+export async function setDefaultFolder(folder: { id: string; name: string }): Promise<void> {
+  await browser.storage.local.set({ [DEFAULT_FOLDER_KEY]: folder });
+}
+
+export async function clearDefaultFolder(): Promise<void> {
+  await browser.storage.local.remove(DEFAULT_FOLDER_KEY);
 }

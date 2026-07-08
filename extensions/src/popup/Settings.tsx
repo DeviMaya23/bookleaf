@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
-import { getDragEnabled, setDragEnabled } from "../lib/storage";
+import { getDragEnabled, setDragEnabled, getDefaultFolder, setDefaultFolder, clearDefaultFolder } from "../lib/storage";
+import { getFolders } from "../lib/api";
 import type { Colors } from "./App";
 
 const SNIP_COMMAND_NAME = "snip-capture";
@@ -78,6 +79,9 @@ export default function Settings({
   const [dragEnabled, setDragEnabledState] = useState(true);
   const [shortcut, setShortcut] = useState("");
   const [browseShortcut, setBrowseShortcut] = useState("");
+  const [folders, setFolders] = useState<Array<{ id: string; name: string }>>([]);
+  const [foldersLoading, setFoldersLoading] = useState(true);
+  const [defaultFolderId, setDefaultFolderIdState] = useState("");
 
   useEffect(() => {
     getDragEnabled().then(setDragEnabledState);
@@ -87,6 +91,15 @@ export default function Settings({
       const browse = commands.find((command) => command.name === BROWSE_IMAGES_COMMAND_NAME);
       setBrowseShortcut(browse?.shortcut ?? "");
     });
+    getDefaultFolder().then((folder) => {
+      setDefaultFolderIdState(folder?.id ?? "");
+    });
+    getFolders()
+      .then(setFolders)
+      .catch(() => {
+        // leave folders empty; stored preference is preserved
+      })
+      .finally(() => setFoldersLoading(false));
   }, []);
 
   async function handleToggleDrag() {
@@ -101,6 +114,19 @@ export default function Settings({
       return;
     }
     await openChromeShortcutSettings();
+  }
+
+  async function handleFolderChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const value = e.target.value;
+    if (value === "") {
+      setDefaultFolderIdState("");
+      await clearDefaultFolder();
+    } else {
+      const folder = folders.find((f) => f.id === value);
+      if (!folder) return;
+      setDefaultFolderIdState(value);
+      await setDefaultFolder(folder);
+    }
   }
 
   return (
@@ -187,6 +213,61 @@ export default function Settings({
       >
         <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Drag to save</span>
         <Switch c={c} checked={dragEnabled} onChange={handleToggleDrag} />
+      </div>
+
+      {/* Save destination section header */}
+      <div
+        style={{
+          padding: "10px 14px 4px",
+          borderTop: `1px solid ${c.border}`,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: c.textSec,
+          }}
+        >
+          Save destination
+        </span>
+      </div>
+
+      {/* Default folder row */}
+      <div
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 14px",
+          gap: 10,
+        }}
+      >
+        <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Default folder</span>
+        <select
+          disabled={foldersLoading}
+          value={defaultFolderId}
+          onChange={handleFolderChange}
+          style={{
+            fontSize: 12,
+            color: c.text,
+            background: c.bg,
+            border: `1px solid ${c.border}`,
+            borderRadius: 6,
+            padding: "4px 9px",
+            cursor: foldersLoading ? "default" : "pointer",
+            maxWidth: 140,
+          }}
+        >
+          <option value="">None (Unsorted)</option>
+          {folders.map((folder) => (
+            <option key={folder.id} value={folder.id}>
+              {folder.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Hotkeys section header */}
