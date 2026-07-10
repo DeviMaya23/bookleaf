@@ -13,9 +13,10 @@ import {
   type RecentSave,
 } from "../lib/storage";
 import Settings from "./Settings";
+import FolderPicker from "./FolderPicker";
 
 type AuthState = "loading" | "unauthenticated" | "authenticated";
-type View = "main" | "settings";
+type View = "main" | "settings" | "folder-picker";
 
 export interface Colors {
   bg: string;
@@ -135,6 +136,10 @@ export default function App() {
 
   const c = isDark ? dark : light;
 
+  if (view === "folder-picker") {
+    return <FolderPicker onBack={() => setView("settings")} c={c} />;
+  }
+
   if (view === "settings") {
     return (
       <Settings
@@ -143,6 +148,7 @@ export default function App() {
         onToggleDark={handleToggleDark}
         onBack={() => setView("main")}
         onLogout={handleLogout}
+        onOpenFolderPicker={() => setView("folder-picker")}
       />
     );
   }
