@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import browser from "webextension-polyfill";
-import { getDragEnabled, setDragEnabled, getDefaultFolder, setDefaultFolder, clearDefaultFolder } from "../lib/storage";
-import { getFolders } from "../lib/api";
+import { getDragEnabled, setDragEnabled, getDefaultFolder } from "../lib/storage";
 import type { Colors } from "./App";
 
 const SNIP_COMMAND_NAME = "snip-capture";
@@ -69,19 +68,19 @@ export default function Settings({
   onToggleDark,
   onBack,
   onLogout,
+  onOpenFolderPicker,
 }: {
   c: Colors;
   isDark: boolean;
   onToggleDark: () => void;
   onBack: () => void;
   onLogout: () => void;
+  onOpenFolderPicker: () => void;
 }) {
   const [dragEnabled, setDragEnabledState] = useState(true);
   const [shortcut, setShortcut] = useState("");
   const [browseShortcut, setBrowseShortcut] = useState("");
-  const [folders, setFolders] = useState<Array<{ id: string; name: string }>>([]);
-  const [foldersLoading, setFoldersLoading] = useState(true);
-  const [defaultFolderId, setDefaultFolderIdState] = useState("");
+  const [defaultFolderName, setDefaultFolderName] = useState<string | null>(null);
 
   useEffect(() => {
     getDragEnabled().then(setDragEnabledState);
@@ -92,14 +91,8 @@ export default function Settings({
       setBrowseShortcut(browse?.shortcut ?? "");
     });
     getDefaultFolder().then((folder) => {
-      setDefaultFolderIdState(folder?.id ?? "");
+      setDefaultFolderName(folder?.name ?? null);
     });
-    getFolders()
-      .then(setFolders)
-      .catch(() => {
-        // leave folders empty; stored preference is preserved
-      })
-      .finally(() => setFoldersLoading(false));
   }, []);
 
   async function handleToggleDrag() {
@@ -114,19 +107,6 @@ export default function Settings({
       return;
     }
     await openChromeShortcutSettings();
-  }
-
-  async function handleFolderChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const value = e.target.value;
-    if (value === "") {
-      setDefaultFolderIdState("");
-      await clearDefaultFolder();
-    } else {
-      const folder = folders.find((f) => f.id === value);
-      if (!folder) return;
-      setDefaultFolderIdState(value);
-      await setDefaultFolder(folder);
-    }
   }
 
   return (
@@ -246,28 +226,24 @@ export default function Settings({
         }}
       >
         <span style={{ fontSize: 13, color: c.text, flex: 1 }}>Default folder</span>
-        <select
-          disabled={foldersLoading}
-          value={defaultFolderId}
-          onChange={handleFolderChange}
+        <button
+          onClick={onOpenFolderPicker}
           style={{
             fontSize: 12,
-            color: c.text,
-            background: c.bg,
+            color: c.textSec,
+            background: "transparent",
             border: `1px solid ${c.border}`,
             borderRadius: 6,
             padding: "4px 9px",
-            cursor: foldersLoading ? "default" : "pointer",
+            cursor: "pointer",
             maxWidth: 140,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
-          <option value="">None (Unsorted)</option>
-          {folders.map((folder) => (
-            <option key={folder.id} value={folder.id}>
-              {folder.name}
-            </option>
-          ))}
-        </select>
+          {defaultFolderName ?? "None"}
+        </button>
       </div>
 
       {/* Hotkeys section header */}

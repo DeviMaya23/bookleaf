@@ -32,12 +32,12 @@ The `name` is stored alongside the `id` solely for use in success toast messages
 
 ### Requirement: Folder list fetch from API
 
-`api.ts` SHALL expose a `getFolders()` function that calls `GET /folders` via `apiFetch` and returns a `Promise<Array<{ id: string; name: string }>>`. On a non-OK response it SHALL throw an error.
+`api.ts` SHALL expose a `getFolders()` function that calls `GET /folders` via `apiFetch` and returns a `Promise<Array<{ id: string; name: string; parent_id: string | null }>>`. On a non-OK response it SHALL throw an error.
 
-#### Scenario: Successful fetch returns folder list
+#### Scenario: Successful fetch returns folder list with parent_id
 
 - **WHEN** `GET /folders` responds with a 200 and a JSON array of folder objects
-- **THEN** `getFolders()` resolves with an array of `{ id, name }` objects
+- **THEN** `getFolders()` resolves with an array of `{ id, name, parent_id }` objects
 
 #### Scenario: Non-OK response throws
 
@@ -49,43 +49,29 @@ The `name` is stored alongside the `id` solely for use in success toast messages
 The Settings panel (`Settings.tsx`) SHALL render a **"Save destination"** section between the drag-to-save row and the Hotkeys section header. The section SHALL contain:
 
 - A section label styled identically to the existing "Hotkeys" label (10px, uppercase, `c.textSec`).
-- A row with a text label "Default folder" and a native `<select>` element flush-right.
-- The `<select>` SHALL be populated with:
-  - A first option with value `""` and label `"None (Unsorted)"`.
-  - One `<option>` per folder returned by `GET /folders`, using `folder.id` as value and `folder.name` as label, sorted by the API response order.
-- The `<select>` SHALL be initialized to the stored default folder ID on mount, or `""` if none is set.
-- Changing the `<select>` SHALL immediately call `setDefaultFolder({ id, name })` for a non-empty selection, or `clearDefaultFolder()` for `""`.
-- `GET /folders` SHALL be called inside a `useEffect` on Settings mount. While loading, the `<select>` SHALL render with only the `"None (Unsorted)"` option and be disabled. On fetch error, the `<select>` SHALL remain with only `"None (Unsorted)"` and be re-enabled (the stored preference is preserved).
+- A row with a text label "Default folder" and a button flush-right that displays the current default folder name, or `"None"` when no default is stored.
+- Clicking the button SHALL navigate to the FolderPicker panel view.
+- The displayed name SHALL be read from `getDefaultFolder()` on Settings mount and updated when the user returns from the FolderPicker panel.
 
-#### Scenario: Settings loads folder list and pre-selects stored default
+#### Scenario: Settings shows stored folder name on the button
 
-- **WHEN** Settings mounts and a default folder is stored with id `"xyz"` and the API returns a list containing `{ id: "xyz", name: "Mood" }`
-- **THEN** the `<select>` shows "Mood" as the selected option
+- **WHEN** Settings mounts and a default folder `{ id: "xyz", name: "Mood" }` is stored
+- **THEN** the "Default folder" button reads "Mood"
 
-#### Scenario: Settings shows "None (Unsorted)" when no default is stored
+#### Scenario: Settings shows "None" when no default is stored
 
 - **WHEN** Settings mounts and no default folder is stored
-- **THEN** the `<select>` shows "None (Unsorted)" as the selected option
+- **THEN** the "Default folder" button reads "None"
 
-#### Scenario: Selecting a folder persists it to storage
+#### Scenario: Clicking the button navigates to FolderPicker
 
-- **WHEN** the user changes the `<select>` to a folder option
-- **THEN** `setDefaultFolder({ id, name })` is called with that folder's id and name
+- **WHEN** the user clicks the "Default folder" button in Settings
+- **THEN** the popup navigates to the FolderPicker panel view
 
-#### Scenario: Selecting "None (Unsorted)" clears the stored default
+#### Scenario: Returning from FolderPicker reflects the updated selection
 
-- **WHEN** the user changes the `<select>` back to "None (Unsorted)"
-- **THEN** `clearDefaultFolder()` is called
-
-#### Scenario: Dropdown is disabled while folder list is loading
-
-- **WHEN** Settings has mounted but `GET /folders` has not yet resolved
-- **THEN** the `<select>` is disabled and shows only "None (Unsorted)"
-
-#### Scenario: Fetch error leaves dropdown functional with no folder options
-
-- **WHEN** `GET /folders` rejects
-- **THEN** the `<select>` is re-enabled with only "None (Unsorted)" and the previously stored folder preference is unchanged
+- **WHEN** the user selects a folder in FolderPicker and the popup navigates back to Settings
+- **THEN** the "Default folder" button displays the name of the newly selected folder
 
 ### Requirement: Default folder forwarded on single save
 
