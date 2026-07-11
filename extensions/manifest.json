@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bookleaf",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Save images to Bookleaf from any webpage.",
   "permissions": ["storage", "identity", "contextMenus", "activeTab"],
   "icons": {

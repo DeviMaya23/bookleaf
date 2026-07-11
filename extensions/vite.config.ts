@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import webExtension from "vite-plugin-web-extension";
 
-const FIREFOX_UPDATE_URL = "https://bookleaf-files.evimay.me/bookleaf-extension-updates.json";
+const FIREFOX_UPDATE_URL = "https://bookleaf-files.bookverse.fyi/bookleaf-extension-updates.json";
 
 export default defineConfig(({ mode }) => {
   const isFirefox = mode === "firefox" || mode === "firefox-production";

@@ -69,5 +69,5 @@ jobs:
             KINDE_AUDIENCE=https://bookleaf-api
             R2_ACCOUNT_ID=4405668e0fb9df82719d43486c50d587
             R2_BUCKET_NAME=bookleaf-prod
-            R2_PUBLIC_URL=https://cdn.evimay.me
-            CORS_ALLOWED_ORIGINS=https://bookleaf.evimay.me
+            R2_PUBLIC_URL=https://cdn.bookleaf.bookverse.fyi
+            CORS_ALLOWED_ORIGINS=https://bookleaf.bookverse.fyi

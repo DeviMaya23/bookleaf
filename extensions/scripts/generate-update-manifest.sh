@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 GECKO_ID="bookleaf@evimay.me"
-UPDATE_LINK="https://bookleaf-files.evimay.me/bookleaf-extension.xpi"
+UPDATE_LINK="https://bookleaf-files.bookverse.fyi/bookleaf-extension.xpi"
 ARTIFACTS_DIR="web-ext-artifacts"
 
 VERSION=$(node -p "require('./manifest.json').version")
