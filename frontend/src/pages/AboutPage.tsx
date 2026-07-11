@@ -22,8 +22,8 @@ export default function AboutPage() {
       <section className="mb-8">
         <h2 className="mb-2 font-serif text-xl font-semibold">Contact</h2>
         <p className="text-muted-foreground">Email me:</p>
-        <a href="mailto:bookleaf@evimay.me" className="text-primary">
-          bookleaf@evimay.me
+        <a href="mailto:bookleaf@bookverse.fyi" className="text-primary">
+          bookleaf@bookverse.fyi
         </a>
       </section>
     </SimplePageLayout>
