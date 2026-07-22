@@ -1,0 +1,15 @@
+meta {
+  name: Get Folder Contents
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/internal/folders/{{folderId}}/contents
+  body: none
+  auth: none
+}
+
+headers {
+  X-Bookleaf-Internal-Secret: {{internalApiSecret}}
+}

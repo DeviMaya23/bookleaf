@@ -1,0 +1,20 @@
+meta {
+  name: List Public Folders
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/internal/users/{{userId}}/public-folders
+  body: none
+  auth: none
+}
+
+headers {
+  X-Bookleaf-Internal-Secret: {{internalApiSecret}}
+}
+
+vars:pre-request {
+  internalApiSecret: CpJUX46S1or518moj344XuBMc0+U40KggKJUzrSzJHs=
+  userId: kp_dc03fd6b92a445f5ae82d1fb21768b70
+}

@@ -29,6 +29,7 @@ func setRequiredEnvVars(t *testing.T) {
 	t.Setenv("R2_BUCKET_NAME", "bucket-name")
 	t.Setenv("OTEL_EXPORTER", "jaeger")
 	t.Setenv("OTEL_METRICS_EXPORTER", "prometheus")
+	t.Setenv("INTERNAL_API_SECRET", "nyaa")
 }
 
 func TestLoad_AllRequiredVarsSet(t *testing.T) {
@@ -187,10 +188,10 @@ func TestLoad_OTELEnabledWithExportersSet(t *testing.T) {
 
 func TestLoad_SampleRatio(t *testing.T) {
 	tests := []struct {
-		name        string
-		ratioEnv    *string
-		wantRatio   float64
-		wantErr     bool
+		name      string
+		ratioEnv  *string
+		wantRatio float64
+		wantErr   bool
 	}{
 		{"unset defaults to 0.1", nil, 0.1, false},
 		{"explicit value", func() *string { s := "0.5"; return &s }(), 0.5, false},

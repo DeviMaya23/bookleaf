@@ -67,6 +67,7 @@ type Config struct {
 	CORSAllowedOrigins []string
 	AnthropicAPIKey    string
 	AnthropicModel     string
+	InternalAPISecret  string
 }
 
 func Load() (*Config, error) {
@@ -143,6 +144,11 @@ func loadFromEnv() (*Config, error) {
 	}
 
 	corsAllowedOriginsRaw, err := requireEnv("CORS_ALLOWED_ORIGINS")
+	if err != nil {
+		return nil, err
+	}
+
+	internalAPISecret, err := requireEnv("INTERNAL_API_SECRET")
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +249,7 @@ func loadFromEnv() (*Config, error) {
 		},
 		AnthropicAPIKey:    envWithDefault("ANTHROPIC_API_KEY", ""),
 		AnthropicModel:     envWithDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),
+		InternalAPISecret:  internalAPISecret,
 		Port:               port,
 		CORSAllowedOrigins: strings.Split(corsAllowedOriginsRaw, ","),
 	}, nil

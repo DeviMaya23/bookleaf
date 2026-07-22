@@ -28,6 +28,12 @@ type ShareImageRepository interface {
 	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 }
 
+type FolderShareSummary struct {
+	FolderID   uuid.UUID
+	Token      string
+	FolderName string
+}
+
 type SharedImage struct {
 	Title        string
 	ThumbnailURL *string
@@ -235,4 +241,89 @@ func (u *shareUsecase) GetSharedFolder(ctx context.Context, token string) (*Shar
 		Notes:  share.Folder.Description,
 		Images: images,
 	}, nil
+}
+
+func (u *shareUsecase) GetPublicFoldersByUser(ctx context.Context, userID string) ([]FolderShareSummary, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetPublicFoldersByUser")
+	defer span.End()
+
+	shares, err := u.folderShareRepo.ListByUserID(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	summaries := make([]FolderShareSummary, len(shares))
+	for i, s := range shares {
+		summaries[i] = FolderShareSummary{
+			FolderID:   s.FolderID,
+			Token:      s.Token,
+			FolderName: s.FolderName,
+		}
+	}
+	return summaries, nil
+}
+
+func (u *shareUsecase) GetSharedFolderByFolderID(ctx context.Context, folderID uuid.UUID) (*SharedFolder, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetSharedFolderByFolderID")
+	defer span.End()
+
+	share, err := u.folderShareRepo.GetByFolderIDWithFolder(ctx, folderID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	rawImages, err := u.imageRepo.ListByFolder(ctx, share.Folder.UserID, share.FolderID, nil, nil)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("list shared folder images: %w", err)
+	}
+
+	images := make([]SharedImage, len(rawImages))
+	for i, img := range rawImages {
+		fullResURL, err := u.store.GeneratePresignedGetURL(ctx, img.R2Path, presignedGetTTL)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("generate presigned url: %w", err)
+		}
+		filename := img.Title + "." + downloadFileExtension(img.MIMEType)
+		downloadURL, err := u.store.GeneratePresignedDownloadURL(ctx, img.R2Path, filename, presignedGetTTL)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("generate presigned download url: %w", err)
+		}
+		images[i] = SharedImage{
+			Title:        img.Title,
+			ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath),
+			FullResURL:   fullResURL,
+			DownloadURL:  downloadURL,
+			Width:        img.Width,
+			Height:       img.Height,
+		}
+	}
+
+	return &SharedFolder{
+		Name:   share.Folder.Name,
+		Notes:  share.Folder.Description,
+		Images: images,
+	}, nil
+}
+
+func (u *shareUsecase) CheckFolderPublicStatus(ctx context.Context, folderID uuid.UUID) (string, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CheckFolderPublicStatus")
+	defer span.End()
+
+	share, err := u.folderShareRepo.GetByFolderID(ctx, folderID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return "", err
+	}
+	return share.Token, nil
 }
