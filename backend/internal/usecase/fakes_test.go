@@ -123,6 +123,28 @@ func (f *fakeFolderShareRepo) GetByToken(_ context.Context, token string) (*doma
 	return share, nil
 }
 
+func (f *fakeFolderShareRepo) GetByFolderIDWithFolder(_ context.Context, folderID uuid.UUID) (*domain.FolderShare, error) {
+	share, ok := f.byFolderID[folderID]
+	if !ok {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return share, nil
+}
+
+func (f *fakeFolderShareRepo) ListByUserID(_ context.Context, userID string) ([]*FolderShareListItem, error) {
+	var result []*FolderShareListItem
+	for _, share := range f.byFolderID {
+		if share.Folder.UserID == userID {
+			result = append(result, &FolderShareListItem{
+				FolderID:   share.FolderID,
+				Token:      share.Token,
+				FolderName: share.Folder.Name,
+			})
+		}
+	}
+	return result, nil
+}
+
 func (f *fakeFolderShareRepo) DeleteByFolderID(_ context.Context, folderID uuid.UUID) error {
 	if share, ok := f.byFolderID[folderID]; ok {
 		delete(f.byFolderID, folderID)

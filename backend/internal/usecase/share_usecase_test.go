@@ -289,3 +289,99 @@ func TestShareUsecase_GetSharedFolder_EmptyFolder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, result.Images)
 }
+
+// --- GetPublicFoldersByUser ---
+
+func TestShareUsecase_GetPublicFoldersByUser_ReturnsSummaries(t *testing.T) {
+	folderID1 := uuid.New()
+	folderID2 := uuid.New()
+	share1 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID1, Token: "tok_one", Folder: domain.Folder{ID: folderID1, Name: "Travel", UserID: "kp_abc123"}}
+	share2 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID2, Token: "tok_two", Folder: domain.Folder{ID: folderID2, Name: "Family", UserID: "kp_abc123"}}
+	folderShareRepo := newFakeFolderShareRepo(share1, share2)
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	summaries, err := uc.GetPublicFoldersByUser(context.Background(), "kp_abc123")
+
+	require.NoError(t, err)
+	require.Len(t, summaries, 2)
+	byToken := map[string]FolderShareSummary{summaries[0].Token: summaries[0], summaries[1].Token: summaries[1]}
+	assert.Equal(t, "Travel", byToken["tok_one"].FolderName)
+	assert.Equal(t, "Family", byToken["tok_two"].FolderName)
+}
+
+func TestShareUsecase_GetPublicFoldersByUser_EmptySliceWhenNone(t *testing.T) {
+	folderShareRepo := newFakeFolderShareRepo()
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	summaries, err := uc.GetPublicFoldersByUser(context.Background(), "kp_abc123")
+
+	require.NoError(t, err)
+	assert.Empty(t, summaries)
+}
+
+// --- GetSharedFolderByFolderID ---
+
+func TestShareUsecase_GetSharedFolderByFolderID_ReturnsFolderContents(t *testing.T) {
+	folderID := uuid.New()
+	notes := "trip board"
+	thumbnailPath := "users/kp_abc123/thumbs/a.jpg"
+	share := &domain.FolderShare{
+		ID:       uuid.New(),
+		FolderID: folderID,
+		Token:    "tok_abc123",
+		Folder: domain.Folder{
+			ID:          folderID,
+			UserID:      "kp_abc123",
+			Name:        "travel",
+			Description: &notes,
+		},
+	}
+	folderShareRepo := newFakeFolderShareRepo(share)
+	width, height := 800, 600
+	images := []*domain.Image{
+		{ID: uuid.New(), Title: "first", R2Path: "users/kp_abc123/images/a.jpg", ThumbnailPath: &thumbnailPath, MIMEType: "image/jpeg", Width: &width, Height: &height},
+	}
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{images: images}, &spyShareStorage{url: "https://r2.example.com/presigned"})
+
+	result, err := uc.GetSharedFolderByFolderID(context.Background(), folderID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "travel", result.Name)
+	require.NotNil(t, result.Notes)
+	assert.Equal(t, "trip board", *result.Notes)
+	require.Len(t, result.Images, 1)
+	assert.Equal(t, "first", result.Images[0].Title)
+	assert.NotEmpty(t, result.Images[0].FullResURL)
+}
+
+func TestShareUsecase_GetSharedFolderByFolderID_UnsharedFolderReturnsNotFound(t *testing.T) {
+	folderShareRepo := newFakeFolderShareRepo()
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	_, err := uc.GetSharedFolderByFolderID(context.Background(), uuid.New())
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+// --- CheckFolderPublicStatus ---
+
+func TestShareUsecase_CheckFolderPublicStatus_ReturnsToken(t *testing.T) {
+	folderID := uuid.New()
+	share := &domain.FolderShare{ID: uuid.New(), FolderID: folderID, Token: "tok_abc123"}
+	folderShareRepo := newFakeFolderShareRepo(share)
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	token, err := uc.CheckFolderPublicStatus(context.Background(), folderID)
+
+	require.NoError(t, err)
+	assert.Equal(t, "tok_abc123", token)
+}
+
+func TestShareUsecase_CheckFolderPublicStatus_PrivateFolderReturnsNotFound(t *testing.T) {
+	folderShareRepo := newFakeFolderShareRepo()
+	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
+
+	_, err := uc.CheckFolderPublicStatus(context.Background(), uuid.New())
+
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}

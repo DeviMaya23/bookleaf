@@ -1,0 +1,15 @@
+meta {
+  name: Check Folder Status
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/internal/folders/{{folderId}}/status
+  body: none
+  auth: none
+}
+
+headers {
+  X-Bookleaf-Internal-Secret: {{internalApiSecret}}
+}

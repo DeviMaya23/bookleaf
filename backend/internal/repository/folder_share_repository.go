@@ -38,6 +38,18 @@ func (r *folderShareRepository) GetByFolderID(ctx context.Context, folderID uuid
 	return &share, nil
 }
 
+func (r *folderShareRepository) GetByFolderIDWithFolder(ctx context.Context, folderID uuid.UUID) (*domain.FolderShare, error) {
+	var share domain.FolderShare
+	if err := r.db.WithContext(ctx).
+		Preload("Folder").
+		Where("folder_id = ?", folderID).
+		First(&share).Error; err != nil {
+		return nil, fmt.Errorf("select folder share with folder by folder id: %w", err)
+	}
+
+	return &share, nil
+}
+
 func (r *folderShareRepository) GetByToken(ctx context.Context, token string) (*domain.FolderShare, error) {
 	var share domain.FolderShare
 	if err := r.db.WithContext(ctx).
@@ -58,6 +70,20 @@ func (r *folderShareRepository) DeleteByFolderID(ctx context.Context, folderID u
 	}
 
 	return nil
+}
+
+func (r *folderShareRepository) ListByUserID(ctx context.Context, userID string) ([]*usecase.FolderShareListItem, error) {
+	var items []*usecase.FolderShareListItem
+	if err := r.db.WithContext(ctx).
+		Table("folder_shares").
+		Select("folder_shares.folder_id, folder_shares.token, folders.name AS folder_name").
+		Joins("JOIN folders ON folders.id = folder_shares.folder_id").
+		Where("folders.user_id = ?", userID).
+		Scan(&items).Error; err != nil {
+		return nil, fmt.Errorf("list folder shares by user id: %w", err)
+	}
+
+	return items, nil
 }
 
 var _ usecase.FolderShareRepository = (*folderShareRepository)(nil)
