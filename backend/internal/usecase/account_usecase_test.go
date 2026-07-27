@@ -47,8 +47,22 @@ func (f *fakeKindeClient) DeleteUser(_ context.Context, userID string) error {
 	return f.err
 }
 
-func newTestAccountUsecase(accountRepo AccountRepository, userRepo UserRepository, kinde KindeClient, enqueuer JobEnqueuer) *accountUsecase {
-	return NewAccountUsecase(accountRepo, userRepo, kinde, enqueuer, noopTel())
+type fakeBookletClient struct {
+	err               error
+	lastDeletedUserID string
+}
+
+func (f *fakeBookletClient) DeleteUser(_ context.Context, userID string) error {
+	f.lastDeletedUserID = userID
+	return f.err
+}
+
+func newTestAccountUsecase(accountRepo AccountRepository, userRepo UserRepository, kinde KindeClient, enqueuer JobEnqueuer, bookletClient ...BookletClient) *accountUsecase {
+	var bc BookletClient
+	if len(bookletClient) > 0 {
+		bc = bookletClient[0]
+	}
+	return NewAccountUsecase(accountRepo, userRepo, kinde, enqueuer, noopTel(), bc)
 }
 
 // --- DeleteAccount ---
@@ -149,6 +163,132 @@ func TestAccountUsecase_ProcessAccountKindeDeletion_KindeErrorLeavesUserRow(t *t
 	require.ErrorContains(t, err, "kinde unavailable")
 	_, stillExists := userRepo.users[userID]
 	assert.True(t, stillExists, "user row must not be deleted when kinde deletion fails")
+}
+
+// --- DeleteAccount (Booklet integration) ---
+
+func TestAccountUsecase_DeleteAccount_EnqueuesBookletJobWhenClientConfigured(t *testing.T) {
+	userID := "kp_abc123"
+	userRepo := newFakeUserRepo()
+	userRepo.users[userID] = &domain.User{ID: userID}
+	accountRepo := &fakeAccountRepository{
+		images:         &mockImageRepository{},
+		folders:        &stubFolderRepo{},
+		tags:           &mockTagRepository{},
+		pendingUploads: &mockPendingUploadRepository{},
+		users:          userRepo,
+	}
+	enqueuer := &mockJobEnqueuer{}
+	bookletClient := &fakeBookletClient{}
+
+	uc := newTestAccountUsecase(accountRepo, userRepo, &fakeKindeClient{}, enqueuer, bookletClient)
+	err := uc.DeleteAccount(context.Background(), userID)
+
+	require.NoError(t, err)
+	var found bool
+	for _, args := range enqueuer.insertArgs {
+		if a, ok := args.(BookletUserDeletionArgs); ok && a.UserID == userID {
+			found = true
+		}
+	}
+	assert.True(t, found, "BookletUserDeletionArgs must be enqueued")
+}
+
+func TestAccountUsecase_DeleteAccount_SkipsBookletJobWhenClientNil(t *testing.T) {
+	userID := "kp_abc123"
+	userRepo := newFakeUserRepo()
+	userRepo.users[userID] = &domain.User{ID: userID}
+	accountRepo := &fakeAccountRepository{
+		images:         &mockImageRepository{},
+		folders:        &stubFolderRepo{},
+		tags:           &mockTagRepository{},
+		pendingUploads: &mockPendingUploadRepository{},
+		users:          userRepo,
+	}
+	enqueuer := &mockJobEnqueuer{}
+
+	uc := newTestAccountUsecase(accountRepo, userRepo, &fakeKindeClient{}, enqueuer)
+	err := uc.DeleteAccount(context.Background(), userID)
+
+	require.NoError(t, err)
+	for _, args := range enqueuer.insertArgs {
+		_, isBooklet := args.(BookletUserDeletionArgs)
+		assert.False(t, isBooklet, "no BookletUserDeletionArgs must be enqueued when client is nil")
+	}
+}
+
+// --- ProcessBookletUserDeletion ---
+
+func TestAccountUsecase_ProcessBookletUserDeletion_SuccessReturnsNil(t *testing.T) {
+	userID := "kp_abc123"
+	bookletClient := &fakeBookletClient{}
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockJobEnqueuer{}, bookletClient)
+
+	err := uc.ProcessBookletUserDeletion(context.Background(), userID)
+
+	require.NoError(t, err)
+	assert.Equal(t, userID, bookletClient.lastDeletedUserID)
+}
+
+func TestAccountUsecase_ProcessBookletUserDeletion_ClientErrorPropagates(t *testing.T) {
+	bookletClient := &fakeBookletClient{err: errors.New("booklet unavailable")}
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockJobEnqueuer{}, bookletClient)
+
+	err := uc.ProcessBookletUserDeletion(context.Background(), "kp_abc123")
+
+	require.ErrorContains(t, err, "booklet unavailable")
+}
+
+// --- ScheduleAccountDeletion ---
+
+func TestAccountUsecase_ScheduleAccountDeletion_EnqueuesJobForActiveUser(t *testing.T) {
+	userID := "kp_abc123"
+	userRepo := newFakeUserRepo()
+	userRepo.users[userID] = &domain.User{ID: userID, PendingKindeDeletion: false}
+	enqueuer := &mockJobEnqueuer{}
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, enqueuer)
+
+	err := uc.ScheduleAccountDeletion(context.Background(), userID)
+
+	require.NoError(t, err)
+	var found bool
+	for _, args := range enqueuer.insertArgs {
+		if a, ok := args.(DeleteAccountArgs); ok && a.UserID == userID {
+			found = true
+		}
+	}
+	assert.True(t, found, "DeleteAccountArgs must be enqueued for active user")
+}
+
+func TestAccountUsecase_ScheduleAccountDeletion_SkipsEnqueueForPendingUser(t *testing.T) {
+	userID := "kp_abc123"
+	userRepo := newFakeUserRepo()
+	userRepo.users[userID] = &domain.User{ID: userID, PendingKindeDeletion: true}
+	enqueuer := &mockJobEnqueuer{}
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, enqueuer)
+
+	err := uc.ScheduleAccountDeletion(context.Background(), userID)
+
+	require.NoError(t, err)
+	assert.Empty(t, enqueuer.insertArgs)
+}
+
+func TestAccountUsecase_ScheduleAccountDeletion_EnqueuesKindeDeletionForUnprovisionedUser(t *testing.T) {
+	userID := "kp_unknown"
+	userRepo := newFakeUserRepo()
+	enqueuer := &mockJobEnqueuer{}
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, enqueuer)
+
+	err := uc.ScheduleAccountDeletion(context.Background(), userID)
+
+	require.NoError(t, err)
+	var found bool
+	for _, args := range enqueuer.insertArgs {
+		if a, ok := args.(AccountKindeDeletionArgs); ok && a.UserID == userID {
+			found = true
+		}
+	}
+	assert.True(t, found, "AccountKindeDeletionArgs must be enqueued for unprovisioned user")
 }
 
 // --- ReconcilePendingKindeDeletions ---

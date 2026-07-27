@@ -13,6 +13,7 @@ import (
 	anthropicOption "github.com/anthropics/anthropic-sdk-go/option"
 
 	"github.com/devi/bookleaf/internal/agent"
+	"github.com/devi/bookleaf/internal/booklet"
 	httphandler "github.com/devi/bookleaf/internal/handler"
 	"github.com/devi/bookleaf/internal/sse"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
@@ -240,7 +241,13 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 
 	accountRepository := repository.NewAccountRepository(db)
 	kindeClient := kinde.NewClient(cfg.Kinde)
-	accountUsecase := usecase.NewAccountUsecase(accountRepository, userRepository, kindeClient, enqueuer, tel)
+
+	var bookletClient usecase.BookletClient
+	if cfg.Booklet.BaseURL != "" {
+		bookletClient = booklet.NewClient(cfg.Booklet.BaseURL, cfg.Booklet.InternalSecret)
+	}
+
+	accountUsecase := usecase.NewAccountUsecase(accountRepository, userRepository, kindeClient, enqueuer, tel, bookletClient)
 
 	broadcaster := sse.NewEventBroadcaster()
 
@@ -251,6 +258,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewR2DeleteWorker(trashUsecase))
 	river.AddWorker(workers, worker.NewAccountKindeDeletionWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewBookletUserDeletionWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewDeleteAccountWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
 	categorisationLogRepo := repository.NewCategorisationLogRepository(db)
@@ -319,7 +328,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
 	shareHandler := httphandler.NewShareHandler(shareUsecase, folderUsecase, tel)
-	internalHandler := httphandler.NewInternalHandler(shareUsecase, tel)
+	internalHandler := httphandler.NewInternalHandler(shareUsecase, accountUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
@@ -332,6 +341,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	internalGroup.GET("/users/:user_id/public-folders", internalHandler.ListPublicFolders)
 	internalGroup.GET("/folders/:folder_id/contents", internalHandler.GetFolderContents)
 	internalGroup.GET("/folders/:folder_id/status", internalHandler.CheckFolderStatus)
+	internalGroup.DELETE("/accounts/:id", internalHandler.DeleteAccount)
 
 	protected := e.Group("")
 	protected.Use(authmiddleware.NewMaintenanceMiddleware(cfg.Maintenance))

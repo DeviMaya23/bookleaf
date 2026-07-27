@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -37,6 +38,9 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, usecase.ErrUserNotFound
+		}
 		return nil, fmt.Errorf("select user: %w", err)
 	}
 

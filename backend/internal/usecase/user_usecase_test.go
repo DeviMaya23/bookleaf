@@ -26,7 +26,7 @@ func newFakeUserRepo() *fakeUserRepo {
 func (f *fakeUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
 	user, ok := f.users[id]
 	if !ok {
-		return nil, errors.New("record not found")
+		return nil, ErrUserNotFound
 	}
 	return user, nil
 }

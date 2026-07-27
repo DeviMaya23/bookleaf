@@ -1,0 +1,15 @@
+meta {
+  name: Delete Account
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/internal/accounts/{{userId}}
+  body: none
+  auth: none
+}
+
+headers {
+  X-Bookleaf-Internal-Secret: {{internalApiSecret}}
+}

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/devi/bookleaf/internal/platform/observability"
@@ -9,12 +10,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type BookletClient interface {
+	DeleteUser(ctx context.Context, userID string) error
+}
+
 type accountUsecase struct {
-	accountRepo AccountRepository
-	userRepo    UserRepository
-	kinde       KindeClient
-	enqueuer    JobEnqueuer
-	tel         *observability.Telemetry
+	accountRepo   AccountRepository
+	userRepo      UserRepository
+	kinde         KindeClient
+	enqueuer      JobEnqueuer
+	tel           *observability.Telemetry
+	bookletClient BookletClient
 }
 
 func NewAccountUsecase(
@@ -23,13 +29,15 @@ func NewAccountUsecase(
 	kinde KindeClient,
 	enqueuer JobEnqueuer,
 	tel *observability.Telemetry,
+	bookletClient BookletClient,
 ) *accountUsecase {
 	return &accountUsecase{
-		accountRepo: accountRepo,
-		userRepo:    userRepo,
-		kinde:       kinde,
-		enqueuer:    enqueuer,
-		tel:         tel,
+		accountRepo:   accountRepo,
+		userRepo:      userRepo,
+		kinde:         kinde,
+		enqueuer:      enqueuer,
+		tel:           tel,
+		bookletClient: bookletClient,
 	}
 }
 
@@ -107,6 +115,22 @@ func (u *accountUsecase) DeleteAccount(ctx context.Context, userID string) error
 		)
 	}
 
+	if u.bookletClient != nil {
+		if err := u.enqueuer.Insert(ctx, BookletUserDeletionArgs{UserID: userID}); err != nil {
+			span.RecordError(err)
+			logger.Warn("failed to enqueue booklet user deletion job",
+				zap.String("event", "account.booklet_deletion.enqueue_failed"),
+				zap.String("user_id", userID),
+				zap.Error(err),
+			)
+		} else {
+			logger.Info("enqueued booklet user deletion job",
+				zap.String("event", "account.booklet_deletion.enqueued"),
+				zap.String("user_id", userID),
+			)
+		}
+	}
+
 	logger.Info("account data wiped",
 		zap.String("event", "account.wiped"),
 		zap.String("user_id", userID),
@@ -136,6 +160,68 @@ func (u *accountUsecase) ProcessAccountKindeDeletion(ctx context.Context, userID
 		zap.String("user_id", userID),
 	)
 
+	return nil
+}
+
+func (u *accountUsecase) ProcessBookletUserDeletion(ctx context.Context, userID string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ProcessBookletUserDeletion")
+	defer span.End()
+
+	if err := u.bookletClient.DeleteUser(ctx, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete booklet user: %w", err)
+	}
+
+	observability.LoggerFromContext(ctx, u.tel.Logger).Info("booklet account deleted",
+		zap.String("event", "account.booklet_account_deleted"),
+		zap.String("user_id", userID),
+	)
+
+	return nil
+}
+
+func (u *accountUsecase) ScheduleAccountDeletion(ctx context.Context, userID string) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ScheduleAccountDeletion")
+	defer span.End()
+
+	user, err := u.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if !errors.Is(err, ErrUserNotFound) {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("look up user for account deletion: %w", err)
+		}
+		// User does not exist in Bookleaf — schedule Kinde-only deletion.
+		observability.LoggerFromContext(ctx, u.tel.Logger).Info("scheduling kinde-only deletion for unprovisioned user",
+			zap.String("event", "account.schedule_deletion.unprovisioned"),
+			zap.String("user_id", userID),
+		)
+		if err := u.enqueuer.Insert(ctx, AccountKindeDeletionArgs{UserID: userID}); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("enqueue kinde deletion for unprovisioned user: %w", err)
+		}
+		return nil
+	}
+
+	if user.PendingKindeDeletion {
+		observability.LoggerFromContext(ctx, u.tel.Logger).Info("skipping deletion — account already pending kinde deletion",
+			zap.String("event", "account.schedule_deletion.already_pending"),
+			zap.String("user_id", userID),
+		)
+		return nil
+	}
+
+	if err := u.enqueuer.Insert(ctx, DeleteAccountArgs{UserID: userID}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("enqueue delete account: %w", err)
+	}
+	observability.LoggerFromContext(ctx, u.tel.Logger).Info("enqueued delete account job",
+		zap.String("event", "account.schedule_deletion.enqueued"),
+		zap.String("user_id", userID),
+	)
 	return nil
 }
 

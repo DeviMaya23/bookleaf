@@ -32,3 +32,17 @@ type CategoriseImageArgs struct {
 
 func (CategoriseImageArgs) Kind() string     { return "categorise_image" }
 func (CategoriseImageArgs) MaxAttempts() int { return 3 }
+
+type BookletUserDeletionArgs struct {
+	UserID string `json:"user_id"`
+}
+
+func (BookletUserDeletionArgs) Kind() string     { return "booklet_user_deletion" }
+func (BookletUserDeletionArgs) MaxAttempts() int { return 10 }
+
+type DeleteAccountArgs struct {
+	UserID string `json:"user_id"`
+}
+
+func (DeleteAccountArgs) Kind() string     { return "delete_account" }
+func (DeleteAccountArgs) MaxAttempts() int { return 5 }

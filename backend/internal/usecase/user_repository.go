@@ -2,9 +2,13 @@ package usecase
 
 import (
 	"context"
+	"errors"
 
 	"github.com/devi/bookleaf/internal/domain"
 )
+
+// ErrUserNotFound is returned by UserRepository.GetByID when the user does not exist.
+var ErrUserNotFound = errors.New("user not found")
 
 type UserRepository interface {
 	GetOrCreate(ctx context.Context, id string) (*domain.User, error)
