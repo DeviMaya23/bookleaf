@@ -1,0 +1,15 @@
+meta {
+  name: Get User Sessions
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{kindeIssuerURL}}/api/v1/users/{{kindeUserID}}/sessions
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{kindeM2MToken}}
+}

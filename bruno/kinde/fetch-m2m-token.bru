@@ -1,0 +1,18 @@
+meta {
+  name: Fetch M2M Token
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{kindeM2MTokenURL}}
+  body: form-urlencoded
+  auth: none
+}
+
+body:form-urlencoded {
+  grant_type: client_credentials
+  client_id: {{kindeM2MClientID}}
+  client_secret: {{kindeM2MClientSecret}}
+  audience: {{kindeManagementAudience}}
+}

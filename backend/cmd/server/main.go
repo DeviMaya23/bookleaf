@@ -15,12 +15,12 @@ import (
 	"github.com/devi/bookleaf/internal/agent"
 	"github.com/devi/bookleaf/internal/booklet"
 	httphandler "github.com/devi/bookleaf/internal/handler"
-	"github.com/devi/bookleaf/internal/sse"
 	authmiddleware "github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/kinde"
 	"github.com/devi/bookleaf/internal/platform/config"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/repository"
+	"github.com/devi/bookleaf/internal/sse"
 	"github.com/devi/bookleaf/internal/storage"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/devi/bookleaf/internal/vision"
@@ -31,6 +31,7 @@ import (
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -49,6 +50,21 @@ func (e *riverEnqueuer) Insert(ctx context.Context, args usecase.JobArgs) error 
 		return fmt.Errorf("unsupported job args type %T", args)
 	}
 	_, err := e.client.Insert(ctx, riverArgs, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
+	return err
+}
+
+func (e *riverEnqueuer) InsertUnique(ctx context.Context, args usecase.JobArgs) error {
+	riverArgs, ok := args.(river.JobArgs)
+	if !ok {
+		return fmt.Errorf("unsupported job args type %T", args)
+	}
+	_, err := e.client.Insert(ctx, riverArgs, &river.InsertOpts{
+		MaxAttempts: args.MaxAttempts(),
+		UniqueOpts: river.UniqueOpts{
+			ByArgs:  true,
+			ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateScheduled, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateDiscarded},
+		},
+	})
 	return err
 }
 
@@ -256,10 +272,10 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	river.AddWorker(workers, worker.NewCleanupStaleUploadsWorker(uploadUsecase))
 	river.AddWorker(workers, worker.NewTrashPurgeWorker(trashUsecase))
 	river.AddWorker(workers, worker.NewR2DeleteWorker(trashUsecase))
-	river.AddWorker(workers, worker.NewAccountKindeDeletionWorker(accountUsecase))
-	river.AddWorker(workers, worker.NewAccountKindeDeletionReconcileWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewAccountWipeWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewAccountWipeReconcileWorker(accountUsecase))
+	river.AddWorker(workers, worker.NewPurgedAccountSweepWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBookletUserDeletionWorker(accountUsecase))
-	river.AddWorker(workers, worker.NewDeleteAccountWorker(accountUsecase))
 	river.AddWorker(workers, worker.NewBackfillPhashWorker(uploadUsecase))
 
 	categorisationLogRepo := repository.NewCategorisationLogRepository(db)
@@ -295,8 +311,13 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 				nil,
 			),
 			river.NewPeriodicJob(
+				river.PeriodicInterval(5*time.Minute),
+				func() (river.JobArgs, *river.InsertOpts) { return worker.AccountWipeReconcileArgs{}, nil },
+				nil,
+			),
+			river.NewPeriodicJob(
 				river.PeriodicInterval(24*time.Hour),
-				func() (river.JobArgs, *river.InsertOpts) { return worker.AccountKindeDeletionReconcileArgs{}, nil },
+				func() (river.JobArgs, *river.InsertOpts) { return worker.PurgedAccountSweepArgs{}, nil },
 				nil,
 			),
 			river.NewPeriodicJob(

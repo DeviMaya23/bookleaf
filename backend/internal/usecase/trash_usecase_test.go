@@ -74,12 +74,18 @@ func (m *mockTrashRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.
 }
 
 type mockJobEnqueuer struct {
-	err        error
-	insertArgs []JobArgs
+	err              error
+	insertArgs       []JobArgs
+	insertUniqueArgs []JobArgs
 }
 
 func (m *mockJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
 	m.insertArgs = append(m.insertArgs, args)
+	return m.err
+}
+
+func (m *mockJobEnqueuer) InsertUnique(_ context.Context, args JobArgs) error {
+	m.insertUniqueArgs = append(m.insertUniqueArgs, args)
 	return m.err
 }
 

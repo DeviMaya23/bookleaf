@@ -20,7 +20,7 @@ type InternalShareUsecase interface {
 }
 
 type InternalAccountUsecase interface {
-	ScheduleAccountDeletion(ctx context.Context, userID string) error
+	MarkForDeletion(ctx context.Context, userID string) error
 }
 
 type InternalHandler struct {
@@ -137,7 +137,7 @@ func (h *InternalHandler) DeleteAccount(c echo.Context) error {
 
 	userID := c.Param("id")
 
-	if err := h.accountUsecase.ScheduleAccountDeletion(ctx, userID); err != nil {
+	if err := h.accountUsecase.MarkForDeletion(ctx, userID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to schedule account deletion")

@@ -76,25 +76,48 @@ func (w *TrashPurgeWorker) Work(ctx context.Context, job *river.Job[TrashPurgeAr
 	return w.usecase.PurgeExpiredTrash(ctx, 30*24*time.Hour)
 }
 
-// AccountKindeDeletionReconcile periodic job
+// AccountWipeReconcile periodic job
 
-type accountKindeDeletionReconcileUsecase interface {
-	ReconcilePendingKindeDeletions(ctx context.Context) error
+type accountWipeReconcileUsecase interface {
+	ReconcilePendingDeletions(ctx context.Context) error
 }
 
-type AccountKindeDeletionReconcileArgs struct{}
+type AccountWipeReconcileArgs struct{}
 
-func (AccountKindeDeletionReconcileArgs) Kind() string { return "account_kinde_deletion_reconcile" }
+func (AccountWipeReconcileArgs) Kind() string { return "account_wipe_reconcile" }
 
-type AccountKindeDeletionReconcileWorker struct {
-	river.WorkerDefaults[AccountKindeDeletionReconcileArgs]
-	usecase accountKindeDeletionReconcileUsecase
+type AccountWipeReconcileWorker struct {
+	river.WorkerDefaults[AccountWipeReconcileArgs]
+	usecase accountWipeReconcileUsecase
 }
 
-func NewAccountKindeDeletionReconcileWorker(uc accountKindeDeletionReconcileUsecase) *AccountKindeDeletionReconcileWorker {
-	return &AccountKindeDeletionReconcileWorker{usecase: uc}
+func NewAccountWipeReconcileWorker(uc accountWipeReconcileUsecase) *AccountWipeReconcileWorker {
+	return &AccountWipeReconcileWorker{usecase: uc}
 }
 
-func (w *AccountKindeDeletionReconcileWorker) Work(ctx context.Context, _ *river.Job[AccountKindeDeletionReconcileArgs]) error {
-	return w.usecase.ReconcilePendingKindeDeletions(ctx)
+func (w *AccountWipeReconcileWorker) Work(ctx context.Context, _ *river.Job[AccountWipeReconcileArgs]) error {
+	return w.usecase.ReconcilePendingDeletions(ctx)
+}
+
+// PurgedAccountSweep periodic job
+
+type purgedAccountSweepUsecase interface {
+	SweepPurgedAccounts(ctx context.Context) error
+}
+
+type PurgedAccountSweepArgs struct{}
+
+func (PurgedAccountSweepArgs) Kind() string { return "purged_account_sweep" }
+
+type PurgedAccountSweepWorker struct {
+	river.WorkerDefaults[PurgedAccountSweepArgs]
+	usecase purgedAccountSweepUsecase
+}
+
+func NewPurgedAccountSweepWorker(uc purgedAccountSweepUsecase) *PurgedAccountSweepWorker {
+	return &PurgedAccountSweepWorker{usecase: uc}
+}
+
+func (w *PurgedAccountSweepWorker) Work(ctx context.Context, _ *river.Job[PurgedAccountSweepArgs]) error {
+	return w.usecase.SweepPurgedAccounts(ctx)
 }

@@ -21,7 +21,7 @@ type spyInternalAccountUsecase struct {
 	err              error
 }
 
-func (s *spyInternalAccountUsecase) ScheduleAccountDeletion(_ context.Context, userID string) error {
+func (s *spyInternalAccountUsecase) MarkForDeletion(_ context.Context, userID string) error {
 	s.calledWithUserID = userID
 	return s.err
 }
@@ -209,7 +209,7 @@ func TestInternalHandler_CheckFolderStatus_InvalidUUID(t *testing.T) {
 
 // --- DeleteAccount ---
 
-func TestInternalHandler_DeleteAccount_ReturnsAcceptedAndEnqueuesForActiveUser(t *testing.T) {
+func TestInternalHandler_DeleteAccount_CallsMarkForDeletionAndReturns202(t *testing.T) {
 	userID := "kp_abc123"
 	accountSpy := &spyInternalAccountUsecase{}
 	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
@@ -225,8 +225,23 @@ func TestInternalHandler_DeleteAccount_ReturnsAcceptedAndEnqueuesForActiveUser(t
 	assert.Equal(t, userID, accountSpy.calledWithUserID)
 }
 
-func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPendingUser(t *testing.T) {
+func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPendingDeletionUser(t *testing.T) {
 	userID := "kp_pending"
+	accountSpy := &spyInternalAccountUsecase{}
+	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")
+	c.SetPath("/internal/accounts/:id")
+	c.SetParamNames("id")
+	c.SetParamValues(userID)
+
+	err := h.DeleteAccount(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+}
+
+func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPurgedUser(t *testing.T) {
+	userID := "kp_purged"
 	accountSpy := &spyInternalAccountUsecase{}
 	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")

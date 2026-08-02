@@ -47,9 +47,34 @@ func NewClient(cfg config.KindeConfig) *Client {
 	}
 }
 
-// DeleteUser permanently deletes the given user (and their profile) from Kinde.
-// A response indicating the user no longer exists is treated as success, so this
-// method is safe to call again for an already-deleted user.
+func (c *Client) DeleteUserSessions(ctx context.Context, kindeUserID string) error {
+	token, err := c.getToken(ctx)
+	if err != nil {
+		return fmt.Errorf("get m2m token: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("%s/users/%s/sessions", c.apiBaseURL, url.PathEscape(kindeUserID))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("build delete user sessions request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete user sessions: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest {
+		return nil
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("delete user sessions: unexpected status %d: %s", resp.StatusCode, string(body))
+}
+
 func (c *Client) DeleteUser(ctx context.Context, kindeUserID string) error {
 	token, err := c.getToken(ctx)
 	if err != nil {
@@ -70,39 +95,14 @@ func (c *Client) DeleteUser(ctx context.Context, kindeUserID string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
+	// Currently, assume 400 bad request for user ID that doesn't exist
+	// Consider 400 a success
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusBadRequest {
 		return nil
 	}
 
 	body, _ := io.ReadAll(resp.Body)
-	if isUserNotFoundError(body) {
-		return nil
-	}
-
 	return fmt.Errorf("delete kinde user: unexpected status %d: %s", resp.StatusCode, string(body))
-}
-
-// kindeErrorResponse is the shape of Kinde Management API error responses:
-// {"errors":[{"code":"...","message":"..."}]}
-type kindeErrorResponse struct {
-	Errors []struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-func isUserNotFoundError(body []byte) bool {
-	var parsed kindeErrorResponse
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return false
-	}
-	for _, e := range parsed.Errors {
-		if strings.Contains(strings.ToUpper(e.Code), "NOT_FOUND") ||
-			strings.Contains(strings.ToUpper(e.Message), "NOT FOUND") {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *Client) getToken(ctx context.Context) (string, error) {

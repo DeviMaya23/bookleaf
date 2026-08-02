@@ -1,7 +1,5 @@
-## Purpose
-Allow an authenticated user to permanently delete their account, including all owned app data, associated R2 objects, and their Kinde identity.
+## MODIFIED Requirements
 
-## Requirements
 ### Requirement: DELETE /me Endpoint
 
 The system SHALL expose a protected `DELETE /me` endpoint that permanently deletes the authenticated user's account: all owned app data, associated R2 objects, and their Kinde identity. The endpoint SHALL require a valid JWT.
@@ -101,3 +99,22 @@ The auth middleware SHALL reject requests from users whose `account_state` is no
 - **THEN** the response is `401 Unauthorized`
 - **AND** the request does not reach the handler
 
+## REMOVED Requirements
+
+### Requirement: Account Kinde Deletion Job
+
+**Reason**: Replaced by `AccountWipeJob` (defined in `account-tombstone`), which combines DB wipe and Kinde deletion into a single idempotent job. The separate `AccountKindeDeletionArgs` job no longer exists.
+
+**Migration**: Any `account_kinde_deletion` jobs remaining in River's queue at deploy time should be drained or cancelled before the new code is deployed.
+
+### Requirement: Reconciliation Sweep for Stuck Tombstones
+
+**Reason**: Replaced by `AccountWipeReconcileWorker` (defined in `account-tombstone`), which queries `account_state = 'pending_deletion'` and enqueues `AccountWipeArgs` — covering both the crash-recovery case and the case where the initial enqueue was lost.
+
+**Migration**: No data migration needed; the new reconcile worker reads from the same `users` table using the new `account_state` column.
+
+### Requirement: Booklet Notification Enqueued After Wipe
+
+**Reason**: Moved into `AccountWipeJob` as step 6 (enqueue `BookletUserDeletionArgs` if `bookletClient` is configured). The requirement is now part of the `AccountWipeJob` spec in `account-tombstone`.
+
+**Migration**: No change to `BookletUserDeletionArgs` itself; only the point of enqueue changes.

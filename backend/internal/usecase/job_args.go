@@ -18,13 +18,6 @@ type R2DeleteArgs struct {
 func (R2DeleteArgs) Kind() string     { return "r2_delete" }
 func (R2DeleteArgs) MaxAttempts() int { return 5 }
 
-type AccountKindeDeletionArgs struct {
-	UserID string `json:"user_id"`
-}
-
-func (AccountKindeDeletionArgs) Kind() string     { return "account_kinde_deletion" }
-func (AccountKindeDeletionArgs) MaxAttempts() int { return 5 }
-
 type CategoriseImageArgs struct {
 	ImageID uuid.UUID `json:"image_id"`
 	UserID  string    `json:"user_id"`
@@ -40,9 +33,19 @@ type BookletUserDeletionArgs struct {
 func (BookletUserDeletionArgs) Kind() string     { return "booklet_user_deletion" }
 func (BookletUserDeletionArgs) MaxAttempts() int { return 10 }
 
-type DeleteAccountArgs struct {
+type AccountWipeArgs struct {
 	UserID string `json:"user_id"`
 }
 
-func (DeleteAccountArgs) Kind() string     { return "delete_account" }
-func (DeleteAccountArgs) MaxAttempts() int { return 5 }
+func (AccountWipeArgs) Kind() string     { return "account_wipe" }
+func (AccountWipeArgs) MaxAttempts() int { return 5 }
+
+type AccountWipeReconcileArgs struct{}
+
+func (AccountWipeReconcileArgs) Kind() string     { return "account_wipe_reconcile" }
+func (AccountWipeReconcileArgs) MaxAttempts() int { return 3 }
+
+type PurgedAccountSweepArgs struct{}
+
+func (PurgedAccountSweepArgs) Kind() string     { return "purged_account_sweep" }
+func (PurgedAccountSweepArgs) MaxAttempts() int { return 3 }

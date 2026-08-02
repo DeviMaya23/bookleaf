@@ -1,0 +1,15 @@
+meta {
+  name: Delete User Sessions
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{kindeIssuerURL}}/api/v1/users/{{kindeUserID}}/refresh_claims
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{kindeM2MToken}}
+}
