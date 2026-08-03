@@ -19,7 +19,7 @@ type UserUsecase interface {
 }
 
 type AccountUsecase interface {
-	DeleteAccount(ctx context.Context, userID string) error
+	MarkForDeletion(ctx context.Context, userID string) error
 }
 
 type CategorisationCountUsecase interface {
@@ -156,11 +156,11 @@ func (h *MeHandler) DeleteMe(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
-	if err := h.accountUsecase.DeleteAccount(ctx, userID); err != nil {
+	if err := h.accountUsecase.MarkForDeletion(ctx, userID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to delete account")
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to schedule account deletion")
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	return c.NoContent(http.StatusAccepted)
 }

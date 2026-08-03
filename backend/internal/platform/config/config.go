@@ -56,6 +56,11 @@ type MaintenanceConfig struct {
 	BypassToken string
 }
 
+type BookletConfig struct {
+	BaseURL        string
+	InternalSecret string
+}
+
 type Config struct {
 	Kinde              KindeConfig
 	DB                 DBConfig
@@ -63,6 +68,7 @@ type Config struct {
 	Obs                ObsConfig
 	Vision             VisionConfig
 	Maintenance        MaintenanceConfig
+	Booklet            BookletConfig
 	Port               string
 	CORSAllowedOrigins []string
 	AnthropicAPIKey    string
@@ -246,6 +252,10 @@ func loadFromEnv() (*Config, error) {
 		Maintenance: MaintenanceConfig{
 			Enabled:     maintenanceEnabled,
 			BypassToken: maintenanceBypassToken,
+		},
+		Booklet: BookletConfig{
+			BaseURL:        envWithDefault("BOOKLET_BASE_URL", ""),
+			InternalSecret: envWithDefault("BOOKLET_INTERNAL_SECRET", ""),
 		},
 		AnthropicAPIKey:    envWithDefault("ANTHROPIC_API_KEY", ""),
 		AnthropicModel:     envWithDefault("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001"),

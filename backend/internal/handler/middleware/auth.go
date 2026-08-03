@@ -118,11 +118,11 @@ func (m *authMiddleware) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to provision user")
 		}
 
-		if user.PendingKindeDeletion {
+		if user.AccountState != domain.AccountStateActive {
 			observability.LoggerFromContext(c.Request().Context(), m.logger).Warn(
 				"auth token rejected",
 				zap.String("event", "auth.token_rejected"),
-				zap.String("reason", "pending_kinde_deletion"),
+				zap.String("reason", "account_not_active"),
 			)
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 		}

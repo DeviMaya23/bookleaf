@@ -19,15 +19,21 @@ type InternalShareUsecase interface {
 	CheckFolderPublicStatus(ctx context.Context, folderID uuid.UUID) (string, error)
 }
 
-type InternalHandler struct {
-	shareUsecase InternalShareUsecase
-	tel          *observability.Telemetry
+type InternalAccountUsecase interface {
+	MarkForDeletion(ctx context.Context, userID string) error
 }
 
-func NewInternalHandler(shareUsecase InternalShareUsecase, tel *observability.Telemetry) *InternalHandler {
+type InternalHandler struct {
+	shareUsecase   InternalShareUsecase
+	accountUsecase InternalAccountUsecase
+	tel            *observability.Telemetry
+}
+
+func NewInternalHandler(shareUsecase InternalShareUsecase, accountUsecase InternalAccountUsecase, tel *observability.Telemetry) *InternalHandler {
 	return &InternalHandler{
-		shareUsecase: shareUsecase,
-		tel:          tel,
+		shareUsecase:   shareUsecase,
+		accountUsecase: accountUsecase,
+		tel:            tel,
 	}
 }
 
@@ -123,4 +129,19 @@ func (h *InternalHandler) CheckFolderStatus(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, shareTokenResponse{Token: token})
+}
+
+func (h *InternalHandler) DeleteAccount(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteAccount")
+	defer span.End()
+
+	userID := c.Param("id")
+
+	if err := h.accountUsecase.MarkForDeletion(ctx, userID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to schedule account deletion")
+	}
+
+	return c.NoContent(http.StatusAccepted)
 }

@@ -1,0 +1,15 @@
+meta {
+  name: Delete User
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{kindeIssuerURL}}/api/v1/user?id={{kindeUserID}}&is_delete_profile=true
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{kindeM2MToken}}
+}

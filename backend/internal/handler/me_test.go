@@ -34,14 +34,14 @@ func (m *mockUserUsecase) UpdatePreferences(_ context.Context, id string, params
 }
 
 type mockAccountUsecase struct {
-	err            error
-	deleteCalls    int
-	lastDeleteUser string
+	err                    error
+	markForDeletionCalls   int
+	lastMarkForDeletionUser string
 }
 
-func (m *mockAccountUsecase) DeleteAccount(_ context.Context, userID string) error {
-	m.deleteCalls++
-	m.lastDeleteUser = userID
+func (m *mockAccountUsecase) MarkForDeletion(_ context.Context, userID string) error {
+	m.markForDeletionCalls++
+	m.lastMarkForDeletionUser = userID
 	return m.err
 }
 
@@ -216,9 +216,9 @@ func TestMeHandler_DeleteMe_Success(t *testing.T) {
 	err := h.DeleteMe(c)
 
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-	assert.Equal(t, 1, accountUsecase.deleteCalls)
-	assert.Equal(t, "kp_abc123", accountUsecase.lastDeleteUser)
+	assert.Equal(t, http.StatusAccepted, rec.Code)
+	assert.Equal(t, 1, accountUsecase.markForDeletionCalls)
+	assert.Equal(t, "kp_abc123", accountUsecase.lastMarkForDeletionUser)
 }
 
 func TestMeHandler_DeleteMe_MissingAuthContext(t *testing.T) {

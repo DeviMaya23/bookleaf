@@ -81,14 +81,20 @@ func (s *stubUserRepo) GetOrCreate(_ context.Context, _ string) (*domain.User, e
 func (s *stubUserRepo) GetByID(_ context.Context, _ string) (*domain.User, error) {
 	return s.user, nil
 }
-func (s *stubUserRepo) MarkPendingKindeDeletion(_ context.Context, _ string) error {
+func (s *stubUserRepo) SetAccountState(_ context.Context, _ string, _ domain.AccountState) error {
 	return nil
+}
+func (s *stubUserRepo) MarkPurged(_ context.Context, _ string, _ time.Time) error {
+	return nil
+}
+func (s *stubUserRepo) ListByAccountState(_ context.Context, _ domain.AccountState) ([]*domain.User, error) {
+	return nil, nil
+}
+func (s *stubUserRepo) ListPurgedBefore(_ context.Context, _ time.Time) ([]*domain.User, error) {
+	return nil, nil
 }
 func (s *stubUserRepo) HardDelete(_ context.Context, _ string) error {
 	return nil
-}
-func (s *stubUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
-	return nil, nil
 }
 func (s *stubUserRepo) Update(_ context.Context, _ string, _ map[string]any) (*domain.User, error) {
 	return s.user, nil
@@ -163,7 +169,8 @@ func defaultUserRepo() *stubUserRepo {
 
 type noopJobEnqueuer struct{}
 
-func (n *noopJobEnqueuer) Insert(_ context.Context, _ JobArgs) error { return nil }
+func (n *noopJobEnqueuer) Insert(_ context.Context, _ JobArgs) error       { return nil }
+func (n *noopJobEnqueuer) InsertUnique(_ context.Context, _ JobArgs) error { return nil }
 
 type capturingJobEnqueuer struct {
 	inserted []JobArgs
@@ -173,12 +180,20 @@ func (c *capturingJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
 	c.inserted = append(c.inserted, args)
 	return nil
 }
+func (c *capturingJobEnqueuer) InsertUnique(_ context.Context, args JobArgs) error {
+	c.inserted = append(c.inserted, args)
+	return nil
+}
 
 type spyJobEnqueuer struct {
 	insertCalls int
 }
 
 func (s *spyJobEnqueuer) Insert(_ context.Context, _ JobArgs) error {
+	s.insertCalls++
+	return nil
+}
+func (s *spyJobEnqueuer) InsertUnique(_ context.Context, _ JobArgs) error {
 	s.insertCalls++
 	return nil
 }
@@ -196,6 +211,9 @@ func (f *failAfterJobEnqueuer) Insert(_ context.Context, args JobArgs) error {
 	}
 	f.inserted = append(f.inserted, args)
 	return nil
+}
+func (f *failAfterJobEnqueuer) InsertUnique(_ context.Context, args JobArgs) error {
+	return f.Insert(context.Background(), args)
 }
 
 func newImageUploadUsecase(

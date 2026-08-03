@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
@@ -26,7 +27,7 @@ func newFakeUserRepo() *fakeUserRepo {
 func (f *fakeUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
 	user, ok := f.users[id]
 	if !ok {
-		return nil, errors.New("record not found")
+		return nil, ErrUserNotFound
 	}
 	return user, nil
 }
@@ -40,13 +41,43 @@ func (f *fakeUserRepo) GetOrCreate(_ context.Context, id string) (*domain.User, 
 	return user, nil
 }
 
-func (f *fakeUserRepo) MarkPendingKindeDeletion(_ context.Context, id string) error {
+func (f *fakeUserRepo) SetAccountState(_ context.Context, id string, state domain.AccountState) error {
 	user, ok := f.users[id]
 	if !ok {
-		return errors.New("record not found")
+		return ErrUserNotFound
 	}
-	user.PendingKindeDeletion = true
+	user.AccountState = state
 	return nil
+}
+
+func (f *fakeUserRepo) MarkPurged(_ context.Context, id string, purgedAt time.Time) error {
+	user, ok := f.users[id]
+	if !ok {
+		return ErrUserNotFound
+	}
+	user.AccountState = domain.AccountStatePurged
+	user.PurgedAt = &purgedAt
+	return nil
+}
+
+func (f *fakeUserRepo) ListByAccountState(_ context.Context, state domain.AccountState) ([]*domain.User, error) {
+	var users []*domain.User
+	for _, u := range f.users {
+		if u.AccountState == state {
+			users = append(users, u)
+		}
+	}
+	return users, nil
+}
+
+func (f *fakeUserRepo) ListPurgedBefore(_ context.Context, threshold time.Time) ([]*domain.User, error) {
+	var users []*domain.User
+	for _, u := range f.users {
+		if u.AccountState == domain.AccountStatePurged && u.PurgedAt != nil && u.PurgedAt.Before(threshold) {
+			users = append(users, u)
+		}
+	}
+	return users, nil
 }
 
 func (f *fakeUserRepo) HardDelete(_ context.Context, id string) error {
@@ -75,16 +106,6 @@ func (f *fakeUserRepo) Update(_ context.Context, id string, fields map[string]an
 		user.AICategorisationEnabled = enabled
 	}
 	return user, nil
-}
-
-func (f *fakeUserRepo) ListPendingKindeDeletion(_ context.Context) ([]*domain.User, error) {
-	var users []*domain.User
-	for _, u := range f.users {
-		if u.PendingKindeDeletion {
-			users = append(users, u)
-		}
-	}
-	return users, nil
 }
 
 func newTestUserUsecase(repo UserRepository) *userUsecase {

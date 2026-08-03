@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/testutil"
@@ -170,28 +171,97 @@ func TestPendingUploadRepository_ListAllAndDeleteAllByUserID_ScopedToOwner(t *te
 	assert.Equal(t, other.ID, gotOther.ID)
 }
 
-// --- UserRepository: MarkPendingKindeDeletion / HardDelete / ListPendingKindeDeletion ---
+// --- UserRepository: SetAccountState / MarkPurged / ListByAccountState / ListPurgedBefore / HardDelete ---
 
-func TestUserRepository_MarkPendingKindeDeletion_Success(t *testing.T) {
+func TestUserRepository_SetAccountState_UpdatesState(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
-	createUser(t, tx, "kp_markpending")
+	createUser(t, tx, "kp_setstate")
 	repo := NewUserRepository(tx)
 
-	err := repo.MarkPendingKindeDeletion(context.Background(), "kp_markpending")
+	err := repo.SetAccountState(context.Background(), "kp_setstate", domain.AccountStatePendingDeletion)
 
 	require.NoError(t, err)
-	got, err := repo.GetByID(context.Background(), "kp_markpending")
+	got, err := repo.GetByID(context.Background(), "kp_setstate")
 	require.NoError(t, err)
-	assert.True(t, got.PendingKindeDeletion)
+	assert.Equal(t, domain.AccountStatePendingDeletion, got.AccountState)
 }
 
-func TestUserRepository_MarkPendingKindeDeletion_NotFound(t *testing.T) {
+func TestUserRepository_SetAccountState_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewUserRepository(tx)
 
-	err := repo.MarkPendingKindeDeletion(context.Background(), "kp_missing")
+	err := repo.SetAccountState(context.Background(), "kp_missing", domain.AccountStatePendingDeletion)
 
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, usecase.ErrUserNotFound)
+}
+
+func TestUserRepository_MarkPurged_SetsStateAndTimestamp(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_markpurged")
+	repo := NewUserRepository(tx)
+	purgedAt := time.Now().Truncate(time.Millisecond)
+
+	err := repo.MarkPurged(context.Background(), "kp_markpurged", purgedAt)
+
+	require.NoError(t, err)
+	got, err := repo.GetByID(context.Background(), "kp_markpurged")
+	require.NoError(t, err)
+	assert.Equal(t, domain.AccountStatePurged, got.AccountState)
+	require.NotNil(t, got.PurgedAt)
+	assert.WithinDuration(t, purgedAt, *got.PurgedAt, time.Second)
+}
+
+func TestUserRepository_ListByAccountState_ReturnsMatchingUsers(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_bystate_pending")
+	createUser(t, tx, "kp_bystate_active")
+	repo := NewUserRepository(tx)
+	require.NoError(t, repo.SetAccountState(context.Background(), "kp_bystate_pending", domain.AccountStatePendingDeletion))
+
+	users, err := repo.ListByAccountState(context.Background(), domain.AccountStatePendingDeletion)
+
+	require.NoError(t, err)
+	ids := make([]string, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	assert.Contains(t, ids, "kp_bystate_pending")
+	assert.NotContains(t, ids, "kp_bystate_active")
+}
+
+func TestUserRepository_ListByAccountState_EmptyWhenNoneMatch(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	repo := NewUserRepository(tx)
+
+	users, err := repo.ListByAccountState(context.Background(), domain.AccountStatePurged)
+
+	require.NoError(t, err)
+	for _, u := range users {
+		assert.NotEqual(t, domain.AccountStateActive, u.AccountState)
+	}
+}
+
+func TestUserRepository_ListPurgedBefore_ReturnsExpiredTombstones(t *testing.T) {
+	tx := testutil.NewTestTx(t, testDB)
+	createUser(t, tx, "kp_purgedbefore_old")
+	createUser(t, tx, "kp_purgedbefore_recent")
+	repo := NewUserRepository(tx)
+
+	longAgo := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, repo.MarkPurged(context.Background(), "kp_purgedbefore_old", longAgo))
+	justNow := time.Now()
+	require.NoError(t, repo.MarkPurged(context.Background(), "kp_purgedbefore_recent", justNow))
+
+	threshold := time.Now().Add(-25 * time.Hour)
+	users, err := repo.ListPurgedBefore(context.Background(), threshold)
+
+	require.NoError(t, err)
+	ids := make([]string, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	assert.Contains(t, ids, "kp_purgedbefore_old")
+	assert.NotContains(t, ids, "kp_purgedbefore_recent")
 }
 
 func TestUserRepository_HardDelete_Success(t *testing.T) {
@@ -214,24 +284,6 @@ func TestUserRepository_HardDelete_NotFound(t *testing.T) {
 	err := repo.HardDelete(context.Background(), "kp_missing")
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
-}
-
-func TestUserRepository_ListPendingKindeDeletion_ReturnsOnlyFlaggedUsers(t *testing.T) {
-	tx := testutil.NewTestTx(t, testDB)
-	createUser(t, tx, "kp_pendlist_a")
-	createUser(t, tx, "kp_pendlist_b")
-	repo := NewUserRepository(tx)
-	require.NoError(t, repo.MarkPendingKindeDeletion(context.Background(), "kp_pendlist_a"))
-
-	users, err := repo.ListPendingKindeDeletion(context.Background())
-
-	require.NoError(t, err)
-	ids := make([]string, len(users))
-	for i, u := range users {
-		ids[i] = u.ID
-	}
-	assert.Contains(t, ids, "kp_pendlist_a")
-	assert.NotContains(t, ids, "kp_pendlist_b")
 }
 
 // --- AccountRepository.Transaction: full account wipe ---
@@ -294,11 +346,7 @@ func TestAccountRepository_Transaction_WipesAllUserDataInFKOrder(t *testing.T) {
 			return err
 		}
 		collectedPending = pendingUploads
-		if err := repos.PendingUploads.DeleteAllByUserID(context.Background(), userID); err != nil {
-			return err
-		}
-
-		return repos.Users.MarkPendingKindeDeletion(context.Background(), userID)
+		return repos.PendingUploads.DeleteAllByUserID(context.Background(), userID)
 	})
 
 	require.NoError(t, err)
@@ -320,7 +368,8 @@ func TestAccountRepository_Transaction_WipesAllUserDataInFKOrder(t *testing.T) {
 	assert.EqualValues(t, 0, imageFolderCount)
 	assert.EqualValues(t, 0, imageTagCount)
 
+	// The users row is NOT touched by the wipe transaction
 	var gotUser domain.User
 	require.NoError(t, tx.Where("id = ?", userID).First(&gotUser).Error)
-	assert.True(t, gotUser.PendingKindeDeletion)
+	assert.Equal(t, domain.AccountStateActive, gotUser.AccountState)
 }
