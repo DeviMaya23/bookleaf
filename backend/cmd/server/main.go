@@ -31,7 +31,6 @@ import (
 	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
-	"github.com/riverqueue/river/rivertype"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
@@ -39,34 +38,6 @@ import (
 	otelgorm "gorm.io/plugin/opentelemetry/tracing"
 )
 
-// riverEnqueuer adapts *river.Client to usecase.JobEnqueuer.
-type riverEnqueuer struct {
-	client *river.Client[pgx.Tx]
-}
-
-func (e *riverEnqueuer) Insert(ctx context.Context, args usecase.JobArgs) error {
-	riverArgs, ok := args.(river.JobArgs)
-	if !ok {
-		return fmt.Errorf("unsupported job args type %T", args)
-	}
-	_, err := e.client.Insert(ctx, riverArgs, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
-	return err
-}
-
-func (e *riverEnqueuer) InsertUnique(ctx context.Context, args usecase.JobArgs) error {
-	riverArgs, ok := args.(river.JobArgs)
-	if !ok {
-		return fmt.Errorf("unsupported job args type %T", args)
-	}
-	_, err := e.client.Insert(ctx, riverArgs, &river.InsertOpts{
-		MaxAttempts: args.MaxAttempts(),
-		UniqueOpts: river.UniqueOpts{
-			ByArgs:  true,
-			ByState: []rivertype.JobState{rivertype.JobStateAvailable, rivertype.JobStateScheduled, rivertype.JobStatePending, rivertype.JobStateRunning, rivertype.JobStateRetryable, rivertype.JobStateDiscarded},
-		},
-	})
-	return err
-}
 
 type server struct {
 	echo        *echo.Echo

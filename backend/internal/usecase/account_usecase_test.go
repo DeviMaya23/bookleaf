@@ -79,7 +79,34 @@ func (f *failingHardDeleteUserRepo) HardDelete(ctx context.Context, id string) e
 	return f.fakeUserRepo.HardDelete(ctx, id)
 }
 
-func newTestAccountUsecase(accountRepo AccountRepository, userRepo UserRepository, kinde KindeClient, enqueuer JobEnqueuer, bookletClient ...BookletClient) *accountUsecase {
+// --- account enqueuer mock ---
+
+type mockAccountJobEnqueuer struct {
+	err                   error
+	accountWipeCalls      []string
+	accountWipeUniqueCalls []string
+	bookletDeletionCalls  []string
+	r2DeleteCalls         []struct{ path string; thumbnail *string }
+}
+
+func (m *mockAccountJobEnqueuer) EnqueueAccountWipe(_ context.Context, userID string) error {
+	m.accountWipeCalls = append(m.accountWipeCalls, userID)
+	return m.err
+}
+func (m *mockAccountJobEnqueuer) EnqueueAccountWipeUnique(_ context.Context, userID string) error {
+	m.accountWipeUniqueCalls = append(m.accountWipeUniqueCalls, userID)
+	return m.err
+}
+func (m *mockAccountJobEnqueuer) EnqueueBookletUserDeletion(_ context.Context, userID string) error {
+	m.bookletDeletionCalls = append(m.bookletDeletionCalls, userID)
+	return m.err
+}
+func (m *mockAccountJobEnqueuer) EnqueueR2Delete(_ context.Context, r2Path string, thumbnailPath *string) error {
+	m.r2DeleteCalls = append(m.r2DeleteCalls, struct{ path string; thumbnail *string }{path: r2Path, thumbnail: thumbnailPath})
+	return m.err
+}
+
+func newTestAccountUsecase(accountRepo AccountRepository, userRepo UserRepository, kinde KindeClient, enqueuer accountJobEnqueuer, bookletClient ...BookletClient) *accountUsecase {
 	var bc BookletClient
 	if len(bookletClient) > 0 {
 		bc = bookletClient[0]
@@ -103,17 +130,15 @@ func TestAccountUsecase_MarkForDeletion_SetsStateAndEnqueuesJob(t *testing.T) {
 	userID := "kp_abc123"
 	userRepo := newFakeUserRepo()
 	userRepo.users[userID] = &domain.User{ID: userID, AccountState: domain.AccountStateActive}
-	enqueuer := &mockJobEnqueuer{}
+	enqueuer := &mockAccountJobEnqueuer{}
 	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, &fakeKindeClient{}, enqueuer)
 
 	err := uc.MarkForDeletion(context.Background(), userID)
 
 	require.NoError(t, err)
 	assert.Equal(t, domain.AccountStatePendingDeletion, userRepo.users[userID].AccountState)
-	require.Len(t, enqueuer.insertArgs, 1)
-	wipeArgs, ok := enqueuer.insertArgs[0].(AccountWipeArgs)
-	require.True(t, ok)
-	assert.Equal(t, userID, wipeArgs.UserID)
+	require.Len(t, enqueuer.accountWipeCalls, 1)
+	assert.Equal(t, userID, enqueuer.accountWipeCalls[0])
 }
 
 func TestAccountUsecase_MarkForDeletion_NoOpForNonActiveUser(t *testing.T) {
@@ -122,37 +147,35 @@ func TestAccountUsecase_MarkForDeletion_NoOpForNonActiveUser(t *testing.T) {
 			userID := "kp_abc123"
 			userRepo := newFakeUserRepo()
 			userRepo.users[userID] = &domain.User{ID: userID, AccountState: state}
-			enqueuer := &mockJobEnqueuer{}
+			enqueuer := &mockAccountJobEnqueuer{}
 			uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, &fakeKindeClient{}, enqueuer)
 
 			err := uc.MarkForDeletion(context.Background(), userID)
 
 			require.NoError(t, err)
 			assert.Equal(t, state, userRepo.users[userID].AccountState, "state must not change")
-			assert.Empty(t, enqueuer.insertArgs)
+			assert.Empty(t, enqueuer.accountWipeCalls)
 		})
 	}
 }
 
 func TestAccountUsecase_MarkForDeletion_EnqueuesWipeForUnprovisionedUser(t *testing.T) {
 	userRepo := newFakeUserRepo() // user not in DB
-	enqueuer := &mockJobEnqueuer{}
+	enqueuer := &mockAccountJobEnqueuer{}
 	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, &fakeKindeClient{}, enqueuer)
 
 	err := uc.MarkForDeletion(context.Background(), "kp_unprovisioned")
 
 	require.NoError(t, err)
-	require.Len(t, enqueuer.insertArgs, 1)
-	wipeArgs, ok := enqueuer.insertArgs[0].(AccountWipeArgs)
-	require.True(t, ok)
-	assert.Equal(t, "kp_unprovisioned", wipeArgs.UserID)
+	require.Len(t, enqueuer.accountWipeCalls, 1)
+	assert.Equal(t, "kp_unprovisioned", enqueuer.accountWipeCalls[0])
 }
 
 func TestAccountUsecase_MarkForDeletion_EnqueueFailureReturnsNil(t *testing.T) {
 	userID := "kp_abc123"
 	userRepo := newFakeUserRepo()
 	userRepo.users[userID] = &domain.User{ID: userID, AccountState: domain.AccountStateActive}
-	enqueuer := &mockJobEnqueuer{err: errors.New("queue unavailable")}
+	enqueuer := &mockAccountJobEnqueuer{err: errors.New("queue unavailable")}
 	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, &fakeKindeClient{}, enqueuer)
 
 	err := uc.MarkForDeletion(context.Background(), userID)
@@ -168,7 +191,7 @@ func TestAccountUsecase_WipeAccount_TransitionsToPurged(t *testing.T) {
 	userRepo := newFakeUserRepo()
 	userRepo.users[userID] = &domain.User{ID: userID, AccountState: domain.AccountStatePendingDeletion}
 	kinde := &fakeKindeClient{}
-	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockJobEnqueuer{})
+	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockAccountJobEnqueuer{})
 
 	err := uc.WipeAccount(context.Background(), userID)
 
@@ -182,7 +205,7 @@ func TestAccountUsecase_WipeAccount_TransitionsToPurged(t *testing.T) {
 func TestAccountUsecase_WipeAccount_SucceedsForUnprovisionedUser(t *testing.T) {
 	userRepo := newFakeUserRepo() // no user row
 	kinde := &fakeKindeClient{}
-	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockJobEnqueuer{})
+	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockAccountJobEnqueuer{})
 
 	err := uc.WipeAccount(context.Background(), "kp_unprovisioned")
 
@@ -196,7 +219,7 @@ func TestAccountUsecase_WipeAccount_DeleteUserSessionsCalledBeforeDeleteUser(t *
 	userRepo := newFakeUserRepo()
 	userRepo.users[userID] = &domain.User{ID: userID, AccountState: domain.AccountStatePendingDeletion}
 	kinde := &fakeKindeClient{deleteUserSessionsErr: errors.New("sessions unavailable")}
-	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockJobEnqueuer{})
+	uc := newTestAccountUsecase(newMinimalAccountRepo(userRepo), userRepo, kinde, &mockAccountJobEnqueuer{})
 
 	err := uc.WipeAccount(context.Background(), userID)
 
@@ -222,22 +245,16 @@ func TestAccountUsecase_WipeAccount_EnqueuesR2Jobs(t *testing.T) {
 		pendingUploads: &mockPendingUploadRepository{},
 		users:          userRepo,
 	}
-	enqueuer := &mockJobEnqueuer{}
+	enqueuer := &mockAccountJobEnqueuer{}
 	uc := newTestAccountUsecase(accountRepo, userRepo, &fakeKindeClient{}, enqueuer)
 
 	err := uc.WipeAccount(context.Background(), userID)
 
 	require.NoError(t, err)
-	var r2Args []R2DeleteArgs
-	for _, a := range enqueuer.insertArgs {
-		if r, ok := a.(R2DeleteArgs); ok {
-			r2Args = append(r2Args, r)
-		}
-	}
-	require.Len(t, r2Args, 1)
-	assert.Equal(t, "users/kp_abc123/images/img1.jpg", r2Args[0].R2Path)
-	require.NotNil(t, r2Args[0].ThumbnailPath)
-	assert.Equal(t, thumb, *r2Args[0].ThumbnailPath)
+	require.Len(t, enqueuer.r2DeleteCalls, 1)
+	assert.Equal(t, "users/kp_abc123/images/img1.jpg", enqueuer.r2DeleteCalls[0].path)
+	require.NotNil(t, enqueuer.r2DeleteCalls[0].thumbnail)
+	assert.Equal(t, thumb, *enqueuer.r2DeleteCalls[0].thumbnail)
 }
 
 // --- ReconcilePendingDeletions ---
@@ -247,19 +264,13 @@ func TestAccountUsecase_ReconcilePendingDeletions_EnqueuesJobPerPendingUser(t *t
 	userRepo.users["kp_pending1"] = &domain.User{ID: "kp_pending1", AccountState: domain.AccountStatePendingDeletion}
 	userRepo.users["kp_pending2"] = &domain.User{ID: "kp_pending2", AccountState: domain.AccountStatePendingDeletion}
 	userRepo.users["kp_active"] = &domain.User{ID: "kp_active", AccountState: domain.AccountStateActive}
-	enqueuer := &mockJobEnqueuer{}
+	enqueuer := &mockAccountJobEnqueuer{}
 	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, enqueuer)
 
 	err := uc.ReconcilePendingDeletions(context.Background())
 
 	require.NoError(t, err)
-	var enqueuedUserIDs []string
-	for _, args := range enqueuer.insertUniqueArgs {
-		if a, ok := args.(AccountWipeArgs); ok {
-			enqueuedUserIDs = append(enqueuedUserIDs, a.UserID)
-		}
-	}
-	assert.ElementsMatch(t, []string{"kp_pending1", "kp_pending2"}, enqueuedUserIDs)
+	assert.ElementsMatch(t, []string{"kp_pending1", "kp_pending2"}, enqueuer.accountWipeUniqueCalls)
 }
 
 // --- SweepPurgedAccounts ---
@@ -269,7 +280,7 @@ func TestAccountUsecase_SweepPurgedAccounts_HardDeletesExpiredRows(t *testing.T)
 	past := time.Now().Add(-26 * time.Hour)
 	userRepo.users["kp_purged1"] = &domain.User{ID: "kp_purged1", AccountState: domain.AccountStatePurged, PurgedAt: &past}
 	userRepo.users["kp_purged2"] = &domain.User{ID: "kp_purged2", AccountState: domain.AccountStatePurged, PurgedAt: &past}
-	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, &mockJobEnqueuer{})
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, &mockAccountJobEnqueuer{})
 
 	err := uc.SweepPurgedAccounts(context.Background())
 
@@ -286,7 +297,7 @@ func TestAccountUsecase_SweepPurgedAccounts_ContinuesOnHardDeleteFailure(t *test
 	inner.users["kp_fail"] = &domain.User{ID: "kp_fail", AccountState: domain.AccountStatePurged, PurgedAt: &past}
 	inner.users["kp_ok"] = &domain.User{ID: "kp_ok", AccountState: domain.AccountStatePurged, PurgedAt: &past}
 	userRepo := &failingHardDeleteUserRepo{fakeUserRepo: inner, failForID: "kp_fail"}
-	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, &mockJobEnqueuer{})
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, userRepo, &fakeKindeClient{}, &mockAccountJobEnqueuer{})
 
 	err := uc.SweepPurgedAccounts(context.Background())
 
@@ -300,7 +311,7 @@ func TestAccountUsecase_SweepPurgedAccounts_ContinuesOnHardDeleteFailure(t *test
 func TestAccountUsecase_ProcessBookletUserDeletion_SuccessReturnsNil(t *testing.T) {
 	userID := "kp_abc123"
 	bookletClient := &fakeBookletClient{}
-	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockJobEnqueuer{}, bookletClient)
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockAccountJobEnqueuer{}, bookletClient)
 
 	err := uc.ProcessBookletUserDeletion(context.Background(), userID)
 
@@ -310,7 +321,7 @@ func TestAccountUsecase_ProcessBookletUserDeletion_SuccessReturnsNil(t *testing.
 
 func TestAccountUsecase_ProcessBookletUserDeletion_ClientErrorPropagates(t *testing.T) {
 	bookletClient := &fakeBookletClient{err: errors.New("booklet unavailable")}
-	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockJobEnqueuer{}, bookletClient)
+	uc := newTestAccountUsecase(&fakeAccountRepository{}, newFakeUserRepo(), &fakeKindeClient{}, &mockAccountJobEnqueuer{}, bookletClient)
 
 	err := uc.ProcessBookletUserDeletion(context.Background(), "kp_abc123")
 
