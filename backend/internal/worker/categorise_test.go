@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/devi/bookleaf/internal/domain"
-	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
@@ -35,8 +34,8 @@ func TestCategorisationWorker_Work_OnSuccessPublishesBroadcastEvent(t *testing.T
 	broadcaster := &mockCategorisationBroadcaster{}
 	w := NewCategorisationWorker(&mockCategorisationUsecase{}, broadcaster)
 	imageID := uuid.New()
-	job := &river.Job[usecase.CategoriseImageArgs]{
-		Args: usecase.CategoriseImageArgs{UserID: "user1", ImageID: imageID},
+	job := &river.Job[CategoriseImageArgs]{
+		Args: CategoriseImageArgs{UserID: "user1", ImageID: imageID},
 	}
 
 	err := w.Work(context.Background(), job)
@@ -51,8 +50,8 @@ func TestCategorisationWorker_Work_OnSuccessPublishesBroadcastEvent(t *testing.T
 func TestCategorisationWorker_Work_OnUsecaseErrorBroadcasterNotCalled(t *testing.T) {
 	broadcaster := &mockCategorisationBroadcaster{}
 	w := NewCategorisationWorker(&mockCategorisationUsecase{err: errors.New("categorisation failed")}, broadcaster)
-	job := &river.Job[usecase.CategoriseImageArgs]{
-		Args: usecase.CategoriseImageArgs{UserID: "user1", ImageID: uuid.New()},
+	job := &river.Job[CategoriseImageArgs]{
+		Args: CategoriseImageArgs{UserID: "user1", ImageID: uuid.New()},
 	}
 
 	err := w.Work(context.Background(), job)

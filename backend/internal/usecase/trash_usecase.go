@@ -11,17 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
+type trashJobEnqueuer interface {
+	EnqueueR2Delete(ctx context.Context, r2Path string, thumbnailPath *string) error
+}
+
 type trashUsecase struct {
 	imageRepo TrashRepository
 	store     StorageService
-	enqueuer  JobEnqueuer
+	enqueuer  trashJobEnqueuer
 	tel       *observability.Telemetry
 }
 
 func NewTrashUsecase(
 	imageRepo TrashRepository,
 	store StorageService,
-	enqueuer JobEnqueuer,
+	enqueuer trashJobEnqueuer,
 	tel *observability.Telemetry,
 ) *trashUsecase {
 	return &trashUsecase{
@@ -262,7 +266,7 @@ func (u *trashUsecase) EmptyTrash(ctx context.Context, userID string) error {
 	}
 
 	for _, img := range images {
-		if err := u.enqueuer.Insert(ctx, R2DeleteArgs{R2Path: img.R2Path, ThumbnailPath: img.ThumbnailPath}); err != nil {
+		if err := u.enqueuer.EnqueueR2Delete(ctx, img.R2Path, img.ThumbnailPath); err != nil {
 			logger.Warn("failed to enqueue R2 delete job during empty trash",
 				zap.String("event", "r2.trash.enqueue_failed"),
 				zap.String("image_id", img.ID.String()),

@@ -60,6 +60,11 @@ type CompleteUploadResult struct {
 	Duplicates []*domain.Image
 }
 
+type imageUploadJobEnqueuer interface {
+	EnqueueVision(ctx context.Context, imageID uuid.UUID, userID string) error
+	EnqueueCategoriseImage(ctx context.Context, imageID uuid.UUID, userID string) error
+}
+
 type imageUploadUsecase struct {
 	imageRepo         UploadImageRepository
 	hashRepo          ImageHashRepository
@@ -68,7 +73,7 @@ type imageUploadUsecase struct {
 	userRepo          UserRepository
 	store             StorageService
 	visionService     VisionService
-	enqueuer          JobEnqueuer
+	enqueuer          imageUploadJobEnqueuer
 	tel               *observability.Telemetry
 	uploadCount       metric.Int64Counter
 }
@@ -81,7 +86,7 @@ func NewImageUploadUsecase(
 	userRepo UserRepository,
 	store StorageService,
 	visionService VisionService,
-	enqueuer JobEnqueuer,
+	enqueuer imageUploadJobEnqueuer,
 	tel *observability.Telemetry,
 ) *imageUploadUsecase {
 	uploadCount, _ := tel.Meter.Int64Counter(
@@ -247,10 +252,7 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 		result.Duplicates = []*domain.Image{}
 	}
 
-	if err := u.enqueuer.Insert(ctx, VisionArgs{
-		ImageID: pending.ID,
-		UserID:  pending.UserID,
-	}); err != nil {
+	if err := u.enqueuer.EnqueueVision(ctx, pending.ID, pending.UserID); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("enqueue vision labelling: %w", err)
@@ -455,10 +457,7 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 	}
 
 	if user.AICategorisationEnabled {
-		if err := u.enqueuer.Insert(ctx, CategoriseImageArgs{
-			ImageID: imageID,
-			UserID:  userID,
-		}); err != nil {
+		if err := u.enqueuer.EnqueueCategoriseImage(ctx, imageID, userID); err != nil {
 			return fmt.Errorf("enqueue categorise image: %w", err)
 		}
 	}
@@ -478,7 +477,7 @@ func (u *imageUploadUsecase) BackfillVisionLabels(ctx context.Context, userID st
 	}
 
 	for i, img := range images {
-		if err := u.enqueuer.Insert(ctx, VisionArgs{ImageID: img.ID, UserID: userID}); err != nil {
+		if err := u.enqueuer.EnqueueVision(ctx, img.ID, userID); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return i, fmt.Errorf("enqueue vision labelling: %w", err)
