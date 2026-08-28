@@ -25,7 +25,7 @@ func NewEventsHandler(broadcaster Broadcaster) *EventsHandler {
 
 func (h *EventsHandler) GetEvents(c echo.Context) error {
 	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
 

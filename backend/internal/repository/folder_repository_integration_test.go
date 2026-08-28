@@ -20,7 +20,7 @@ func TestFolderRepository_Create_PersistsFields(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	folder, err := repo.Create(context.Background(), &domain.Folder{
-		UserID:      "kp_abc123",
+		UserID:      mustMakeUserID("kp_abc123"),
 		Name:        "travel",
 		Description: func() *string { v := "trip board"; return &v }(),
 	})
@@ -37,7 +37,7 @@ func TestFolderRepository_Create_FKViolation(t *testing.T) {
 	repo := NewFolderRepository(tx)
 
 	_, err := repo.Create(context.Background(), &domain.Folder{
-		UserID: "kp_nonexistent",
+		UserID: uuid.New(),
 		Name:   "travel",
 	})
 
@@ -49,11 +49,11 @@ func TestFolderRepository_Create_FKViolation(t *testing.T) {
 func TestFolderRepository_List_ReturnsOwnFolders(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	createFolder(t, tx, "kp_abc123", "travel", nil)
-	createFolder(t, tx, "kp_abc123", "food", nil)
+	createFolder(t, tx, mustMakeUserID("kp_abc123"), "travel", nil)
+	createFolder(t, tx, mustMakeUserID("kp_abc123"), "food", nil)
 	repo := NewFolderRepository(tx)
 
-	folders, err := repo.List(context.Background(), "kp_abc123")
+	folders, err := repo.List(context.Background(), mustMakeUserID("kp_abc123"))
 
 	require.NoError(t, err)
 	assert.Len(t, folders, 2)
@@ -63,10 +63,10 @@ func TestFolderRepository_List_ExcludesOtherUserFolders(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	createFolder(t, tx, "kp_owner", "travel", nil)
+	createFolder(t, tx, mustMakeUserID("kp_owner"), "travel", nil)
 	repo := NewFolderRepository(tx)
 
-	folders, err := repo.List(context.Background(), "kp_other")
+	folders, err := repo.List(context.Background(), mustMakeUserID("kp_other"))
 
 	require.NoError(t, err)
 	assert.Empty(t, folders)
@@ -77,10 +77,10 @@ func TestFolderRepository_List_ExcludesOtherUserFolders(t *testing.T) {
 func TestFolderRepository_FindByName_ReturnsMatch(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	existing := createFolder(t, tx, "kp_abc123", "Nature", nil)
+	existing := createFolder(t, tx, mustMakeUserID("kp_abc123"), "Nature", nil)
 	repo := NewFolderRepository(tx)
 
-	folder, err := repo.FindByName(context.Background(), "kp_abc123", "nature")
+	folder, err := repo.FindByName(context.Background(), mustMakeUserID("kp_abc123"), "nature")
 
 	require.NoError(t, err)
 	require.NotNil(t, folder)
@@ -92,7 +92,7 @@ func TestFolderRepository_FindByName_NotFound(t *testing.T) {
 	createUser(t, tx, "kp_abc123")
 	repo := NewFolderRepository(tx)
 
-	folder, err := repo.FindByName(context.Background(), "kp_abc123", "missing-folder")
+	folder, err := repo.FindByName(context.Background(), mustMakeUserID("kp_abc123"), "missing-folder")
 
 	require.NoError(t, err)
 	assert.Nil(t, folder)
@@ -102,10 +102,10 @@ func TestFolderRepository_FindByName_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	createFolder(t, tx, "kp_owner", "nature", nil)
+	createFolder(t, tx, mustMakeUserID("kp_owner"), "nature", nil)
 	repo := NewFolderRepository(tx)
 
-	folder, err := repo.FindByName(context.Background(), "kp_other", "nature")
+	folder, err := repo.FindByName(context.Background(), mustMakeUserID("kp_other"), "nature")
 
 	require.NoError(t, err)
 	assert.Nil(t, folder)
@@ -116,10 +116,10 @@ func TestFolderRepository_FindByName_WrongUser(t *testing.T) {
 func TestFolderRepository_GetByID_ReturnsFolder(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	existing := createFolder(t, tx, "kp_abc123", "travel", nil)
+	existing := createFolder(t, tx, mustMakeUserID("kp_abc123"), "travel", nil)
 	repo := NewFolderRepository(tx)
 
-	folder, err := repo.GetByID(context.Background(), existing.ID, "kp_abc123")
+	folder, err := repo.GetByID(context.Background(), existing.ID, mustMakeUserID("kp_abc123"))
 
 	require.NoError(t, err)
 	assert.Equal(t, existing.ID, folder.ID)
@@ -129,7 +129,7 @@ func TestFolderRepository_GetByID_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.GetByID(context.Background(), uuid.New(), "kp_abc123")
+	_, err := repo.GetByID(context.Background(), uuid.New(), uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -138,17 +138,17 @@ func TestFolderRepository_GetByID_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	existing := createFolder(t, tx, "kp_owner", "travel", nil)
+	existing := createFolder(t, tx, mustMakeUserID("kp_owner"), "travel", nil)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.GetByID(context.Background(), existing.ID, "kp_other")
+	_, err := repo.GetByID(context.Background(), existing.ID, mustMakeUserID("kp_other"))
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
 
 // --- Update ---
 
-func setupUpdateFolder(t *testing.T, tx *gorm.DB, userID string, parentID *uuid.UUID, description *string) *domain.Folder {
+func setupUpdateFolder(t *testing.T, tx *gorm.DB, userID uuid.UUID, parentID *uuid.UUID, description *string) *domain.Folder {
 	t.Helper()
 	folder := &domain.Folder{
 		UserID:      userID,
@@ -163,12 +163,13 @@ func setupUpdateFolder(t *testing.T, tx *gorm.DB, userID string, parentID *uuid.
 func TestFolderRepository_Update_OmittedFieldsPreserved(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	parent := createFolder(t, tx, "kp_abc123", "parent", nil)
+	ownerID := mustMakeUserID("kp_abc123")
+	parent := createFolder(t, tx, ownerID, "parent", nil)
 	description := "original description"
-	existing := setupUpdateFolder(t, tx, "kp_abc123", &parent.ID, &description)
+	existing := setupUpdateFolder(t, tx, ownerID, &parent.ID, &description)
 	repo := NewFolderRepository(tx)
 
-	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+	updated, err := repo.Update(context.Background(), existing.ID, ownerID, map[string]any{
 		"name": "updated",
 	})
 
@@ -183,12 +184,13 @@ func TestFolderRepository_Update_OmittedFieldsPreserved(t *testing.T) {
 func TestFolderRepository_Update_ExplicitNullClearsField(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	parent := createFolder(t, tx, "kp_abc123", "parent", nil)
+	ownerID := mustMakeUserID("kp_abc123")
+	parent := createFolder(t, tx, ownerID, "parent", nil)
 	description := "original description"
-	existing := setupUpdateFolder(t, tx, "kp_abc123", &parent.ID, &description)
+	existing := setupUpdateFolder(t, tx, ownerID, &parent.ID, &description)
 	repo := NewFolderRepository(tx)
 
-	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+	updated, err := repo.Update(context.Background(), existing.ID, ownerID, map[string]any{
 		"parent_id":   (*uuid.UUID)(nil),
 		"description": (*string)(nil),
 	})
@@ -202,13 +204,14 @@ func TestFolderRepository_Update_ExplicitNullClearsField(t *testing.T) {
 func TestFolderRepository_Update_OverwritesProvidedFields(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	oldParent := createFolder(t, tx, "kp_abc123", "old-parent", nil)
-	newParent := createFolder(t, tx, "kp_abc123", "new-parent", nil)
+	ownerID := mustMakeUserID("kp_abc123")
+	oldParent := createFolder(t, tx, ownerID, "old-parent", nil)
+	newParent := createFolder(t, tx, ownerID, "new-parent", nil)
 	description := "original description"
-	existing := setupUpdateFolder(t, tx, "kp_abc123", &oldParent.ID, &description)
+	existing := setupUpdateFolder(t, tx, ownerID, &oldParent.ID, &description)
 	repo := NewFolderRepository(tx)
 
-	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+	updated, err := repo.Update(context.Background(), existing.ID, ownerID, map[string]any{
 		"name":        "updated",
 		"parent_id":   &newParent.ID,
 		"description": func() *string { v := "updated description"; return &v }(),
@@ -225,11 +228,11 @@ func TestFolderRepository_Update_OverwritesProvidedFields(t *testing.T) {
 func TestFolderRepository_Update_WritesIconColumn(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	existing := setupUpdateFolder(t, tx, "kp_abc123", nil, nil)
+	existing := setupUpdateFolder(t, tx, mustMakeUserID("kp_abc123"), nil, nil)
 	repo := NewFolderRepository(tx)
 
 	icon := "star"
-	updated, err := repo.Update(context.Background(), existing.ID, "kp_abc123", map[string]any{
+	updated, err := repo.Update(context.Background(), existing.ID, mustMakeUserID("kp_abc123"), map[string]any{
 		"icon": &icon,
 	})
 
@@ -242,7 +245,7 @@ func TestFolderRepository_Update_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.Update(context.Background(), uuid.New(), "kp_abc123", map[string]any{
+	_, err := repo.Update(context.Background(), uuid.New(), uuid.New(), map[string]any{
 		"name": "updated",
 	})
 
@@ -253,10 +256,10 @@ func TestFolderRepository_Update_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	existing := createFolder(t, tx, "kp_owner", "travel", nil)
+	existing := createFolder(t, tx, mustMakeUserID("kp_owner"), "travel", nil)
 	repo := NewFolderRepository(tx)
 
-	_, err := repo.Update(context.Background(), existing.ID, "kp_other", map[string]any{
+	_, err := repo.Update(context.Background(), existing.ID, mustMakeUserID("kp_other"), map[string]any{
 		"name": "updated",
 	})
 
@@ -267,8 +270,8 @@ func TestFolderRepository_Update_WrongUser(t *testing.T) {
 
 func TestFolderRepository_DeleteWithCascade_RemovesTargetAndNullsChildParent(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
-	userID := "kp_abc123"
-	createUser(t, tx, userID)
+	createUser(t, tx, "kp_abc123")
+	userID := mustMakeUserID("kp_abc123")
 	target := createFolder(t, tx, userID, "target", nil)
 	child := createFolder(t, tx, userID, "child", &target.ID)
 	img := createImage(t, tx, userID, &target.ID)
@@ -299,10 +302,10 @@ func TestFolderRepository_DeleteWithCascade_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	target := createFolder(t, tx, "kp_owner", "target", nil)
+	target := createFolder(t, tx, mustMakeUserID("kp_owner"), "target", nil)
 	repo := NewFolderRepository(tx)
 
-	err := repo.DeleteWithCascade(context.Background(), target.ID, "kp_other")
+	err := repo.DeleteWithCascade(context.Background(), target.ID, mustMakeUserID("kp_other"))
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 
@@ -314,8 +317,8 @@ func TestFolderRepository_DeleteWithCascade_WrongUser(t *testing.T) {
 
 func TestFolderRepository_CountImagesByFolder_ExcludesSoftDeleted(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
-	userID := "kp_countimgs"
-	createUser(t, tx, userID)
+	createUser(t, tx, "kp_countimgs")
+	userID := mustMakeUserID("kp_countimgs")
 	folder := createFolder(t, tx, userID, "target", nil)
 	imageRepo := NewImageRepository(tx)
 	createImage(t, tx, userID, &folder.ID)
@@ -334,11 +337,11 @@ func TestFolderRepository_CountImagesByFolder_WrongUser(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_owner")
 	createUser(t, tx, "kp_other")
-	folder := createFolder(t, tx, "kp_owner", "target", nil)
-	createImage(t, tx, "kp_owner", &folder.ID)
+	folder := createFolder(t, tx, mustMakeUserID("kp_owner"), "target", nil)
+	createImage(t, tx, mustMakeUserID("kp_owner"), &folder.ID)
 	repo := NewFolderRepository(tx)
 
-	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, "kp_other")
+	count, err := repo.CountImagesByFolder(context.Background(), folder.ID, mustMakeUserID("kp_other"))
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
@@ -346,12 +349,17 @@ func TestFolderRepository_CountImagesByFolder_WrongUser(t *testing.T) {
 
 // --- helpers ---
 
-func createUser(t *testing.T, db *gorm.DB, id string) {
-	t.Helper()
-	require.NoError(t, db.Create(&domain.User{ID: id}).Error)
+// mustMakeUserID creates a deterministic UUID from an IDP subject string.
+func mustMakeUserID(idpSubject string) uuid.UUID {
+	return uuid.NewSHA1(uuid.NameSpaceDNS, []byte(idpSubject))
 }
 
-func createFolder(t *testing.T, db *gorm.DB, userID, name string, parentID *uuid.UUID) *domain.Folder {
+func createUser(t *testing.T, db *gorm.DB, idpSubject string) {
+	t.Helper()
+	require.NoError(t, db.Create(&domain.User{ID: mustMakeUserID(idpSubject), IDPSubject: idpSubject}).Error)
+}
+
+func createFolder(t *testing.T, db *gorm.DB, userID uuid.UUID, name string, parentID *uuid.UUID) *domain.Folder {
 	t.Helper()
 	folder := &domain.Folder{
 		UserID:   userID,
@@ -362,12 +370,12 @@ func createFolder(t *testing.T, db *gorm.DB, userID, name string, parentID *uuid
 	return folder
 }
 
-func createImage(t *testing.T, db *gorm.DB, userID string, folderID *uuid.UUID) *domain.Image {
+func createImage(t *testing.T, db *gorm.DB, userID uuid.UUID, folderID *uuid.UUID) *domain.Image {
 	t.Helper()
 	img := &domain.Image{
 		UserID:   userID,
 		Title:    "test image",
-		R2Path:   "users/" + userID + "/images/test.jpg",
+		R2Path:   "users/" + userID.String() + "/images/test.jpg",
 		MIMEType: "image/jpeg",
 	}
 	require.NoError(t, db.Create(img).Error)
@@ -376,4 +384,3 @@ func createImage(t *testing.T, db *gorm.DB, userID string, folderID *uuid.UUID) 
 	}
 	return img
 }
-

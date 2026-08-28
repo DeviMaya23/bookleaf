@@ -43,7 +43,7 @@ func (r *categorisationLogRepository) GetByImageID(ctx context.Context, imageID 
 	return &log, nil
 }
 
-func (r *categorisationLogRepository) CountByUserAndMonth(ctx context.Context, userID string, year, month int) (int, error) {
+func (r *categorisationLogRepository) CountByUserAndMonth(ctx context.Context, userID uuid.UUID, year, month int) (int, error) {
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 1, 0)
 

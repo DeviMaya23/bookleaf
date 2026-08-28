@@ -19,9 +19,9 @@ import (
 )
 
 type ShareUsecase interface {
-	CreateShare(ctx context.Context, folderID uuid.UUID, userID string) (token string, created bool, err error)
-	GetShare(ctx context.Context, folderID uuid.UUID, userID string) (token string, err error)
-	DeleteShare(ctx context.Context, folderID uuid.UUID, userID string) error
+	CreateShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) (token string, created bool, err error)
+	GetShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) (token string, err error)
+	DeleteShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) error
 	GetSharedFolder(ctx context.Context, token string) (*usecase.SharedFolder, error)
 	GetSharedFolderInfo(ctx context.Context, token string) (*domain.Folder, error)
 }
@@ -29,7 +29,7 @@ type ShareUsecase interface {
 // FolderExporter is the narrow export capability ShareHandler needs,
 // satisfied implicitly by the existing folderUsecase.
 type FolderExporter interface {
-	ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error
+	ExportFolder(ctx context.Context, folderID uuid.UUID, userID uuid.UUID, w io.Writer) error
 }
 
 type ShareHandler struct {
@@ -78,8 +78,8 @@ func (h *ShareHandler) CreateShare(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -109,8 +109,8 @@ func (h *ShareHandler) GetShare(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -136,8 +136,8 @@ func (h *ShareHandler) DeleteShare(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

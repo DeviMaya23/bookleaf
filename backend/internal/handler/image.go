@@ -19,14 +19,14 @@ import (
 )
 
 type ImageUsecase interface {
-	ListImages(ctx context.Context, userID string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error)
-	ListFolderImages(ctx context.Context, userID string, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error)
-	GetImage(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageDetail, error)
-	DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error)
-	UpdateImage(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateImageParams) (*usecase.ImageItem, error)
-	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error)
-	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error
-	BulkAddToFolder(ctx context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error)
+	ListImages(ctx context.Context, userID uuid.UUID, params usecase.ListImagesParams) (*usecase.ListImagesResult, error)
+	ListFolderImages(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error)
+	GetImage(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*usecase.ImageDetail, error)
+	DownloadImage(ctx context.Context, id uuid.UUID, userID uuid.UUID) (string, error)
+	UpdateImage(ctx context.Context, id uuid.UUID, userID uuid.UUID, params usecase.UpdateImageParams) (*usecase.ImageItem, error)
+	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error)
+	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, folderID uuid.UUID, position string) error
+	BulkAddToFolder(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error)
 }
 
 type ImageHandler struct {
@@ -116,8 +116,8 @@ func (h *ImageHandler) ListImages(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListImages")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -209,8 +209,8 @@ func (h *ImageHandler) ListFolderImages(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -263,8 +263,8 @@ func (h *ImageHandler) GetImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -306,8 +306,8 @@ func (h *ImageHandler) DownloadImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -333,8 +333,8 @@ func (h *ImageHandler) UpdateImage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -422,8 +422,8 @@ func (h *ImageHandler) MoveImageFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -475,8 +475,8 @@ func (h *ImageHandler) UpdateImagePosition(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateImagePosition")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -512,8 +512,8 @@ func (h *ImageHandler) BulkAddToFolder(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkAddToFolder")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

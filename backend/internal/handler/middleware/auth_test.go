@@ -12,6 +12,7 @@ import (
 	"github.com/MicahParks/jwkset"
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,8 @@ func makeSignedToken(t *testing.T, key *rsa.PrivateKey, issuer, audience string)
 
 func TestAuthMiddleware_ValidToken_SetsUserIDOnContext(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
-	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", AccountState: domain.AccountStateActive}}
+	testUserID := uuid.New()
+	mockUC := &mockUserUsecase{user: &domain.User{ID: testUserID, AccountState: domain.AccountStateActive}}
 	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
 
@@ -76,7 +78,7 @@ func TestAuthMiddleware_ValidToken_SetsUserIDOnContext(t *testing.T) {
 	err := mw(func(c echo.Context) error {
 		userID, ok := AuthenticatedUserIDFromContext(c)
 		require.True(t, ok)
-		assert.Equal(t, "kp_abc123", userID)
+		assert.Equal(t, testUserID.String(), userID)
 		return c.NoContent(http.StatusNoContent)
 	})(c)
 
@@ -86,7 +88,7 @@ func TestAuthMiddleware_ValidToken_SetsUserIDOnContext(t *testing.T) {
 
 func TestAuthMiddleware_InvalidOrMissingToken_Returns401(t *testing.T) {
 	storage := jwkset.NewMemoryStorage()
-	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123"}}
+	mockUC := &mockUserUsecase{user: &domain.User{ID: uuid.New()}}
 	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 
 	tests := []struct {
@@ -123,7 +125,7 @@ func TestAuthMiddleware_InvalidOrMissingToken_Returns401(t *testing.T) {
 
 func TestAuthMiddleware_PendingDeletionUser_Returns401(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
-	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", AccountState: domain.AccountStatePendingDeletion}}
+	mockUC := &mockUserUsecase{user: &domain.User{ID: uuid.New(), AccountState: domain.AccountStatePendingDeletion}}
 	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
 
@@ -147,7 +149,7 @@ func TestAuthMiddleware_PendingDeletionUser_Returns401(t *testing.T) {
 
 func TestAuthMiddleware_PurgedUser_Returns401(t *testing.T) {
 	storage, privateKey := makeTestStorage(t)
-	mockUC := &mockUserUsecase{user: &domain.User{ID: "kp_abc123", AccountState: domain.AccountStatePurged}}
+	mockUC := &mockUserUsecase{user: &domain.User{ID: uuid.New(), AccountState: domain.AccountStatePurged}}
 	mw := newAuthMiddlewareWithStorage("https://example.kinde.com", "bookleaf-api", storage, mockUC, zap.NewNop())
 	tokenString := makeSignedToken(t, privateKey, "https://example.kinde.com", "bookleaf-api")
 

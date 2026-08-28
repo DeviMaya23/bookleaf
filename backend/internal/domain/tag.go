@@ -9,7 +9,7 @@ import (
 
 type Tag struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey"`
-	UserID    string    `gorm:"column:user_id;type:text;not null;index"`
+	UserID    uuid.UUID `gorm:"column:user_id;type:uuid;not null;index"`
 	Name      string    `gorm:"column:name;not null"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`

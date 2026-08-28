@@ -26,7 +26,7 @@ func NewTagUsecase(tagRepo TagRepository, tel *observability.Telemetry) *tagUsec
 	return &tagUsecase{tagRepo: tagRepo, tel: tel}
 }
 
-func (u *tagUsecase) Create(ctx context.Context, userID string, name string) (*domain.Tag, error) {
+func (u *tagUsecase) Create(ctx context.Context, userID uuid.UUID, name string) (*domain.Tag, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CreateTag")
 	defer span.End()
 
@@ -48,7 +48,7 @@ func (u *tagUsecase) Create(ctx context.Context, userID string, name string) (*d
 	return tag, nil
 }
 
-func (u *tagUsecase) List(ctx context.Context, userID string) ([]*domain.Tag, error) {
+func (u *tagUsecase) List(ctx context.Context, userID uuid.UUID) ([]*domain.Tag, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListTags")
 	defer span.End()
 
@@ -62,7 +62,7 @@ func (u *tagUsecase) List(ctx context.Context, userID string) ([]*domain.Tag, er
 	return tags, nil
 }
 
-func (u *tagUsecase) Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error) {
+func (u *tagUsecase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateTag")
 	defer span.End()
 
@@ -84,7 +84,7 @@ func (u *tagUsecase) Update(ctx context.Context, id uuid.UUID, userID string, na
 	return tag, nil
 }
 
-func (u *tagUsecase) Delete(ctx context.Context, id uuid.UUID, userID string) error {
+func (u *tagUsecase) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DeleteTag")
 	defer span.End()
 

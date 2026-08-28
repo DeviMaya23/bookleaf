@@ -24,5 +24,5 @@ type FolderShareRepository interface {
 	DeleteByFolderID(ctx context.Context, folderID uuid.UUID) error
 	// ListByUserID returns all folder_shares rows whose associated folder belongs to userID,
 	// including the folder name. Returns an empty slice (not an error) when no rows match.
-	ListByUserID(ctx context.Context, userID string) ([]*FolderShareListItem, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*FolderShareListItem, error)
 }

@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupTagTest(t *testing.T) (usecase.TagRepository, usecase.ImageRepository, string) {
+func setupTagTest(t *testing.T) (usecase.TagRepository, usecase.ImageRepository, uuid.UUID) {
 	t.Helper()
 	tx := testutil.NewTestTx(t, testDB)
 
@@ -24,7 +24,7 @@ func setupTagTest(t *testing.T) (usecase.TagRepository, usecase.ImageRepository,
 	return NewTagRepository(tx), NewImageRepository(tx), user.ID
 }
 
-func newTestTag(userID, name string) *domain.Tag {
+func newTestTag(userID uuid.UUID, name string) *domain.Tag {
 	return &domain.Tag{
 		UserID: userID,
 		Name:   name,

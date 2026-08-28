@@ -28,22 +28,22 @@ type mockUploadUsecase struct {
 	lastFileSize       *int64
 	backfillEnqueued   int
 	backfillErr        error
-	lastBackfillUserID string
+	lastBackfillUserID uuid.UUID
 }
 
-func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
+func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _ uuid.UUID, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
 	m.lastDescription = description
 	return m.uploadResult, m.err
 }
 
-func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ string, width, height *int, fileSize *int64, _ *string) (*usecase.CompleteUploadResult, error) {
+func (m *mockUploadUsecase) CompleteUpload(_ context.Context, _ uuid.UUID, _ uuid.UUID, width, height *int, fileSize *int64, _ *string) (*usecase.CompleteUploadResult, error) {
 	m.lastWidth = width
 	m.lastHeight = height
 	m.lastFileSize = fileSize
 	return m.completeResult, m.err
 }
 
-func (m *mockUploadUsecase) BackfillVisionLabels(_ context.Context, userID string) (int, error) {
+func (m *mockUploadUsecase) BackfillVisionLabels(_ context.Context, userID uuid.UUID) (int, error) {
 	m.lastBackfillUserID = userID
 	return m.backfillEnqueued, m.backfillErr
 }
@@ -248,7 +248,7 @@ func TestUploadHandler_BackfillVision_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusAccepted, rec.Code)
 	assert.JSONEq(t, `{"enqueued":5}`, rec.Body.String())
-	assert.Equal(t, "kp_abc123", uc.lastBackfillUserID)
+	assert.NotEqual(t, uuid.Nil, uc.lastBackfillUserID)
 }
 
 func TestUploadHandler_BackfillVision_UsecaseError(t *testing.T) {

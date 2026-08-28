@@ -8,7 +8,7 @@ import (
 )
 
 type ImageFolderRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error)
-	FindByName(ctx context.Context, userID, name string) (*domain.Folder, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Folder, error)
+	FindByName(ctx context.Context, userID uuid.UUID, name string) (*domain.Folder, error)
 	Create(ctx context.Context, folder *domain.Folder) (*domain.Folder, error)
 }

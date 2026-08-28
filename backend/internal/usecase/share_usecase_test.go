@@ -20,7 +20,7 @@ type stubShareFolderRepo struct {
 	err    error
 }
 
-func (s *stubShareFolderRepo) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Folder, error) {
+func (s *stubShareFolderRepo) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Folder, error) {
 	return s.folder, s.err
 }
 
@@ -30,7 +30,7 @@ type stubShareImageRepo struct {
 	err    error
 }
 
-func (s *stubShareImageRepo) ListByFolder(_ context.Context, _ string, _ uuid.UUID, _ *string, _ *string) ([]*domain.Image, error) {
+func (s *stubShareImageRepo) ListByFolder(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ *string, _ *string) ([]*domain.Image, error) {
 	return s.images, s.err
 }
 
@@ -66,7 +66,7 @@ func TestShareUsecase_CreateShare_NewShareCreated(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	token, created, err := uc.CreateShare(context.Background(), folderID, "kp_abc123")
+	token, created, err := uc.CreateShare(context.Background(), folderID, uuid.New())
 
 	require.NoError(t, err)
 	assert.True(t, created)
@@ -80,7 +80,7 @@ func TestShareUsecase_CreateShare_IdempotentRepeat(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo(existing)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	token, created, err := uc.CreateShare(context.Background(), folderID, "kp_abc123")
+	token, created, err := uc.CreateShare(context.Background(), folderID, uuid.New())
 
 	require.NoError(t, err)
 	assert.False(t, created)
@@ -96,7 +96,7 @@ func TestShareUsecase_CreateShare_ConcurrentCreateFallback(t *testing.T) {
 	folderShareRepo.failCreateWithUniqueViolation = true
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	token, created, err := uc.CreateShare(context.Background(), folderID, "kp_abc123")
+	token, created, err := uc.CreateShare(context.Background(), folderID, uuid.New())
 
 	require.NoError(t, err)
 	assert.False(t, created)
@@ -108,7 +108,7 @@ func TestShareUsecase_CreateShare_NotOwned(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{err: gorm.ErrRecordNotFound}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	_, _, err := uc.CreateShare(context.Background(), folderID, "kp_abc123")
+	_, _, err := uc.CreateShare(context.Background(), folderID, uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	assert.Equal(t, 0, folderShareRepo.createCalls)
@@ -122,7 +122,7 @@ func TestShareUsecase_GetShare_Found(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo(existing)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	token, err := uc.GetShare(context.Background(), folderID, "kp_abc123")
+	token, err := uc.GetShare(context.Background(), folderID, uuid.New())
 
 	require.NoError(t, err)
 	assert.Equal(t, "existing-token", token)
@@ -133,7 +133,7 @@ func TestShareUsecase_GetShare_NotShared(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	_, err := uc.GetShare(context.Background(), folderID, "kp_abc123")
+	_, err := uc.GetShare(context.Background(), folderID, uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -143,7 +143,7 @@ func TestShareUsecase_GetShare_NotOwned(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{err: gorm.ErrRecordNotFound}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	_, err := uc.GetShare(context.Background(), folderID, "kp_abc123")
+	_, err := uc.GetShare(context.Background(), folderID, uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -156,7 +156,7 @@ func TestShareUsecase_DeleteShare_RevokesExisting(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo(existing)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	err := uc.DeleteShare(context.Background(), folderID, "kp_abc123")
+	err := uc.DeleteShare(context.Background(), folderID, uuid.New())
 	require.NoError(t, err)
 
 	_, getErr := folderShareRepo.GetByFolderID(context.Background(), folderID)
@@ -168,7 +168,7 @@ func TestShareUsecase_DeleteShare_NoopWhenAbsent(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{folder: &domain.Folder{ID: folderID}}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	err := uc.DeleteShare(context.Background(), folderID, "kp_abc123")
+	err := uc.DeleteShare(context.Background(), folderID, uuid.New())
 
 	require.NoError(t, err)
 }
@@ -178,7 +178,7 @@ func TestShareUsecase_DeleteShare_NotOwned(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{err: gorm.ErrRecordNotFound}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	err := uc.DeleteShare(context.Background(), folderID, "kp_abc123")
+	err := uc.DeleteShare(context.Background(), folderID, uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -195,7 +195,7 @@ func TestShareUsecase_GetSharedFolder_AssemblesFolderAndImages(t *testing.T) {
 		Token:    "tok_abc123",
 		Folder: domain.Folder{
 			ID:          folderID,
-			UserID:      "kp_abc123",
+			UserID:      uuid.New(),
 			Name:        "travel",
 			Description: &notes,
 		},
@@ -247,11 +247,12 @@ func TestShareUsecase_GetSharedFolder_UnknownToken(t *testing.T) {
 
 func TestShareUsecase_GetSharedFolderInfo_ValidToken(t *testing.T) {
 	folderID := uuid.New()
+	folderUserID := uuid.New()
 	share := &domain.FolderShare{
 		ID:       uuid.New(),
 		FolderID: folderID,
 		Token:    "tok_abc123",
-		Folder:   domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "travel"},
+		Folder:   domain.Folder{ID: folderID, UserID: folderUserID, Name: "travel"},
 	}
 	folderShareRepo := newFakeFolderShareRepo(share)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
@@ -261,7 +262,7 @@ func TestShareUsecase_GetSharedFolderInfo_ValidToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, folderID, folder.ID)
 	assert.Equal(t, "travel", folder.Name)
-	assert.Equal(t, "kp_abc123", folder.UserID)
+	assert.Equal(t, folderUserID, folder.UserID)
 }
 
 func TestShareUsecase_GetSharedFolderInfo_UnknownToken(t *testing.T) {
@@ -279,7 +280,7 @@ func TestShareUsecase_GetSharedFolder_EmptyFolder(t *testing.T) {
 		ID:       uuid.New(),
 		FolderID: folderID,
 		Token:    "tok_abc123",
-		Folder:   domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "empty"},
+		Folder:   domain.Folder{ID: folderID, UserID: uuid.New(), Name: "empty"},
 	}
 	folderShareRepo := newFakeFolderShareRepo(share)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{images: []*domain.Image{}}, &spyShareStorage{})
@@ -295,12 +296,13 @@ func TestShareUsecase_GetSharedFolder_EmptyFolder(t *testing.T) {
 func TestShareUsecase_GetPublicFoldersByUser_ReturnsSummaries(t *testing.T) {
 	folderID1 := uuid.New()
 	folderID2 := uuid.New()
-	share1 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID1, Token: "tok_one", Folder: domain.Folder{ID: folderID1, Name: "Travel", UserID: "kp_abc123"}}
-	share2 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID2, Token: "tok_two", Folder: domain.Folder{ID: folderID2, Name: "Family", UserID: "kp_abc123"}}
+	publicUserID := uuid.New()
+	share1 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID1, Token: "tok_one", Folder: domain.Folder{ID: folderID1, Name: "Travel", UserID: publicUserID}}
+	share2 := &domain.FolderShare{ID: uuid.New(), FolderID: folderID2, Token: "tok_two", Folder: domain.Folder{ID: folderID2, Name: "Family", UserID: publicUserID}}
 	folderShareRepo := newFakeFolderShareRepo(share1, share2)
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	summaries, err := uc.GetPublicFoldersByUser(context.Background(), "kp_abc123")
+	summaries, err := uc.GetPublicFoldersByUser(context.Background(), publicUserID)
 
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
@@ -313,7 +315,7 @@ func TestShareUsecase_GetPublicFoldersByUser_EmptySliceWhenNone(t *testing.T) {
 	folderShareRepo := newFakeFolderShareRepo()
 	uc := newTestShareUsecase(folderShareRepo, &stubShareFolderRepo{}, &stubShareImageRepo{}, &spyShareStorage{})
 
-	summaries, err := uc.GetPublicFoldersByUser(context.Background(), "kp_abc123")
+	summaries, err := uc.GetPublicFoldersByUser(context.Background(), uuid.New())
 
 	require.NoError(t, err)
 	assert.Empty(t, summaries)
@@ -331,7 +333,7 @@ func TestShareUsecase_GetSharedFolderByFolderID_ReturnsFolderContents(t *testing
 		Token:    "tok_abc123",
 		Folder: domain.Folder{
 			ID:          folderID,
-			UserID:      "kp_abc123",
+			UserID:      uuid.New(),
 			Name:        "travel",
 			Description: &notes,
 		},

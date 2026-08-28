@@ -20,17 +20,18 @@ func TestImageRepository_ListAllByUserID_IncludesTrashedExcludesOtherUsers(t *te
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_imgall_owner")
 	createUser(t, tx, "kp_imgall_other")
+	ownerID := mustMakeUserID("kp_imgall_owner")
 	repo := NewImageRepository(tx)
 
-	active, err := repo.Create(context.Background(), newTestImage("kp_imgall_owner"))
+	active, err := repo.Create(context.Background(), newTestImage(ownerID))
 	require.NoError(t, err)
-	trashed, err := repo.Create(context.Background(), newTestImage("kp_imgall_owner"))
+	trashed, err := repo.Create(context.Background(), newTestImage(ownerID))
 	require.NoError(t, err)
-	require.NoError(t, repo.SoftDelete(context.Background(), trashed.ID, "kp_imgall_owner"))
-	_, err = repo.Create(context.Background(), newTestImage("kp_imgall_other"))
+	require.NoError(t, repo.SoftDelete(context.Background(), trashed.ID, ownerID))
+	_, err = repo.Create(context.Background(), newTestImage(mustMakeUserID("kp_imgall_other")))
 	require.NoError(t, err)
 
-	images, err := repo.ListAllByUserID(context.Background(), "kp_imgall_owner")
+	images, err := repo.ListAllByUserID(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	ids := []uuid.UUID{images[0].ID, images[1].ID}
@@ -41,21 +42,23 @@ func TestImageRepository_HardDeleteAllByUserID_RemovesAllIncludingTrashedLeavesO
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_imghard_owner")
 	createUser(t, tx, "kp_imghard_other")
+	ownerID := mustMakeUserID("kp_imghard_owner")
+	otherID := mustMakeUserID("kp_imghard_other")
 	repo := NewImageRepository(tx)
 
-	_, err := repo.Create(context.Background(), newTestImage("kp_imghard_owner"))
+	_, err := repo.Create(context.Background(), newTestImage(ownerID))
 	require.NoError(t, err)
-	trashed, err := repo.Create(context.Background(), newTestImage("kp_imghard_owner"))
+	trashed, err := repo.Create(context.Background(), newTestImage(ownerID))
 	require.NoError(t, err)
-	require.NoError(t, repo.SoftDelete(context.Background(), trashed.ID, "kp_imghard_owner"))
-	otherImg, err := repo.Create(context.Background(), newTestImage("kp_imghard_other"))
+	require.NoError(t, repo.SoftDelete(context.Background(), trashed.ID, ownerID))
+	otherImg, err := repo.Create(context.Background(), newTestImage(otherID))
 	require.NoError(t, err)
 
-	err = repo.HardDeleteAllByUserID(context.Background(), "kp_imghard_owner")
+	err = repo.HardDeleteAllByUserID(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	var ownerCount int64
-	tx.Unscoped().Model(&domain.Image{}).Where("user_id = ?", "kp_imghard_owner").Count(&ownerCount)
+	tx.Unscoped().Model(&domain.Image{}).Where("user_id = ?", ownerID).Count(&ownerCount)
 	assert.EqualValues(t, 0, ownerCount)
 
 	var got domain.Image
@@ -68,13 +71,15 @@ func TestFolderRepository_ClearAllParents_NullsOwnFoldersOnly(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_folderclear_owner")
 	createUser(t, tx, "kp_folderclear_other")
-	parent := createFolder(t, tx, "kp_folderclear_owner", "parent", nil)
-	child := createFolder(t, tx, "kp_folderclear_owner", "child", &parent.ID)
-	otherParent := createFolder(t, tx, "kp_folderclear_other", "other-parent", nil)
-	otherChild := createFolder(t, tx, "kp_folderclear_other", "other-child", &otherParent.ID)
+	ownerID := mustMakeUserID("kp_folderclear_owner")
+	otherID := mustMakeUserID("kp_folderclear_other")
+	parent := createFolder(t, tx, ownerID, "parent", nil)
+	child := createFolder(t, tx, ownerID, "child", &parent.ID)
+	otherParent := createFolder(t, tx, otherID, "other-parent", nil)
+	otherChild := createFolder(t, tx, otherID, "other-child", &otherParent.ID)
 	repo := NewFolderRepository(tx)
 
-	err := repo.ClearAllParents(context.Background(), "kp_folderclear_owner")
+	err := repo.ClearAllParents(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	var gotParent, gotChild, gotOtherChild domain.Folder
@@ -90,17 +95,19 @@ func TestFolderRepository_DeleteAllByUserID_RemovesOwnFoldersLeavesOtherUsers(t 
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_folderdel_owner")
 	createUser(t, tx, "kp_folderdel_other")
-	parent := createFolder(t, tx, "kp_folderdel_owner", "parent", nil)
-	createFolder(t, tx, "kp_folderdel_owner", "child", &parent.ID)
-	otherFolder := createFolder(t, tx, "kp_folderdel_other", "folder", nil)
+	ownerID := mustMakeUserID("kp_folderdel_owner")
+	otherID := mustMakeUserID("kp_folderdel_other")
+	parent := createFolder(t, tx, ownerID, "parent", nil)
+	createFolder(t, tx, ownerID, "child", &parent.ID)
+	otherFolder := createFolder(t, tx, otherID, "folder", nil)
 	repo := NewFolderRepository(tx)
-	require.NoError(t, repo.ClearAllParents(context.Background(), "kp_folderdel_owner"))
+	require.NoError(t, repo.ClearAllParents(context.Background(), ownerID))
 
-	err := repo.DeleteAllByUserID(context.Background(), "kp_folderdel_owner")
+	err := repo.DeleteAllByUserID(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	var ownerCount int64
-	tx.Model(&domain.Folder{}).Where("user_id = ?", "kp_folderdel_owner").Count(&ownerCount)
+	tx.Model(&domain.Folder{}).Where("user_id = ?", ownerID).Count(&ownerCount)
 	assert.EqualValues(t, 0, ownerCount)
 
 	var got domain.Folder
@@ -113,22 +120,24 @@ func TestTagRepository_DeleteAllByUserID_RemovesOwnTagsCascadesImageTagsLeavesOt
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_tagdel_owner")
 	createUser(t, tx, "kp_tagdel_other")
+	ownerID := mustMakeUserID("kp_tagdel_owner")
+	otherID := mustMakeUserID("kp_tagdel_other")
 	imageRepo := NewImageRepository(tx)
 	tagRepo := NewTagRepository(tx)
 
-	img, err := imageRepo.Create(context.Background(), newTestImage("kp_tagdel_owner"))
+	img, err := imageRepo.Create(context.Background(), newTestImage(ownerID))
 	require.NoError(t, err)
-	tag, err := tagRepo.Create(context.Background(), newTestTag("kp_tagdel_owner", "wipetag"))
+	tag, err := tagRepo.Create(context.Background(), newTestTag(ownerID, "wipetag"))
 	require.NoError(t, err)
 	require.NoError(t, tagRepo.ReplaceImageTags(context.Background(), img.ID, []uuid.UUID{tag.ID}))
-	otherTag, err := tagRepo.Create(context.Background(), newTestTag("kp_tagdel_other", "othertag"))
+	otherTag, err := tagRepo.Create(context.Background(), newTestTag(otherID, "othertag"))
 	require.NoError(t, err)
 
-	err = tagRepo.DeleteAllByUserID(context.Background(), "kp_tagdel_owner")
+	err = tagRepo.DeleteAllByUserID(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	var ownerTagCount, imageTagCount int64
-	tx.Model(&domain.Tag{}).Where("user_id = ?", "kp_tagdel_owner").Count(&ownerTagCount)
+	tx.Model(&domain.Tag{}).Where("user_id = ?", ownerID).Count(&ownerTagCount)
 	tx.Table("image_tags").Where("image_id = ?", img.ID).Count(&imageTagCount)
 	assert.EqualValues(t, 0, ownerTagCount)
 	assert.EqualValues(t, 0, imageTagCount)
@@ -143,30 +152,32 @@ func TestPendingUploadRepository_ListAllAndDeleteAllByUserID_ScopedToOwner(t *te
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_pendall_owner")
 	createUser(t, tx, "kp_pendall_other")
+	ownerID := mustMakeUserID("kp_pendall_owner")
+	otherID := mustMakeUserID("kp_pendall_other")
 	repo := NewPendingUploadRepository(tx)
 
 	owned, err := repo.Create(context.Background(), &domain.PendingUpload{
-		UserID: "kp_pendall_owner", Title: "owned", R2Path: "users/kp_pendall_owner/images/1.jpg", MIMEType: "image/jpeg",
+		UserID: ownerID, Title: "owned", R2Path: "users/" + ownerID.String() + "/images/1.jpg", MIMEType: "image/jpeg",
 	})
 	require.NoError(t, err)
 	other, err := repo.Create(context.Background(), &domain.PendingUpload{
-		UserID: "kp_pendall_other", Title: "other", R2Path: "users/kp_pendall_other/images/1.jpg", MIMEType: "image/jpeg",
+		UserID: otherID, Title: "other", R2Path: "users/" + otherID.String() + "/images/1.jpg", MIMEType: "image/jpeg",
 	})
 	require.NoError(t, err)
 
-	listed, err := repo.ListAllByUserID(context.Background(), "kp_pendall_owner")
+	listed, err := repo.ListAllByUserID(context.Background(), ownerID)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 	assert.Equal(t, owned.ID, listed[0].ID)
 
-	err = repo.DeleteAllByUserID(context.Background(), "kp_pendall_owner")
+	err = repo.DeleteAllByUserID(context.Background(), ownerID)
 
 	require.NoError(t, err)
-	remaining, err := repo.ListAllByUserID(context.Background(), "kp_pendall_owner")
+	remaining, err := repo.ListAllByUserID(context.Background(), ownerID)
 	require.NoError(t, err)
 	assert.Empty(t, remaining)
 
-	gotOther, err := repo.GetByID(context.Background(), other.ID, "kp_pendall_other")
+	gotOther, err := repo.GetByID(context.Background(), other.ID, otherID)
 	require.NoError(t, err)
 	assert.Equal(t, other.ID, gotOther.ID)
 }
@@ -176,12 +187,13 @@ func TestPendingUploadRepository_ListAllAndDeleteAllByUserID_ScopedToOwner(t *te
 func TestUserRepository_SetAccountState_UpdatesState(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_setstate")
+	ownerID := mustMakeUserID("kp_setstate")
 	repo := NewUserRepository(tx)
 
-	err := repo.SetAccountState(context.Background(), "kp_setstate", domain.AccountStatePendingDeletion)
+	err := repo.SetAccountState(context.Background(), ownerID, domain.AccountStatePendingDeletion)
 
 	require.NoError(t, err)
-	got, err := repo.GetByID(context.Background(), "kp_setstate")
+	got, err := repo.GetByID(context.Background(), ownerID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.AccountStatePendingDeletion, got.AccountState)
 }
@@ -190,7 +202,7 @@ func TestUserRepository_SetAccountState_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewUserRepository(tx)
 
-	err := repo.SetAccountState(context.Background(), "kp_missing", domain.AccountStatePendingDeletion)
+	err := repo.SetAccountState(context.Background(), uuid.New(), domain.AccountStatePendingDeletion)
 
 	require.ErrorIs(t, err, usecase.ErrUserNotFound)
 }
@@ -198,13 +210,14 @@ func TestUserRepository_SetAccountState_NotFound(t *testing.T) {
 func TestUserRepository_MarkPurged_SetsStateAndTimestamp(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_markpurged")
+	ownerID := mustMakeUserID("kp_markpurged")
 	repo := NewUserRepository(tx)
 	purgedAt := time.Now().Truncate(time.Millisecond)
 
-	err := repo.MarkPurged(context.Background(), "kp_markpurged", purgedAt)
+	err := repo.MarkPurged(context.Background(), ownerID, purgedAt)
 
 	require.NoError(t, err)
-	got, err := repo.GetByID(context.Background(), "kp_markpurged")
+	got, err := repo.GetByID(context.Background(), ownerID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.AccountStatePurged, got.AccountState)
 	require.NotNil(t, got.PurgedAt)
@@ -215,18 +228,20 @@ func TestUserRepository_ListByAccountState_ReturnsMatchingUsers(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_bystate_pending")
 	createUser(t, tx, "kp_bystate_active")
+	pendingID := mustMakeUserID("kp_bystate_pending")
+	activeID := mustMakeUserID("kp_bystate_active")
 	repo := NewUserRepository(tx)
-	require.NoError(t, repo.SetAccountState(context.Background(), "kp_bystate_pending", domain.AccountStatePendingDeletion))
+	require.NoError(t, repo.SetAccountState(context.Background(), pendingID, domain.AccountStatePendingDeletion))
 
 	users, err := repo.ListByAccountState(context.Background(), domain.AccountStatePendingDeletion)
 
 	require.NoError(t, err)
-	ids := make([]string, len(users))
+	ids := make([]uuid.UUID, len(users))
 	for i, u := range users {
 		ids[i] = u.ID
 	}
-	assert.Contains(t, ids, "kp_bystate_pending")
-	assert.NotContains(t, ids, "kp_bystate_active")
+	assert.Contains(t, ids, pendingID)
+	assert.NotContains(t, ids, activeID)
 }
 
 func TestUserRepository_ListByAccountState_EmptyWhenNoneMatch(t *testing.T) {
@@ -245,35 +260,38 @@ func TestUserRepository_ListPurgedBefore_ReturnsExpiredTombstones(t *testing.T) 
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_purgedbefore_old")
 	createUser(t, tx, "kp_purgedbefore_recent")
+	oldID := mustMakeUserID("kp_purgedbefore_old")
+	recentID := mustMakeUserID("kp_purgedbefore_recent")
 	repo := NewUserRepository(tx)
 
 	longAgo := time.Now().Add(-48 * time.Hour)
-	require.NoError(t, repo.MarkPurged(context.Background(), "kp_purgedbefore_old", longAgo))
+	require.NoError(t, repo.MarkPurged(context.Background(), oldID, longAgo))
 	justNow := time.Now()
-	require.NoError(t, repo.MarkPurged(context.Background(), "kp_purgedbefore_recent", justNow))
+	require.NoError(t, repo.MarkPurged(context.Background(), recentID, justNow))
 
 	threshold := time.Now().Add(-25 * time.Hour)
 	users, err := repo.ListPurgedBefore(context.Background(), threshold)
 
 	require.NoError(t, err)
-	ids := make([]string, len(users))
+	ids := make([]uuid.UUID, len(users))
 	for i, u := range users {
 		ids[i] = u.ID
 	}
-	assert.Contains(t, ids, "kp_purgedbefore_old")
-	assert.NotContains(t, ids, "kp_purgedbefore_recent")
+	assert.Contains(t, ids, oldID)
+	assert.NotContains(t, ids, recentID)
 }
 
 func TestUserRepository_HardDelete_Success(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_harddeluser")
+	ownerID := mustMakeUserID("kp_harddeluser")
 	repo := NewUserRepository(tx)
 
-	err := repo.HardDelete(context.Background(), "kp_harddeluser")
+	err := repo.HardDelete(context.Background(), ownerID)
 
 	require.NoError(t, err)
 	var count int64
-	tx.Unscoped().Model(&domain.User{}).Where("id = ?", "kp_harddeluser").Count(&count)
+	tx.Unscoped().Model(&domain.User{}).Where("id = ?", ownerID).Count(&count)
 	assert.EqualValues(t, 0, count)
 }
 
@@ -281,7 +299,7 @@ func TestUserRepository_HardDelete_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	repo := NewUserRepository(tx)
 
-	err := repo.HardDelete(context.Background(), "kp_missing")
+	err := repo.HardDelete(context.Background(), uuid.New())
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -290,8 +308,8 @@ func TestUserRepository_HardDelete_NotFound(t *testing.T) {
 
 func TestAccountRepository_Transaction_WipesAllUserDataInFKOrder(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
-	userID := "kp_accountwipe"
-	createUser(t, tx, userID)
+	createUser(t, tx, "kp_accountwipe")
+	userID := mustMakeUserID("kp_accountwipe")
 
 	parent := createFolder(t, tx, userID, "parent", nil)
 	child := createFolder(t, tx, userID, "child", &parent.ID)
@@ -311,7 +329,7 @@ func TestAccountRepository_Transaction_WipesAllUserDataInFKOrder(t *testing.T) {
 
 	pendingRepo := NewPendingUploadRepository(tx)
 	_, err = pendingRepo.Create(context.Background(), &domain.PendingUpload{
-		UserID: userID, Title: "pending", R2Path: "users/" + userID + "/images/pending.jpg", MIMEType: "image/jpeg",
+		UserID: userID, Title: "pending", R2Path: "users/" + userID.String() + "/images/pending.jpg", MIMEType: "image/jpeg",
 	})
 	require.NoError(t, err)
 

@@ -16,13 +16,13 @@ import (
 const VISION_LABEL_SCORE_THRESHOLD = 0.75
 
 type AgentImageRepository interface {
-	GetImageWithLabels(ctx context.Context, id uuid.UUID, userID string, threshold float64) (*domain.Image, []string, error)
-	GetFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error)
-	GetFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error)
+	GetImageWithLabels(ctx context.Context, id uuid.UUID, userID uuid.UUID, threshold float64) (*domain.Image, []string, error)
+	GetFolderTopLabels(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error)
+	GetFolderImageSamples(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error)
 }
 
 type AgentFolderRepository interface {
-	List(ctx context.Context, userID string) ([]*domain.Folder, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*domain.Folder, error)
 }
 
 type Suggestion struct {
@@ -50,7 +50,7 @@ func NewAgentService(imageRepo AgentImageRepository, folderRepo AgentFolderRepos
 	}
 }
 
-func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (Suggestion, error) {
+func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID uuid.UUID, imageID uuid.UUID) (Suggestion, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "agent.GetFolderSuggestion")
 	defer span.End()
 
@@ -58,7 +58,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 	toolsUsed := []string{}
 	defer func() {
 		observability.LoggerFromContext(ctx, u.tel.Logger).Info("folder suggestion complete",
-			zap.String("user_id", userID),
+			zap.String("user_id", userID.String()),
 			zap.String("image_id", imageID.String()),
 			zap.Int("tool_call_count", len(toolsUsed)),
 			zap.Strings("tools_used", toolsUsed),
@@ -106,7 +106,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 
 	invalidInputCount := 0
 
-	handleFolderIDTool := func(rawInput json.RawMessage, fetchFn func(context.Context, string, uuid.UUID) (string, error)) (string, error) {
+	handleFolderIDTool := func(rawInput json.RawMessage, fetchFn func(context.Context, uuid.UUID, uuid.UUID) (string, error)) (string, error) {
 		var input struct {
 			FolderID string `json:"folder_id"`
 		}
@@ -172,7 +172,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 				switch variant.Name {
 				case "get_folder_top_labels":
 					toolsUsed = append(toolsUsed, variant.Name)
-					result, err := handleFolderIDTool(variant.Input, func(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+					result, err := handleFolderIDTool(variant.Input, func(ctx context.Context, userID uuid.UUID, folderID uuid.UUID) (string, error) {
 						return u.getFolderTopLabels(ctx, userID, folderID, findFolder(folders, folderID))
 					})
 					if err != nil {
@@ -221,7 +221,7 @@ func (u *AgentService) GetFolderSuggestion(ctx context.Context, userID string, i
 }
 
 
-func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, folder *domain.Folder) (string, error) {
+func (a *AgentService) getFolderTopLabels(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, folder *domain.Folder) (string, error) {
 	agg, err := a.imageRepo.GetFolderTopLabels(ctx, userID, folderID, VISION_LABEL_SCORE_THRESHOLD, 5)
 	if err != nil {
 		return "", err
@@ -230,7 +230,7 @@ func (a *AgentService) getFolderTopLabels(ctx context.Context, userID string, fo
 	return formatFolderTopLabels(folderID, folder, agg.ImageCount, agg.TopVisionLabels, agg.TopUserTags)
 }
 
-func (a *AgentService) getFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID) (string, error) {
+func (a *AgentService) getFolderImageSamples(ctx context.Context, userID uuid.UUID, folderID uuid.UUID) (string, error) {
 	images, labelMap, err := a.imageRepo.GetFolderImageSamples(ctx, userID, folderID, VISION_LABEL_SCORE_THRESHOLD, 5)
 	if err != nil {
 		return "", err

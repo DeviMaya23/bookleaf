@@ -23,19 +23,19 @@ type mockTagUsecase struct {
 	err  error
 }
 
-func (m *mockTagUsecase) Create(_ context.Context, _ string, _ string) (*domain.Tag, error) {
+func (m *mockTagUsecase) Create(_ context.Context, _ uuid.UUID, _ string) (*domain.Tag, error) {
 	return m.tag, m.err
 }
 
-func (m *mockTagUsecase) List(_ context.Context, _ string) ([]*domain.Tag, error) {
+func (m *mockTagUsecase) List(_ context.Context, _ uuid.UUID) ([]*domain.Tag, error) {
 	return m.tags, m.err
 }
 
-func (m *mockTagUsecase) Update(_ context.Context, _ uuid.UUID, _ string, _ string) (*domain.Tag, error) {
+func (m *mockTagUsecase) Update(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (*domain.Tag, error) {
 	return m.tag, m.err
 }
 
-func (m *mockTagUsecase) Delete(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTagUsecase) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 

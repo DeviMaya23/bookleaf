@@ -13,12 +13,12 @@ import (
 // Vision
 
 type visionUsecase interface {
-	ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error
+	ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error
 }
 
 type VisionArgs struct {
 	ImageID uuid.UUID `json:"image_id"`
-	UserID  string    `json:"user_id"`
+	UserID  uuid.UUID `json:"user_id"`
 }
 
 func (VisionArgs) Kind() string     { return "vision_labelling" }
@@ -44,7 +44,7 @@ func (w *VisionWorker) Work(ctx context.Context, job *river.Job[VisionArgs]) err
 // CategoriseImage
 
 type categorisationUsecase interface {
-	CategoriseImage(ctx context.Context, userID string, imageID uuid.UUID) error
+	CategoriseImage(ctx context.Context, userID uuid.UUID, imageID uuid.UUID) error
 }
 
 type categorisationBroadcaster interface {
@@ -53,7 +53,7 @@ type categorisationBroadcaster interface {
 
 type CategoriseImageArgs struct {
 	ImageID uuid.UUID `json:"image_id"`
-	UserID  string    `json:"user_id"`
+	UserID  uuid.UUID `json:"user_id"`
 }
 
 func (CategoriseImageArgs) Kind() string     { return "categorise_image" }
@@ -79,7 +79,7 @@ func (w *CategorisationWorker) Work(ctx context.Context, job *river.Job[Categori
 	}
 
 	payload, _ := json.Marshal(map[string]string{"image_id": job.Args.ImageID.String()})
-	w.broadcaster.Publish(job.Args.UserID, domain.Event{
+	w.broadcaster.Publish(job.Args.UserID.String(), domain.Event{
 		Type:    "categorisation_complete",
 		Payload: payload,
 	})

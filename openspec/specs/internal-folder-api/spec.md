@@ -48,25 +48,19 @@ The middleware SHALL read the `X-Bookleaf-Internal-Secret` request header. If th
 `shareUsecase` SHALL implement:
 
 ```go
-type FolderShareSummary struct {
-    FolderID   uuid.UUID
-    Token      string
-    FolderName string
-}
-
-GetPublicFoldersByUser(ctx context.Context, userID string) ([]FolderShareSummary, error)
+GetPublicFoldersByUser(ctx context.Context, userID uuid.UUID) ([]FolderShareSummary, error)
 ```
 
-It SHALL call `FolderShareRepository.ListByUserID(ctx, userID)` and map each result to a `FolderShareSummary`, including `FolderName` from the item. If no rows exist, it SHALL return an empty slice and no error.
+The parameter type changes from `string` to `uuid.UUID` to match the internal identity space. It SHALL call `FolderShareRepository.ListByUserID(ctx, userID)` and map each result to a `FolderShareSummary`. If no rows exist it SHALL return an empty slice and no error.
 
 #### Scenario: Returns all public folders for a user
 
-- **WHEN** `GetPublicFoldersByUser` is called for a user who has two shared folders
+- **WHEN** `GetPublicFoldersByUser` is called with an internal UUID for a user who has two shared folders
 - **THEN** it returns a slice of two `FolderShareSummary` values with the correct `FolderID`, `Token`, and `FolderName` for each
 
 #### Scenario: Returns empty slice when user has no public folders
 
-- **WHEN** `GetPublicFoldersByUser` is called for a user with no `folder_shares` rows
+- **WHEN** `GetPublicFoldersByUser` is called with an internal UUID for a user with no `folder_shares` rows
 - **THEN** it returns an empty slice and no error
 
 ---
@@ -121,33 +115,35 @@ It SHALL call `FolderShareRepository.GetByFolderID(ctx, folderID)`. If found, re
 
 ### Requirement: InternalHandler
 
-The `handler` package SHALL define `InternalHandler` in `handler/internal.go`:
+The `handler` package SHALL define `InternalHandler` in `handler/internal.go`. The `InternalShareUsecase` interface SHALL be updated to accept `uuid.UUID` for `GetPublicFoldersByUser`. `InternalHandler` SHALL additionally depend on a `UserResolver` interface:
 
 ```go
-type InternalShareUsecase interface {
-    GetPublicFoldersByUser(ctx context.Context, userID string) ([]usecase.FolderShareSummary, error)
-    GetSharedFolderByFolderID(ctx context.Context, folderID uuid.UUID) (*usecase.SharedFolder, error)
-    CheckFolderPublicStatus(ctx context.Context, folderID uuid.UUID) (string, error)
+type UserResolver interface {
+    GetByIDPSubject(ctx context.Context, idpSubject string) (*domain.User, error)
 }
-
-type InternalHandler struct { ... }
-
-func NewInternalHandler(shareUsecase InternalShareUsecase, tel *observability.Telemetry) *InternalHandler
 ```
 
-Methods:
-- `ListPublicFolders(c echo.Context) error` — reads `:user_id` path param (string, no UUID parsing), calls `GetPublicFoldersByUser`, returns `200` with `{"folder_list": [{"folder_id": "...", "token": "...", "folder_name": "..."}, ...]}`. Empty list returns `200` with `{"folder_list": []}`.
-- `GetFolderContents(c echo.Context) error` — parses `:folder_id` as UUID (`400` on failure), calls `GetSharedFolderByFolderID`, maps to the same response shape as `GET /share/:token` (`404` on `gorm.ErrRecordNotFound`).
-- `CheckFolderStatus(c echo.Context) error` — parses `:folder_id` as UUID (`400` on failure), calls `CheckFolderPublicStatus`, returns `200` with `{"token": "..."}` or `404` on not-found.
+`ListPublicFolders(c echo.Context) error` SHALL:
+1. Read `:user_id` path param (the Kinde subject sent by the caller)
+2. Call `UserResolver.GetByIDPSubject(ctx, userID)` to resolve to an internal UUID
+3. On `ErrUserNotFound`: return `200 OK` with `{"folder_list": []}` (the caller's user is unknown to Bookleaf — treat as having no public folders)
+4. On success: call `GetPublicFoldersByUser(ctx, user.ID)` and return the result
 
-#### Scenario: ListPublicFolders returns folder list
+#### Scenario: ListPublicFolders resolves Kinde subject to UUID before querying
 
-- **WHEN** `GET /internal/users/:user_id/public-folders` is called with a valid secret and a user who has public folders
-- **THEN** the response is `200 OK` with `{"folder_list": [{"folder_id": "...", "token": "...", "folder_name": "..."}, ...]}`
+- **WHEN** `GET /internal/users/:user_id/public-folders` is called with a Kinde subject and the user exists
+- **THEN** the handler resolves the subject to an internal UUID
+- **AND** queries folders by that UUID
+- **AND** returns `200 OK` with the folder list
 
-#### Scenario: ListPublicFolders returns empty list
+#### Scenario: ListPublicFolders returns empty list for unknown Kinde subject
 
-- **WHEN** `GET /internal/users/:user_id/public-folders` is called for a user with no public folders
+- **WHEN** `GET /internal/users/:user_id/public-folders` is called with a Kinde subject that has no matching user row
+- **THEN** the response is `200 OK` with `{"folder_list": []}`
+
+#### Scenario: ListPublicFolders returns empty list when user has no public folders
+
+- **WHEN** `GET /internal/users/:user_id/public-folders` is called for a known user with no `folder_shares` rows
 - **THEN** the response is `200 OK` with `{"folder_list": []}`
 
 #### Scenario: GetFolderContents returns shared folder shape

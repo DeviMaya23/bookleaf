@@ -20,7 +20,7 @@ type spyCategorisationAgent struct {
 	calls      int
 }
 
-func (s *spyCategorisationAgent) GetFolderSuggestion(_ context.Context, _ string, _ uuid.UUID) (agent.Suggestion, error) {
+func (s *spyCategorisationAgent) GetFolderSuggestion(_ context.Context, _ uuid.UUID, _ uuid.UUID) (agent.Suggestion, error) {
 	s.calls++
 	return s.suggestion, s.err
 }
@@ -31,7 +31,7 @@ type spyCategorisationImageRepo struct {
 	setFolderFolderID *uuid.UUID
 }
 
-func (s *spyCategorisationImageRepo) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+func (s *spyCategorisationImageRepo) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Image, error) {
 	if s.image != nil {
 		return s.image, nil
 	}
@@ -68,7 +68,7 @@ func TestCategorisationUsecase_CategoriseImage_IdempotencyReusesPriorLog(t *test
 	imageRepo := &spyCategorisationImageRepo{}
 	uc := NewCategorisationUsecase(agentSvc, imageRepo, &spyCategorisationFolderRepo{}, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when a prior log entry exists")
@@ -86,7 +86,7 @@ func TestCategorisationUsecase_CategoriseImage_FolderIDAssigned(t *testing.T) {
 	imageRepo := &spyCategorisationImageRepo{}
 	uc := NewCategorisationUsecase(agentSvc, imageRepo, &spyCategorisationFolderRepo{}, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.NoError(t, err)
 	require.NotNil(t, logRepo.created)
@@ -105,7 +105,7 @@ func TestCategorisationUsecase_CategoriseImage_NewFolderCreatedAndAssigned(t *te
 	folderRepo := &spyCategorisationFolderRepo{}
 	uc := NewCategorisationUsecase(agentSvc, imageRepo, folderRepo, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.NoError(t, err)
 	require.NotNil(t, logRepo.created)
@@ -124,7 +124,7 @@ func TestCategorisationUsecase_CategoriseImage_AlreadyInFolder_ReturnsNil(t *tes
 	agentSvc := &spyCategorisationAgent{}
 	uc := NewCategorisationUsecase(agentSvc, imageRepo, &spyCategorisationFolderRepo{}, &fakeCategorisationLogRepo{}, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when image is already in a folder")
@@ -137,7 +137,7 @@ func TestCategorisationUsecase_CategoriseImage_EmptySuggestionReturnsError(t *te
 	agentSvc := &spyCategorisationAgent{suggestion: agent.Suggestion{Reasoning: "indecisive"}}
 	uc := NewCategorisationUsecase(agentSvc, &spyCategorisationImageRepo{}, &spyCategorisationFolderRepo{}, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.ErrorContains(t, err, "agent returned suggestion with no folder id or new folder name")
 }
@@ -148,7 +148,7 @@ func TestCategorisationUsecase_CategoriseImage_MonthlyLimitReached_SkipsAgent(t 
 	agentSvc := &spyCategorisationAgent{}
 	uc := NewCategorisationUsecase(agentSvc, &spyCategorisationImageRepo{}, &spyCategorisationFolderRepo{}, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when monthly limit is reached")
@@ -162,7 +162,7 @@ func TestCategorisationUsecase_CategoriseImage_CountQueryError_ReturnsError(t *t
 	agentSvc := &spyCategorisationAgent{}
 	uc := NewCategorisationUsecase(agentSvc, &spyCategorisationImageRepo{}, &spyCategorisationFolderRepo{}, logRepo, noopTel())
 
-	err := uc.CategoriseImage(context.Background(), "kp_abc123", imageID)
+	err := uc.CategoriseImage(context.Background(), uuid.New(), imageID)
 
 	require.ErrorContains(t, err, "db error")
 	assert.Equal(t, 0, agentSvc.calls, "agent must not be called when count query errors")

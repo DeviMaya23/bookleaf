@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupImageTest(t *testing.T) (*imageRepository, string) {
+func setupImageTest(t *testing.T) (*imageRepository, uuid.UUID) {
 	t.Helper()
 	tx := testutil.NewTestTx(t, testDB)
 
@@ -28,14 +28,14 @@ func setupImageTest(t *testing.T) (*imageRepository, string) {
 	return NewImageRepository(tx), user.ID
 }
 
-func newTestImage(userID string) *domain.Image {
+func newTestImage(userID uuid.UUID) *domain.Image {
 	id := uuid.New()
 	return &domain.Image{
-		ID:         id,
-		UserID:     userID,
-		Title:      "test image",
-		MIMEType:   "image/jpeg",
-		R2Path:     "users/" + userID + "/images/" + id.String() + ".jpg",
+		ID:       id,
+		UserID:   userID,
+		Title:    "test image",
+		MIMEType: "image/jpeg",
+		R2Path:   "users/" + userID.String() + "/images/" + id.String() + ".jpg",
 	}
 }
 
@@ -185,7 +185,7 @@ func TestImageRepository_UpdateThumbnailPath_Success(t *testing.T) {
 	created, err := repo.Create(context.Background(), newTestImage(userID))
 	require.NoError(t, err)
 
-	thumbPath := "users/" + userID + "/thumbnails/" + created.ID.String() + ".jpg"
+	thumbPath := "users/" + userID.String() + "/thumbnails/" + created.ID.String() + ".jpg"
 	err = repo.UpdateThumbnailPath(context.Background(), created.ID, thumbPath)
 
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestImageRepository_Update_SelectiveFieldUpdate(t *testing.T) {
 	repo, userID := setupImageTest(t)
 
 	img := newTestImage(userID)
-	thumbPath := "users/" + userID + "/thumbnails/test.jpg"
+	thumbPath := "users/" + userID.String() + "/thumbnails/test.jpg"
 	img.ThumbnailPath = &thumbPath
 	created, err := repo.Create(context.Background(), img)
 	require.NoError(t, err)
@@ -1072,7 +1072,7 @@ func TestImageRepository_ListByFolder_ScopedToFolder(t *testing.T) {
 // listAllPages walks every page of the cursor-paginated (non-folder) branch for the
 // given sort/direction, asserting no duplicates appear across page boundaries, and
 // returns the IDs in the order returned by the repository.
-func listAllPages(t *testing.T, repo *imageRepository, userID string, sortField, direction string, pageLimit int) []uuid.UUID {
+func listAllPages(t *testing.T, repo *imageRepository, userID uuid.UUID, sortField, direction string, pageLimit int) []uuid.UUID {
 	t.Helper()
 
 	var cursor *usecase.ImageCursor
@@ -1111,7 +1111,7 @@ func listAllPages(t *testing.T, repo *imageRepository, userID string, sortField,
 	return collected
 }
 
-func listAllTrashedPages(t *testing.T, repo *imageRepository, userID string, sortField, direction string, pageLimit int) []uuid.UUID {
+func listAllTrashedPages(t *testing.T, repo *imageRepository, userID uuid.UUID, sortField, direction string, pageLimit int) []uuid.UUID {
 	t.Helper()
 
 	var cursor *usecase.ImageCursor
@@ -1375,7 +1375,7 @@ func TestImageRepository_AddImageToFolder_AppendsAfterExistingMax(t *testing.T) 
 	assert.Greater(t, secondPosition, firstPosition)
 }
 
-func mustGetImageFolderPosition(t *testing.T, repo *imageRepository, imageID uuid.UUID, userID string, folderID uuid.UUID) string {
+func mustGetImageFolderPosition(t *testing.T, repo *imageRepository, imageID uuid.UUID, userID uuid.UUID, folderID uuid.UUID) string {
 	t.Helper()
 	found, err := repo.GetByID(context.Background(), imageID, userID)
 	require.NoError(t, err)

@@ -3,6 +3,7 @@ package domain
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -15,7 +16,8 @@ const (
 )
 
 type User struct {
-	ID                      string         `gorm:"type:text;primaryKey"`
+	ID                      uuid.UUID      `gorm:"type:uuid;primaryKey"`
+	IDPSubject              string         `gorm:"column:idp_subject;not null;uniqueIndex"`
 	VisionEnabled           bool           `gorm:"column:vision_enabled;default:false"`
 	AICategorisationEnabled bool           `gorm:"column:ai_categorisation_enabled;default:false"`
 	AccountState            AccountState   `gorm:"column:account_state;default:active"`

@@ -27,7 +27,7 @@ type UpdateFolderParams struct {
 
 type FolderImageRepository interface {
 	CountByFolderID(ctx context.Context, folderID uuid.UUID) (int64, error)
-	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
+	ListByFolder(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 }
 
 type FolderDetail struct {
@@ -51,7 +51,7 @@ func NewFolderUsecase(folderRepo FolderRepository, imageRepo FolderImageReposito
 	}
 }
 
-func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error) {
+func (u *folderUsecase) Create(ctx context.Context, userID uuid.UUID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CreateFolder")
 	defer span.End()
 
@@ -83,7 +83,7 @@ func (u *folderUsecase) Create(ctx context.Context, userID, name string, parentI
 	return folder, nil
 }
 
-func (u *folderUsecase) List(ctx context.Context, userID string) ([]*domain.Folder, error) {
+func (u *folderUsecase) List(ctx context.Context, userID uuid.UUID) ([]*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListFolders")
 	defer span.End()
 
@@ -96,7 +96,7 @@ func (u *folderUsecase) List(ctx context.Context, userID string) ([]*domain.Fold
 	return folders, nil
 }
 
-func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string) (*FolderDetail, error) {
+func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*FolderDetail, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetFolder")
 	defer span.End()
 
@@ -120,7 +120,7 @@ func (u *folderUsecase) GetByID(ctx context.Context, id uuid.UUID, userID string
 	}, nil
 }
 
-func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string, params UpdateFolderParams) (*domain.Folder, error) {
+func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, params UpdateFolderParams) (*domain.Folder, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateFolder")
 	defer span.End()
 
@@ -160,7 +160,7 @@ func (u *folderUsecase) Update(ctx context.Context, id uuid.UUID, userID string,
 	return folder, nil
 }
 
-func (u *folderUsecase) ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error {
+func (u *folderUsecase) ExportFolder(ctx context.Context, folderID uuid.UUID, userID uuid.UUID, w io.Writer) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ExportFolder")
 	defer span.End()
 
@@ -233,7 +233,7 @@ func sanitizePathSegment(s string) string {
 	return s
 }
 
-func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string) error {
+func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DeleteFolder")
 	defer span.End()
 
@@ -254,7 +254,7 @@ func (u *folderUsecase) Delete(ctx context.Context, id uuid.UUID, userID string)
 		"folder deleted",
 		zap.String("event", "folder.mutated"),
 		zap.String("folder_id", id.String()),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.String("operation", "deleted"),
 		zap.Int("image_count", imageCount),
 	)

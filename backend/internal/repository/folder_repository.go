@@ -29,7 +29,7 @@ func (r *folderRepository) Create(ctx context.Context, folder *domain.Folder) (*
 	return folder, nil
 }
 
-func (r *folderRepository) List(ctx context.Context, userID string) ([]*domain.Folder, error) {
+func (r *folderRepository) List(ctx context.Context, userID uuid.UUID) ([]*domain.Folder, error) {
 	var folders []*domain.Folder
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
@@ -41,7 +41,7 @@ func (r *folderRepository) List(ctx context.Context, userID string) ([]*domain.F
 	return folders, nil
 }
 
-func (r *folderRepository) FindByName(ctx context.Context, userID, name string) (*domain.Folder, error) {
+func (r *folderRepository) FindByName(ctx context.Context, userID uuid.UUID, name string) (*domain.Folder, error) {
 	var folder domain.Folder
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND name ILIKE ?", userID, strings.TrimSpace(name)).
@@ -55,7 +55,7 @@ func (r *folderRepository) FindByName(ctx context.Context, userID, name string) 
 	return &folder, nil
 }
 
-func (r *folderRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error) {
+func (r *folderRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Folder, error) {
 	var folder domain.Folder
 	if err := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -66,7 +66,7 @@ func (r *folderRepository) GetByID(ctx context.Context, id uuid.UUID, userID str
 	return &folder, nil
 }
 
-func (r *folderRepository) Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Folder, error) {
+func (r *folderRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, fields map[string]any) (*domain.Folder, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.Folder{}).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -81,7 +81,7 @@ func (r *folderRepository) Update(ctx context.Context, id uuid.UUID, userID stri
 	return r.GetByID(ctx, id, userID)
 }
 
-func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID, userID string) (int, error) {
+func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID, userID uuid.UUID) (int, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).
 		Model(&domain.Image{}).
@@ -94,7 +94,7 @@ func (r *folderRepository) CountImagesByFolder(ctx context.Context, id uuid.UUID
 	return int(count), nil
 }
 
-func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, userID string) error {
+func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&domain.Folder{}).
 			Where("parent_id = ? AND user_id = ?", id, userID).
@@ -114,7 +114,7 @@ func (r *folderRepository) DeleteWithCascade(ctx context.Context, id uuid.UUID, 
 	})
 }
 
-func (r *folderRepository) ClearAllParents(ctx context.Context, userID string) error {
+func (r *folderRepository) ClearAllParents(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Model(&domain.Folder{}).
 		Where("user_id = ?", userID).
@@ -124,7 +124,7 @@ func (r *folderRepository) ClearAllParents(ctx context.Context, userID string) e
 	return nil
 }
 
-func (r *folderRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+func (r *folderRepository) DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
 		Delete(&domain.Folder{}).Error; err != nil {

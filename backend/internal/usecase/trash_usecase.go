@@ -47,7 +47,7 @@ func (u *trashUsecase) thumbnailURL(ctx context.Context, path *string) *string {
 	return &url
 }
 
-func (u *trashUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {
+func (u *trashUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.SoftDelete")
 	defer span.End()
 
@@ -60,13 +60,13 @@ func (u *trashUsecase) SoftDelete(ctx context.Context, id uuid.UUID, userID stri
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("image mutated",
 		zap.String("event", "image.mutated"),
 		zap.String("image_id", id.String()),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.String("operation", "trashed"),
 	)
 	return nil
 }
 
-func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params ListTrashedParams) (*ListTrashedResult, error) {
+func (u *trashUsecase) ListTrashed(ctx context.Context, userID uuid.UUID, params ListTrashedParams) (*ListTrashedResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListTrashed")
 	defer span.End()
 
@@ -116,7 +116,7 @@ func (u *trashUsecase) ListTrashed(ctx context.Context, userID string, params Li
 	return &ListTrashedResult{Images: items, NextCursor: nextCursor}, nil
 }
 
-func (u *trashUsecase) Restore(ctx context.Context, id uuid.UUID, userID string) (*ImageItem, error) {
+func (u *trashUsecase) Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.Restore")
 	defer span.End()
 
@@ -192,7 +192,7 @@ func (u *trashUsecase) PurgeExpiredTrash(ctx context.Context, threshold time.Dur
 	return nil
 }
 
-func (u *trashUsecase) DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error {
+func (u *trashUsecase) DeleteFromTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DeleteFromTrash")
 	defer span.End()
 
@@ -232,13 +232,13 @@ func (u *trashUsecase) DeleteFromTrash(ctx context.Context, id uuid.UUID, userID
 	logger.Info("image mutated",
 		zap.String("event", "image.mutated"),
 		zap.String("image_id", img.ID.String()),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.String("operation", "deleted_from_trash"),
 	)
 	return nil
 }
 
-func (u *trashUsecase) EmptyTrash(ctx context.Context, userID string) error {
+func (u *trashUsecase) EmptyTrash(ctx context.Context, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.EmptyTrash")
 	defer span.End()
 
@@ -278,14 +278,14 @@ func (u *trashUsecase) EmptyTrash(ctx context.Context, userID string) error {
 
 	logger.Info("trash emptied",
 		zap.String("event", "r2.trash.emptied"),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.Int("deleted", len(images)),
 	)
 
 	return nil
 }
 
-func (u *trashUsecase) BulkTrash(ctx context.Context, userID string, imageIDs []uuid.UUID) (int, error) {
+func (u *trashUsecase) BulkTrash(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID) (int, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkTrash")
 	defer span.End()
 
@@ -309,7 +309,7 @@ func (u *trashUsecase) BulkTrash(ctx context.Context, userID string, imageIDs []
 			logger.Info("skipping unowned image in bulk trash",
 				zap.String("event", "image.bulk_trash.skipped"),
 				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 			)
 			continue
 		}
@@ -318,7 +318,7 @@ func (u *trashUsecase) BulkTrash(ctx context.Context, userID string, imageIDs []
 			logger.Info("skipping image in bulk trash",
 				zap.String("event", "image.bulk_trash.skipped"),
 				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 				zap.Error(err),
 			)
 			continue
@@ -328,7 +328,7 @@ func (u *trashUsecase) BulkTrash(ctx context.Context, userID string, imageIDs []
 
 	logger.Info("bulk trash complete",
 		zap.String("event", "image.bulk_trash.complete"),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.Int("succeeded_count", succeeded),
 	)
 

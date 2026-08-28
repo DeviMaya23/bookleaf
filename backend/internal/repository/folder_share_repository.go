@@ -72,7 +72,7 @@ func (r *folderShareRepository) DeleteByFolderID(ctx context.Context, folderID u
 	return nil
 }
 
-func (r *folderShareRepository) ListByUserID(ctx context.Context, userID string) ([]*usecase.FolderShareListItem, error) {
+func (r *folderShareRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*usecase.FolderShareListItem, error) {
 	var items []*usecase.FolderShareListItem
 	if err := r.db.WithContext(ctx).
 		Table("folder_shares").

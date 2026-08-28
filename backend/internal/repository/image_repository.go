@@ -34,7 +34,7 @@ func (r *imageRepository) Create(ctx context.Context, image *domain.Image) (*dom
 	return image, nil
 }
 
-func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) List(ctx context.Context, userID uuid.UUID, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 	dispatch := usecase.ResolveSort(sortField, direction)
 
@@ -86,7 +86,7 @@ func (r *imageRepository) List(ctx context.Context, userID string, unfiled bool,
 	return images, nil
 }
 
-func (r *imageRepository) ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
+func (r *imageRepository) ListByFolder(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
 	var images []*domain.Image
 	dispatch := usecase.ResolveSort(sortField, direction)
 
@@ -169,7 +169,7 @@ func (r *imageRepository) AddImageToFolder(ctx context.Context, imageID, folderI
 	return nil
 }
 
-func (r *imageRepository) FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID string) ([]uuid.UUID, error) {
+func (r *imageRepository) FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) ([]uuid.UUID, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -302,7 +302,7 @@ func (r *imageRepository) UpdateImageFolderPosition(ctx context.Context, imageID
 	return nil
 }
 
-func (r *imageRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {
+func (r *imageRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Image, error) {
 	var image domain.Image
 	if err := r.db.WithContext(ctx).
 		Preload("Tags").
@@ -315,7 +315,7 @@ func (r *imageRepository) GetByID(ctx context.Context, id uuid.UUID, userID stri
 	return &image, nil
 }
 
-func (r *imageRepository) GetDeletedByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error) {
+func (r *imageRepository) GetDeletedByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Image, error) {
 	var image domain.Image
 	if err := r.db.WithContext(ctx).
 		Unscoped().
@@ -368,7 +368,7 @@ func (r *imageRepository) UpdateLabels(ctx context.Context, id uuid.UUID, rawJSO
 	})
 }
 
-func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
+func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, fields map[string]any) (*domain.Image, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.Image{}).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -383,7 +383,7 @@ func (r *imageRepository) Update(ctx context.Context, id uuid.UUID, userID strin
 	return r.GetByID(ctx, id, userID) // includes Preload("Tags")
 }
 
-func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID string) error {
+func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&domain.Image{})
@@ -397,7 +397,7 @@ func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID s
 	return nil
 }
 
-func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID string) error {
+func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Unscoped().
 		Model(&domain.Image{}).
@@ -413,7 +413,7 @@ func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID stri
 	return nil
 }
 
-func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
+func (r *imageRepository) ListTrashed(ctx context.Context, userID uuid.UUID, name *string, sortField *string, direction *string, cursor *usecase.ImageCursor, limit int) ([]*domain.Image, error) {
 	var images []*domain.Image
 	dispatch := usecase.ResolveSort(sortField, direction)
 
@@ -445,7 +445,7 @@ func (r *imageRepository) ListTrashed(ctx context.Context, userID string, name *
 	return images, nil
 }
 
-func (r *imageRepository) ListAllTrashed(ctx context.Context, userID string) ([]*domain.Image, error) {
+func (r *imageRepository) ListAllTrashed(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error) {
 	var images []*domain.Image
 	if err := r.db.WithContext(ctx).
 		Unscoped().
@@ -481,7 +481,7 @@ func (r *imageRepository) ListExpiredTrash(ctx context.Context, olderThan time.T
 	return images, nil
 }
 
-func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID string) error {
+func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Unscoped().
 		Where("id = ? AND user_id = ?", id, userID).
@@ -495,7 +495,7 @@ func (r *imageRepository) HardDelete(ctx context.Context, id uuid.UUID, userID s
 	return nil
 }
 
-func (r *imageRepository) ListAllByUserID(ctx context.Context, userID string) ([]*domain.Image, error) {
+func (r *imageRepository) ListAllByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error) {
 	var images []*domain.Image
 	if err := r.db.WithContext(ctx).
 		Unscoped().
@@ -506,7 +506,7 @@ func (r *imageRepository) ListAllByUserID(ctx context.Context, userID string) ([
 	return images, nil
 }
 
-func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID string) error {
+func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Unscoped().
 		Where("user_id = ?", userID).
@@ -516,7 +516,7 @@ func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID stri
 	return nil
 }
 
-func (r *imageRepository) FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error) {
+func (r *imageRepository) FindDuplicates(ctx context.Context, userID uuid.UUID, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error) {
 	var images []*domain.Image
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ? AND id != ? AND phash IS NOT NULL AND bit_count(phash # ?::bit(64)) <= ?", userID, excludeID, phash, threshold).
@@ -538,7 +538,7 @@ func (r *imageRepository) ListUnhashed(ctx context.Context, limit int) ([]*domai
 	return images, nil
 }
 
-func (r *imageRepository) ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error) {
+func (r *imageRepository) ListUnlabelled(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error) {
 	var images []*domain.Image
 	if err := r.db.WithContext(ctx).
 		Unscoped().
@@ -563,7 +563,7 @@ func (r *imageRepository) UpdatePHash(ctx context.Context, id uuid.UUID, phash s
 	return nil
 }
 
-func (r *imageRepository) GetImageWithLabels(ctx context.Context, id uuid.UUID, userID string, threshold float64) (*domain.Image, []string, error) {
+func (r *imageRepository) GetImageWithLabels(ctx context.Context, id uuid.UUID, userID uuid.UUID, threshold float64) (*domain.Image, []string, error) {
 	type row struct {
 		domain.Image
 		LabelText *string  `gorm:"column:il_label"`
@@ -596,7 +596,7 @@ func (r *imageRepository) GetImageWithLabels(ctx context.Context, id uuid.UUID, 
 	return &img, labels, nil
 }
 
-func (r *imageRepository) GetFolderTopLabels(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error) {
+func (r *imageRepository) GetFolderTopLabels(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, threshold float64, topN int) (*domain.FolderAggregate, error) {
 	type nameRow struct {
 		Name string `gorm:"column:name"`
 	}
@@ -657,7 +657,7 @@ func (r *imageRepository) GetFolderTopLabels(ctx context.Context, userID string,
 	return agg, nil
 }
 
-func (r *imageRepository) GetFolderImageSamples(ctx context.Context, userID string, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error) {
+func (r *imageRepository) GetFolderImageSamples(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, threshold float64, limit int) ([]*domain.Image, map[uuid.UUID][]string, error) {
 	var images []*domain.Image
 	err := r.db.WithContext(ctx).
 		Joins("JOIN image_folders imf ON imf.image_id = images.id AND imf.folder_id = ?", folderID).

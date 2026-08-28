@@ -31,12 +31,12 @@ var (
 
 type UploadImageRepository interface {
 	Create(ctx context.Context, image *domain.Image) (*domain.Image, error)
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Image, error)
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
 	UpdateLabels(ctx context.Context, id uuid.UUID, rawJSON json.RawMessage, labels []domain.ImageLabel) error
 	UpdateThumbnailPath(ctx context.Context, id uuid.UUID, thumbnailPath string) error
-	FindDuplicates(ctx context.Context, userID string, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error)
-	ListUnlabelled(ctx context.Context, userID string) ([]*domain.Image, error)
+	FindDuplicates(ctx context.Context, userID uuid.UUID, phash string, excludeID uuid.UUID, threshold int) ([]*domain.Image, error)
+	ListUnlabelled(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
 }
 
 const uploadURLTTL = 15 * time.Minute
@@ -61,8 +61,8 @@ type CompleteUploadResult struct {
 }
 
 type imageUploadJobEnqueuer interface {
-	EnqueueVision(ctx context.Context, imageID uuid.UUID, userID string) error
-	EnqueueCategoriseImage(ctx context.Context, imageID uuid.UUID, userID string) error
+	EnqueueVision(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error
+	EnqueueCategoriseImage(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error
 }
 
 type imageUploadUsecase struct {
@@ -108,7 +108,7 @@ func NewImageUploadUsecase(
 	}
 }
 
-func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error) {
+func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.InitiateUpload")
 	defer span.End()
 
@@ -127,7 +127,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 			observability.LoggerFromContext(ctx, u.tel.Logger).Info("initiate upload folder fallback applied",
 				zap.String("event", "image.initiate_upload.folder_fallback"),
 				zap.String("image_id", id.String()),
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 				zap.String("requested_folder_id", folderID.String()),
 				zap.Error(err),
 			)
@@ -154,7 +154,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("upload initiated",
 		zap.String("event", "r2.upload.started"),
 		zap.String("image_id", pending.ID.String()),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.String("mime_type", mimeType),
 		zap.String("r2_key", r2Path),
 	)
@@ -183,7 +183,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID, title, 
 	}, nil
 }
 
-func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*CompleteUploadResult, error) {
+func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID uuid.UUID, width, height *int, fileSize *int64, phash *string) (*CompleteUploadResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CompleteUpload")
 	defer span.End()
 
@@ -202,7 +202,7 @@ func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, u
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("upload completed",
 		zap.String("event", "r2.upload.completed"),
 		zap.String("image_id", id.String()),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.Float64("duration_ms", float64(time.Since(start).Milliseconds())),
 	)
 
@@ -401,7 +401,7 @@ func positiveInt64OrNil(v *int64) *int64 {
 	return v
 }
 
-func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID string) error {
+func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error {
 	user, err := u.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("fetch user: %w", err)
@@ -465,7 +465,7 @@ func (u *imageUploadUsecase) ProcessVisionLabelling(ctx context.Context, imageID
 	return nil
 }
 
-func (u *imageUploadUsecase) BackfillVisionLabels(ctx context.Context, userID string) (int, error) {
+func (u *imageUploadUsecase) BackfillVisionLabels(ctx context.Context, userID uuid.UUID) (int, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BackfillVisionLabels")
 	defer span.End()
 

@@ -31,13 +31,13 @@ type mockTrashRepository struct {
 	lastSoftDeleteIDs  []uuid.UUID
 }
 
-func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Image, error) {
 	return m.image, m.err
 }
-func (m *mockTrashRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+func (m *mockTrashRepository) GetDeletedByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Image, error) {
 	return m.image, m.err
 }
-func (m *mockTrashRepository) SoftDelete(_ context.Context, id uuid.UUID, _ string) error {
+func (m *mockTrashRepository) SoftDelete(_ context.Context, id uuid.UUID, _ uuid.UUID) error {
 	m.softDeleteCalls++
 	m.lastSoftDeleteIDs = append(m.lastSoftDeleteIDs, id)
 	if _, fail := m.softDeleteFailIDs[id]; fail {
@@ -45,26 +45,26 @@ func (m *mockTrashRepository) SoftDelete(_ context.Context, id uuid.UUID, _ stri
 	}
 	return m.err
 }
-func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTrashRepository) Restore(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
-func (m *mockTrashRepository) ListTrashed(_ context.Context, _ string, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockTrashRepository) ListTrashed(_ context.Context, _ uuid.UUID, name *string, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastListName = name
 	m.lastListSort = sortField
 	m.lastListDirection = direction
 	return m.images, m.err
 }
-func (m *mockTrashRepository) ListAllTrashed(_ context.Context, _ string) ([]*domain.Image, error) {
+func (m *mockTrashRepository) ListAllTrashed(_ context.Context, _ uuid.UUID) ([]*domain.Image, error) {
 	return m.images, m.err
 }
 func (m *mockTrashRepository) ListExpiredTrash(_ context.Context, _ time.Time) ([]*domain.Image, error) {
 	return m.images, m.err
 }
-func (m *mockTrashRepository) HardDelete(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTrashRepository) HardDelete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	m.hardDeleteCalls++
 	return m.err
 }
-func (m *mockTrashRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ string) ([]uuid.UUID, error) {
+func (m *mockTrashRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ uuid.UUID) ([]uuid.UUID, error) {
 	m.filterOwnedCalls++
 	m.lastFilterOwnedIDs = ids
 	if m.filterOwnedResult != nil {
@@ -94,7 +94,7 @@ func TestTrashUsecase_ListTrashed_PassesNameToRepository(t *testing.T) {
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 	name := "heartopia"
 
-	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{Name: &name})
+	_, err := uc.ListTrashed(context.Background(), uuid.New(), ListTrashedParams{Name: &name})
 
 	require.NoError(t, err)
 	require.NotNil(t, repo.lastListName)
@@ -116,7 +116,7 @@ func TestTrashUsecase_ListTrashed_SkipsBlankName(t *testing.T) {
 			repo := &mockTrashRepository{images: []*domain.Image{{ID: uuid.New()}}}
 			uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-			_, err := uc.ListTrashed(context.Background(), "kp_abc123", tt.params)
+			_, err := uc.ListTrashed(context.Background(), uuid.New(), tt.params)
 
 			require.NoError(t, err)
 			assert.Nil(t, repo.lastListName)
@@ -131,7 +131,7 @@ func TestTrashUsecase_ListTrashed_PassesSortAndDirection(t *testing.T) {
 	repo := &mockTrashRepository{images: []*domain.Image{}}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{
+	_, err := uc.ListTrashed(context.Background(), uuid.New(), ListTrashedParams{
 		Sort:      &sortVal,
 		Direction: &dirVal,
 	})
@@ -147,7 +147,7 @@ func TestTrashUsecase_ListTrashed_PassesNilSortAndDirection(t *testing.T) {
 	repo := &mockTrashRepository{images: []*domain.Image{}}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	_, err := uc.ListTrashed(context.Background(), "kp_abc123", ListTrashedParams{
+	_, err := uc.ListTrashed(context.Background(), uuid.New(), ListTrashedParams{
 		Sort:      nil,
 		Direction: nil,
 	})
@@ -162,15 +162,16 @@ func TestTrashUsecase_ListTrashed_PassesNilSortAndDirection(t *testing.T) {
 func TestTrashUsecase_EmptyTrash_DeletesAndEnqueues(t *testing.T) {
 	r2Path := "users/u1/images/a.jpg"
 	thumb := "users/u1/thumbnails/a.jpg"
+	userID := uuid.New()
 	images := []*domain.Image{
-		{ID: uuid.New(), UserID: "u1", R2Path: r2Path, ThumbnailPath: &thumb},
-		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/b.jpg"},
+		{ID: uuid.New(), UserID: userID, R2Path: r2Path, ThumbnailPath: &thumb},
+		{ID: uuid.New(), UserID: userID, R2Path: "users/u1/images/b.jpg"},
 	}
 	repo := &mockTrashRepository{images: images}
 	enqueuer := &mockTrashJobEnqueuer{}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
-	err := uc.EmptyTrash(context.Background(), "u1")
+	err := uc.EmptyTrash(context.Background(), userID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, repo.hardDeleteCalls)
@@ -185,7 +186,7 @@ func TestTrashUsecase_EmptyTrash_NoOp(t *testing.T) {
 	enqueuer := &mockTrashJobEnqueuer{}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
-	err := uc.EmptyTrash(context.Background(), "u1")
+	err := uc.EmptyTrash(context.Background(), uuid.New())
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, repo.hardDeleteCalls)
@@ -193,15 +194,16 @@ func TestTrashUsecase_EmptyTrash_NoOp(t *testing.T) {
 }
 
 func TestTrashUsecase_EmptyTrash_EnqueueErrorContinues(t *testing.T) {
+	emptyUserID := uuid.New()
 	images := []*domain.Image{
-		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/a.jpg"},
-		{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/b.jpg"},
+		{ID: uuid.New(), UserID: emptyUserID, R2Path: "users/u1/images/a.jpg"},
+		{ID: uuid.New(), UserID: emptyUserID, R2Path: "users/u1/images/b.jpg"},
 	}
 	repo := &mockTrashRepository{images: images}
 	enqueuer := &mockTrashJobEnqueuer{err: errors.New("queue unavailable")}
 	uc := newTrashUsecase(repo, &mockStorageService{}, enqueuer)
 
-	err := uc.EmptyTrash(context.Background(), "u1")
+	err := uc.EmptyTrash(context.Background(), emptyUserID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, repo.hardDeleteCalls)
@@ -214,12 +216,13 @@ func TestTrashUsecase_EmptyTrash_EnqueueErrorContinues(t *testing.T) {
 func TestTrashUsecase_DeleteFromTrash_DeletesR2AndDB(t *testing.T) {
 	r2Path := "users/u1/images/a.jpg"
 	thumb := "users/u1/thumbnails/a.jpg"
-	img := &domain.Image{ID: uuid.New(), UserID: "u1", R2Path: r2Path, ThumbnailPath: &thumb}
+	deleteUserID := uuid.New()
+	img := &domain.Image{ID: uuid.New(), UserID: deleteUserID, R2Path: r2Path, ThumbnailPath: &thumb}
 	repo := &mockTrashRepository{image: img}
 	store := &mockStorageService{}
 	uc := newTrashUsecase(repo, store, &mockTrashJobEnqueuer{})
 
-	err := uc.DeleteFromTrash(context.Background(), img.ID, "u1")
+	err := uc.DeleteFromTrash(context.Background(), img.ID, deleteUserID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, repo.hardDeleteCalls)
@@ -232,7 +235,7 @@ func TestTrashUsecase_DeleteFromTrash_NotFound(t *testing.T) {
 	repo := &mockTrashRepository{err: gorm.ErrRecordNotFound}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	err := uc.DeleteFromTrash(context.Background(), uuid.New(), "u1")
+	err := uc.DeleteFromTrash(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
@@ -240,12 +243,13 @@ func TestTrashUsecase_DeleteFromTrash_NotFound(t *testing.T) {
 }
 
 func TestTrashUsecase_DeleteFromTrash_R2FailureDoesNotBlockHardDelete(t *testing.T) {
-	img := &domain.Image{ID: uuid.New(), UserID: "u1", R2Path: "users/u1/images/a.jpg"}
+	r2UserID := uuid.New()
+	img := &domain.Image{ID: uuid.New(), UserID: r2UserID, R2Path: "users/u1/images/a.jpg"}
 	repo := &mockTrashRepository{image: img}
 	store := &mockStorageService{deleteObjectErr: errors.New("r2 error")}
 	uc := newTrashUsecase(repo, store, &mockTrashJobEnqueuer{})
 
-	err := uc.DeleteFromTrash(context.Background(), img.ID, "u1")
+	err := uc.DeleteFromTrash(context.Background(), img.ID, r2UserID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, repo.hardDeleteCalls)
@@ -295,7 +299,7 @@ func TestTrashUsecase_BulkTrash_AllSucceed(t *testing.T) {
 	repo := &mockTrashRepository{filterOwnedResult: imageIDs}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	count, err := uc.BulkTrash(context.Background(), "u1", imageIDs)
+	count, err := uc.BulkTrash(context.Background(), uuid.New(), imageIDs)
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, count)
@@ -311,7 +315,7 @@ func TestTrashUsecase_BulkTrash_AlreadyTrashedExcludedOthersSucceed(t *testing.T
 	}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	count, err := uc.BulkTrash(context.Background(), "u1", []uuid.UUID{alreadyTrashed, valid})
+	count, err := uc.BulkTrash(context.Background(), uuid.New(), []uuid.UUID{alreadyTrashed, valid})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
@@ -324,7 +328,7 @@ func TestTrashUsecase_BulkTrash_UnownedImageExcludedOthersSucceed(t *testing.T) 
 	repo := &mockTrashRepository{filterOwnedResult: []uuid.UUID{owned}}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	count, err := uc.BulkTrash(context.Background(), "u1", []uuid.UUID{owned, unowned})
+	count, err := uc.BulkTrash(context.Background(), uuid.New(), []uuid.UUID{owned, unowned})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
@@ -337,7 +341,7 @@ func TestTrashUsecase_BulkTrash_AllInvalidReturnsZeroNoError(t *testing.T) {
 	repo := &mockTrashRepository{filterOwnedResult: []uuid.UUID{}}
 	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
 
-	count, err := uc.BulkTrash(context.Background(), "u1", imageIDs)
+	count, err := uc.BulkTrash(context.Background(), uuid.New(), imageIDs)
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
