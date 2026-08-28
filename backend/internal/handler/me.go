@@ -9,28 +9,29 @@ import (
 	"github.com/devi/bookleaf/internal/handler/middleware"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
 )
 
 type UserUsecase interface {
-	GetByID(ctx context.Context, kindeID string) (*domain.User, error)
-	UpdatePreferences(ctx context.Context, id string, params usecase.UpdateUserPreferencesParams) (*domain.User, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
+	UpdatePreferences(ctx context.Context, id uuid.UUID, params usecase.UpdateUserPreferencesParams) (*domain.User, error)
 }
 
 type AccountUsecase interface {
-	MarkForDeletion(ctx context.Context, userID string) error
+	MarkForDeletion(ctx context.Context, idpSubject string) error
 }
 
 type CategorisationCountUsecase interface {
-	CountThisMonth(ctx context.Context, userID string) (int, error)
+	CountThisMonth(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 type MeHandler struct {
-	userUsecase            UserUsecase
-	accountUsecase         AccountUsecase
-	categorisationUsecase  CategorisationCountUsecase
-	tel                    *observability.Telemetry
+	userUsecase           UserUsecase
+	accountUsecase        AccountUsecase
+	categorisationUsecase CategorisationCountUsecase
+	tel                   *observability.Telemetry
 }
 
 type updateMeRequest struct {
@@ -52,8 +53,8 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.GetMe")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -72,11 +73,10 @@ func (h *MeHandler) GetMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                                  user.ID,
-		"vision_enabled":                      user.VisionEnabled,
-		"folder_icons_enabled":                user.FolderIconsEnabled,
-		"ai_categorisation_enabled":           user.AICategorisationEnabled,
-		"ai_categorisation_count_this_month":  count,
+		"vision_enabled":                     user.VisionEnabled,
+		"folder_icons_enabled":               user.FolderIconsEnabled,
+		"ai_categorisation_enabled":          user.AICategorisationEnabled,
+		"ai_categorisation_count_this_month": count,
 	})
 }
 
@@ -84,8 +84,8 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.UpdateMe")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -139,11 +139,10 @@ func (h *MeHandler) UpdateMe(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]any{
-		"id":                                  user.ID,
-		"vision_enabled":                      user.VisionEnabled,
-		"folder_icons_enabled":                user.FolderIconsEnabled,
-		"ai_categorisation_enabled":           user.AICategorisationEnabled,
-		"ai_categorisation_count_this_month":  count,
+		"vision_enabled":                     user.VisionEnabled,
+		"folder_icons_enabled":               user.FolderIconsEnabled,
+		"ai_categorisation_enabled":          user.AICategorisationEnabled,
+		"ai_categorisation_count_this_month": count,
 	})
 }
 
@@ -151,12 +150,12 @@ func (h *MeHandler) DeleteMe(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteMe")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
-		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	idpSubject, ok := middleware.AuthenticatedIDPSubjectFromContext(c)
+	if !ok || idpSubject == "" {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated idp subject missing in context")
 	}
 
-	if err := h.accountUsecase.MarkForDeletion(ctx, userID); err != nil {
+	if err := h.accountUsecase.MarkForDeletion(ctx, idpSubject); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to schedule account deletion")

@@ -16,12 +16,12 @@ import (
 )
 
 type TrashUsecase interface {
-	SoftDelete(ctx context.Context, id uuid.UUID, userID string) error
-	ListTrashed(ctx context.Context, userID string, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error)
-	Restore(ctx context.Context, id uuid.UUID, userID string) (*usecase.ImageItem, error)
-	DeleteFromTrash(ctx context.Context, id uuid.UUID, userID string) error
-	EmptyTrash(ctx context.Context, userID string) error
-	BulkTrash(ctx context.Context, userID string, imageIDs []uuid.UUID) (int, error)
+	SoftDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	ListTrashed(ctx context.Context, userID uuid.UUID, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error)
+	Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*usecase.ImageItem, error)
+	DeleteFromTrash(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	EmptyTrash(ctx context.Context, userID uuid.UUID) error
+	BulkTrash(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID) (int, error)
 }
 
 type TrashHandler struct {
@@ -45,8 +45,8 @@ func (h *TrashHandler) SoftDelete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -66,8 +66,8 @@ func (h *TrashHandler) ListTrashed(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListTrashed")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -139,8 +139,8 @@ func (h *TrashHandler) Restore(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -166,8 +166,8 @@ func (h *TrashHandler) DeleteFromTrash(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -191,8 +191,8 @@ func (h *TrashHandler) BulkTrash(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkTrash")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -220,8 +220,8 @@ func (h *TrashHandler) EmptyTrash(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.EmptyTrash")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

@@ -35,12 +35,12 @@ func sanitizeFilename(name string) string {
 }
 
 type FolderUsecase interface {
-	Create(ctx context.Context, userID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error)
-	List(ctx context.Context, userID string) ([]*domain.Folder, error)
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*usecase.FolderDetail, error)
-	Update(ctx context.Context, id uuid.UUID, userID string, params usecase.UpdateFolderParams) (*domain.Folder, error)
-	Delete(ctx context.Context, id uuid.UUID, userID string) error
-	ExportFolder(ctx context.Context, folderID uuid.UUID, userID string, w io.Writer) error
+	Create(ctx context.Context, userID uuid.UUID, name string, parentID *uuid.UUID, description *string, icon *string) (*domain.Folder, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*domain.Folder, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*usecase.FolderDetail, error)
+	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, params usecase.UpdateFolderParams) (*domain.Folder, error)
+	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
+	ExportFolder(ctx context.Context, folderID uuid.UUID, userID uuid.UUID, w io.Writer) error
 }
 
 type FolderHandler struct {
@@ -88,8 +88,8 @@ func (h *FolderHandler) CreateFolder(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.CreateFolder")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -118,8 +118,8 @@ func (h *FolderHandler) ListFolders(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListFolders")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -147,8 +147,8 @@ func (h *FolderHandler) GetFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -174,8 +174,8 @@ func (h *FolderHandler) UpdateFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -271,8 +271,8 @@ func (h *FolderHandler) DeleteFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -298,8 +298,8 @@ func (h *FolderHandler) ExportFolder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

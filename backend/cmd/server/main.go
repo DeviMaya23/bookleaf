@@ -320,7 +320,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
 	shareHandler := httphandler.NewShareHandler(shareUsecase, folderUsecase, tel)
-	internalHandler := httphandler.NewInternalHandler(shareUsecase, accountUsecase, tel)
+	internalHandler := httphandler.NewInternalHandler(shareUsecase, accountUsecase, userUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 

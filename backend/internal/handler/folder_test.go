@@ -32,28 +32,28 @@ type mockFolderUsecase struct {
 	exportErr        error
 }
 
-func (m *mockFolderUsecase) Create(_ context.Context, _, _ string, _ *uuid.UUID, _ *string, _ *string) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Create(_ context.Context, _ uuid.UUID, _ string, _ *uuid.UUID, _ *string, _ *string) (*domain.Folder, error) {
 	return m.folder, m.err
 }
 
-func (m *mockFolderUsecase) List(_ context.Context, _ string) ([]*domain.Folder, error) {
+func (m *mockFolderUsecase) List(_ context.Context, _ uuid.UUID) ([]*domain.Folder, error) {
 	return m.folders, m.err
 }
 
-func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ string) (*usecase.FolderDetail, error) {
+func (m *mockFolderUsecase) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*usecase.FolderDetail, error) {
 	return m.detail, m.err
 }
 
-func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateFolderParams) (*domain.Folder, error) {
+func (m *mockFolderUsecase) Update(_ context.Context, _ uuid.UUID, _ uuid.UUID, params usecase.UpdateFolderParams) (*domain.Folder, error) {
 	m.lastUpdateParams = params
 	return m.folder, m.err
 }
 
-func (m *mockFolderUsecase) Delete(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockFolderUsecase) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 
-func (m *mockFolderUsecase) ExportFolder(_ context.Context, _ uuid.UUID, _ string, w io.Writer) error {
+func (m *mockFolderUsecase) ExportFolder(_ context.Context, _ uuid.UUID, _ uuid.UUID, w io.Writer) error {
 	if m.exportErr != nil {
 		return m.exportErr
 	}
@@ -76,7 +76,8 @@ func newEchoContext(t *testing.T, method, path, body string) (echo.Context, *htt
 	}
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set(string(authmw.AuthenticatedUserIDContextKey), "kp_abc123")
+	c.Set(string(authmw.AuthenticatedUserIDContextKey), uuid.New().String())
+	c.Set(string(authmw.AuthenticatedIDPSubjectContextKey), "kp_abc123")
 	return c, rec
 }
 

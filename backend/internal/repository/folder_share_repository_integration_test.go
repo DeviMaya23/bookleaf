@@ -15,7 +15,7 @@ import (
 func TestFolderShareRepository_Create_PersistsAndGetByFolderID(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	created, err := repo.Create(context.Background(), folder.ID, "tok_abc123")
@@ -32,7 +32,7 @@ func TestFolderShareRepository_Create_PersistsAndGetByFolderID(t *testing.T) {
 func TestFolderShareRepository_GetByFolderID_NotFound(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	_, err := repo.GetByFolderID(context.Background(), folder.ID)
@@ -43,7 +43,7 @@ func TestFolderShareRepository_GetByFolderID_NotFound(t *testing.T) {
 func TestFolderShareRepository_Create_DuplicateFolderID(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	_, err := repo.Create(context.Background(), folder.ID, "tok_first")
@@ -59,7 +59,7 @@ func TestFolderShareRepository_GetByToken_PreloadsFolder(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
 	description := "trip board"
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	require.NoError(t, tx.Model(folder).Update("description", description).Error)
 	repo := NewFolderShareRepository(tx)
 
@@ -72,7 +72,7 @@ func TestFolderShareRepository_GetByToken_PreloadsFolder(t *testing.T) {
 	assert.Equal(t, "travel", share.Folder.Name)
 	require.NotNil(t, share.Folder.Description)
 	assert.Equal(t, description, *share.Folder.Description)
-	assert.Equal(t, "kp_abc123", share.Folder.UserID)
+	assert.Equal(t, mustMakeUserID("kp_abc123"), share.Folder.UserID)
 }
 
 func TestFolderShareRepository_GetByToken_NotFound(t *testing.T) {
@@ -89,7 +89,7 @@ func TestFolderShareRepository_GetByToken_NotFound(t *testing.T) {
 func TestFolderShareRepository_DeleteByFolderID_RemovesRow(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	_, err := repo.Create(context.Background(), folder.ID, "tok_abc123")
@@ -104,7 +104,7 @@ func TestFolderShareRepository_DeleteByFolderID_RemovesRow(t *testing.T) {
 func TestFolderShareRepository_DeleteByFolderID_NoRowIsNoop(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	err := repo.DeleteByFolderID(context.Background(), folder.ID)
@@ -117,13 +117,13 @@ func TestFolderShareRepository_DeleteByFolderID_NoRowIsNoop(t *testing.T) {
 func TestFolderShareRepository_CascadeDelete_WhenFolderDeleted(t *testing.T) {
 	tx := testutil.NewTestTx(t, testDB)
 	createUser(t, tx, "kp_abc123")
-	folder := createFolder(t, tx, "kp_abc123", "travel", nil)
+	folder := createFolder(t, tx, mustMakeUserID("kp_abc123"),"travel", nil)
 	repo := NewFolderShareRepository(tx)
 
 	_, err := repo.Create(context.Background(), folder.ID, "tok_abc123")
 	require.NoError(t, err)
 
-	require.NoError(t, NewFolderRepository(tx).DeleteWithCascade(context.Background(), folder.ID, "kp_abc123"))
+	require.NoError(t, NewFolderRepository(tx).DeleteWithCascade(context.Background(), folder.ID, mustMakeUserID("kp_abc123")))
 
 	_, err = repo.GetByFolderID(context.Background(), folder.ID)
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)

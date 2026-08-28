@@ -25,7 +25,7 @@ func (r *tagRepository) Create(ctx context.Context, tag *domain.Tag) (*domain.Ta
 	return tag, nil
 }
 
-func (r *tagRepository) ListByUserID(ctx context.Context, userID string) ([]*domain.Tag, error) {
+func (r *tagRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Tag, error) {
 	var tags []*domain.Tag
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
@@ -36,7 +36,7 @@ func (r *tagRepository) ListByUserID(ctx context.Context, userID string) ([]*dom
 	return tags, nil
 }
 
-func (r *tagRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Tag, error) {
+func (r *tagRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Tag, error) {
 	var tag domain.Tag
 	if err := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -46,7 +46,7 @@ func (r *tagRepository) GetByID(ctx context.Context, id uuid.UUID, userID string
 	return &tag, nil
 }
 
-func (r *tagRepository) Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error) {
+func (r *tagRepository) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.Tag{}).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -60,7 +60,7 @@ func (r *tagRepository) Update(ctx context.Context, id uuid.UUID, userID string,
 	return r.GetByID(ctx, id, userID)
 }
 
-func (r *tagRepository) Delete(ctx context.Context, id uuid.UUID, userID string) error {
+func (r *tagRepository) Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&domain.Tag{})
@@ -96,7 +96,7 @@ func (r *tagRepository) ReplaceImageTags(ctx context.Context, imageID uuid.UUID,
 	})
 }
 
-func (r *tagRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+func (r *tagRepository) DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
 		Delete(&domain.Tag{}).Error; err != nil {

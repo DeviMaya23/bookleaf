@@ -23,11 +23,11 @@ type CategorisationUsecase struct {
 }
 
 type CategorisationAgentService interface {
-	GetFolderSuggestion(ctx context.Context, userID string, imageID uuid.UUID) (agent.Suggestion, error)
+	GetFolderSuggestion(ctx context.Context, userID uuid.UUID, imageID uuid.UUID) (agent.Suggestion, error)
 }
 
 type categorisationImageRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Image, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Image, error)
 	SetImageFolder(ctx context.Context, imageID uuid.UUID, folderID *uuid.UUID) error
 }
 
@@ -38,7 +38,7 @@ type categorisationFolderRepository interface {
 type categorisationLogRepository interface {
 	Create(ctx context.Context, log *domain.CategorisationLog) error
 	GetByImageID(ctx context.Context, imageID uuid.UUID) (*domain.CategorisationLog, error)
-	CountByUserAndMonth(ctx context.Context, userID string, year, month int) (int, error)
+	CountByUserAndMonth(ctx context.Context, userID uuid.UUID, year, month int) (int, error)
 }
 
 func NewCategorisationUsecase(agentService CategorisationAgentService,
@@ -55,12 +55,12 @@ func NewCategorisationUsecase(agentService CategorisationAgentService,
 	}
 }
 
-func (u *CategorisationUsecase) CountThisMonth(ctx context.Context, userID string) (int, error) {
+func (u *CategorisationUsecase) CountThisMonth(ctx context.Context, userID uuid.UUID) (int, error) {
 	now := time.Now().UTC()
 	return u.logRepo.CountByUserAndMonth(ctx, userID, now.Year(), int(now.Month()))
 }
 
-func (u *CategorisationUsecase) CategoriseImage(ctx context.Context, userID string, imageID uuid.UUID) error {
+func (u *CategorisationUsecase) CategoriseImage(ctx context.Context, userID uuid.UUID, imageID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CategoriseImage")
 	defer span.End()
 

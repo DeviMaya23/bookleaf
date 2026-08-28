@@ -69,7 +69,7 @@ func (m *mockImageRepository) Create(_ context.Context, img *domain.Image) (*dom
 	m.createdImage = img
 	return m.image, m.err
 }
-func (m *mockImageRepository) List(_ context.Context, _ string, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) List(_ context.Context, _ uuid.UUID, unfiled bool, folderIDs []uuid.UUID, tagIDs []uuid.UUID, mimeTypes []string, name *string, searchLabels bool, sortField *string, direction *string, _ *ImageCursor, _ int) ([]*domain.Image, error) {
 	m.lastListUnfiled = unfiled
 	m.lastListFolderIDs = folderIDs
 	m.lastListTagIDs = tagIDs
@@ -80,14 +80,14 @@ func (m *mockImageRepository) List(_ context.Context, _ string, unfiled bool, fo
 	m.lastListDirection = direction
 	return m.images, m.err
 }
-func (m *mockImageRepository) ListByFolder(_ context.Context, _ string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
+func (m *mockImageRepository) ListByFolder(_ context.Context, _ uuid.UUID, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error) {
 	m.listByFolderCalls++
 	m.lastListByFolderID = folderID
 	m.lastListSort = sortField
 	m.lastListDirection = direction
 	return m.listByFolderImages, m.err
 }
-func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Image, error) {
+func (m *mockImageRepository) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Image, error) {
 	return m.image, m.err
 }
 func (m *mockImageRepository) UpdateThumbnailPath(_ context.Context, _ uuid.UUID, _ string) error {
@@ -99,9 +99,9 @@ func (m *mockImageRepository) UpdateLabels(_ context.Context, _ uuid.UUID, rawJS
 	m.lastImageLabels = labels
 	return m.err
 }
-func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID string, fields map[string]any) (*domain.Image, error) {
+func (m *mockImageRepository) Update(_ context.Context, id uuid.UUID, userID uuid.UUID, fields map[string]any) (*domain.Image, error) {
 	m.lastUpdateID = id
-	m.lastUpdateBy = userID
+	m.lastUpdateBy = userID.String()
 	m.updateFields = _mapCopy(fields)
 	return m.image, m.err
 }
@@ -127,20 +127,20 @@ func (m *mockImageRepository) MoveImageFolder(_ context.Context, imageID uuid.UU
 func (m *mockImageRepository) UpdateImageFolderPosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) error {
 	return m.err
 }
-func (m *mockImageRepository) ListAllByUserID(_ context.Context, _ string) ([]*domain.Image, error) {
+func (m *mockImageRepository) ListAllByUserID(_ context.Context, _ uuid.UUID) ([]*domain.Image, error) {
 	return m.images, m.err
 }
-func (m *mockImageRepository) HardDeleteAllByUserID(_ context.Context, _ string) error {
+func (m *mockImageRepository) HardDeleteAllByUserID(_ context.Context, _ uuid.UUID) error {
 	return m.err
 }
-func (m *mockImageRepository) FindDuplicates(_ context.Context, _ string, _ string, _ uuid.UUID, _ int) ([]*domain.Image, error) {
+func (m *mockImageRepository) FindDuplicates(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ int) ([]*domain.Image, error) {
 	m.findDuplicatesCalls++
 	return m.findDuplicatesResult, m.findDuplicatesErr
 }
 func (m *mockImageRepository) ListUnhashed(_ context.Context, _ int) ([]*domain.Image, error) {
 	return nil, m.err
 }
-func (m *mockImageRepository) ListUnlabelled(_ context.Context, _ string) ([]*domain.Image, error) {
+func (m *mockImageRepository) ListUnlabelled(_ context.Context, _ uuid.UUID) ([]*domain.Image, error) {
 	return m.listUnlabelledResult, m.listUnlabelledErr
 }
 func (m *mockImageRepository) UpdatePHash(_ context.Context, _ uuid.UUID, _ string) error {
@@ -152,7 +152,7 @@ func (m *mockImageRepository) AddImageToFolder(_ context.Context, imageID, folde
 	m.lastAddToFolderFolder = folderID
 	return m.err
 }
-func (m *mockImageRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ string) ([]uuid.UUID, error) {
+func (m *mockImageRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.UUID, _ uuid.UUID) ([]uuid.UUID, error) {
 	m.filterOwnedCalls++
 	m.lastFilterOwnedIDs = ids
 	if m.filterOwnedResult != nil {
@@ -231,16 +231,16 @@ type mockTagRepository struct {
 func (m *mockTagRepository) Create(_ context.Context, _ *domain.Tag) (*domain.Tag, error) {
 	return m.tag, m.err
 }
-func (m *mockTagRepository) ListByUserID(_ context.Context, _ string) ([]*domain.Tag, error) {
+func (m *mockTagRepository) ListByUserID(_ context.Context, _ uuid.UUID) ([]*domain.Tag, error) {
 	return m.tags, m.err
 }
-func (m *mockTagRepository) GetByID(_ context.Context, _ uuid.UUID, _ string) (*domain.Tag, error) {
+func (m *mockTagRepository) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Tag, error) {
 	return m.tag, m.err
 }
-func (m *mockTagRepository) Update(_ context.Context, _ uuid.UUID, _ string, _ string) (*domain.Tag, error) {
+func (m *mockTagRepository) Update(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (*domain.Tag, error) {
 	return m.tag, m.err
 }
-func (m *mockTagRepository) Delete(_ context.Context, _ uuid.UUID, _ string) error { return m.err }
+func (m *mockTagRepository) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error { return m.err }
 func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUID, tagIDs []uuid.UUID) error {
 	m.replaceCalls++
 	m.lastReplaceImageID = imageID
@@ -251,7 +251,7 @@ func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUI
 	}
 	return m.err
 }
-func (m *mockTagRepository) DeleteAllByUserID(_ context.Context, _ string) error {
+func (m *mockTagRepository) DeleteAllByUserID(_ context.Context, _ uuid.UUID) error {
 	return m.err
 }
 
@@ -289,7 +289,7 @@ func TestImageUsecase_ListImages_PassesFolderIDsTagIDsMIMETypesToRepository(t *t
 	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{FolderIDs: folderIDs, TagIDs: tagIDs, MIMETypes: mimeTypes})
+	_, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{FolderIDs: folderIDs, TagIDs: tagIDs, MIMETypes: mimeTypes})
 
 	require.NoError(t, err)
 	assert.Equal(t, folderIDs, repo.lastListFolderIDs)
@@ -306,7 +306,7 @@ func TestImageUsecase_ListImages_NextCursor(t *testing.T) {
 	repo := &mockImageRepository{images: images}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
+	result, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{Limit: 10})
 
 	require.NoError(t, err)
 	assert.Len(t, result.Images, 10)
@@ -318,7 +318,7 @@ func TestImageUsecase_ListImages_LastPage(t *testing.T) {
 	repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}, {ID: uuid.New()}}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Limit: 10})
+	result, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{Limit: 10})
 
 	require.NoError(t, err)
 	assert.Len(t, result.Images, 2)
@@ -331,7 +331,7 @@ func TestImageUsecase_ListImages_ThumbnailURL(t *testing.T) {
 	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
 	uc := newImageUsecase(repo, nil, store)
 
-	result, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{})
+	result, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{})
 
 	require.NoError(t, err)
 	require.Len(t, result.Images, 1)
@@ -344,7 +344,7 @@ func TestImageUsecase_ListImages_PassesNameToRepository(t *testing.T) {
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 	name := "heartopia"
 
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Name: &name})
+	_, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{Name: &name})
 
 	require.NoError(t, err)
 	require.NotNil(t, repo.lastListName)
@@ -366,7 +366,7 @@ func TestImageUsecase_ListImages_SkipsBlankName(t *testing.T) {
 			repo := &mockImageRepository{images: []*domain.Image{{ID: uuid.New()}}}
 			uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-			_, err := uc.ListImages(context.Background(), "kp_abc123", tt.params)
+			_, err := uc.ListImages(context.Background(), uuid.New(), tt.params)
 
 			require.NoError(t, err)
 			assert.Nil(t, repo.lastListName)
@@ -379,7 +379,7 @@ func TestImageUsecase_ListImages_PassesSearchLabelsToRepository(t *testing.T) {
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 	name := "sunset"
 
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{Name: &name, SearchLabels: true})
+	_, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{Name: &name, SearchLabels: true})
 
 	require.NoError(t, err)
 	assert.True(t, repo.lastListSearchLabels)
@@ -398,10 +398,10 @@ func TestImageUsecase_ListFolderImages_FolderFoundAndOwned(t *testing.T) {
 		},
 	}
 	store := &mockStorageService{getURL: "https://r2.example.com/thumb"}
-	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: uuid.New()}}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, store, folderRepo)
 
-	items, err := uc.ListFolderImages(context.Background(), "kp_abc123", folderID, nil, nil)
+	items, err := uc.ListFolderImages(context.Background(), uuid.New(), folderID, nil, nil)
 
 	require.NoError(t, err)
 	require.Len(t, items, 1)
@@ -417,7 +417,7 @@ func TestImageUsecase_ListFolderImages_FolderNotFoundOrNotOwned(t *testing.T) {
 	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
 
-	_, err := uc.ListFolderImages(context.Background(), "kp_abc123", folderID, nil, nil)
+	_, err := uc.ListFolderImages(context.Background(), uuid.New(), folderID, nil, nil)
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	assert.Equal(t, 0, repo.listByFolderCalls)
@@ -432,7 +432,7 @@ func TestImageUsecase_GetImage_WithThumbnail(t *testing.T) {
 	store := &mockStorageService{getURL: "https://r2.example.com/view"}
 	uc := newImageUsecase(repo, nil, store)
 
-	detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
+	detail, err := uc.GetImage(context.Background(), imageID, uuid.New())
 
 	require.NoError(t, err)
 	assert.Equal(t, imageID, detail.Image.ID)
@@ -447,7 +447,7 @@ func TestImageUsecase_GetImage_NoThumbnail(t *testing.T) {
 	store := &mockStorageService{getURL: "https://r2.example.com/view"}
 	uc := newImageUsecase(repo, nil, store)
 
-	detail, err := uc.GetImage(context.Background(), imageID, "kp_abc123")
+	detail, err := uc.GetImage(context.Background(), imageID, uuid.New())
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://r2.example.com/view", detail.ImageURL)
@@ -459,7 +459,7 @@ func TestImageUsecase_GetImage_PresignFails(t *testing.T) {
 	store := &mockStorageService{err: errors.New("presign failed")}
 	uc := newImageUsecase(repo, nil, store)
 
-	_, err := uc.GetImage(context.Background(), uuid.New(), "kp_abc123")
+	_, err := uc.GetImage(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 }
@@ -472,7 +472,7 @@ func TestImageUsecase_DownloadImage(t *testing.T) {
 	store := &mockStorageService{downloadURL: "https://r2.example.com/download"}
 	uc := newImageUsecase(repo, nil, store)
 
-	url, err := uc.DownloadImage(context.Background(), imageID, "kp_abc123")
+	url, err := uc.DownloadImage(context.Background(), imageID, uuid.New())
 
 	require.NoError(t, err)
 	assert.Equal(t, "https://r2.example.com/download", url)
@@ -489,7 +489,7 @@ func TestImageUsecase_UpdateImage_FieldsAssembled(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{
+	_, err := uc.UpdateImage(context.Background(), imageID, uuid.New(), UpdateImageParams{
 		Title:       &title,
 		Description: &description,
 	})
@@ -505,7 +505,7 @@ func TestImageUsecase_UpdateImage_NilTags_NoReplace(t *testing.T) {
 	tagRepo := &mockTagRepository{}
 	uc := newImageUsecase(repo, tagRepo, &mockStorageService{})
 
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{Tags: nil})
+	_, err := uc.UpdateImage(context.Background(), imageID, uuid.New(), UpdateImageParams{Tags: nil})
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, tagRepo.replaceCalls)
@@ -519,7 +519,7 @@ func TestImageUsecase_UpdateImage_WithTags(t *testing.T) {
 	uc := newImageUsecase(repo, tagRepo, &mockStorageService{})
 
 	tags := []uuid.UUID{tag1, tag2}
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{Tags: &tags})
+	_, err := uc.UpdateImage(context.Background(), imageID, uuid.New(), UpdateImageParams{Tags: &tags})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, tagRepo.replaceCalls)
@@ -532,7 +532,7 @@ func TestImageUsecase_UpdateImage_NilFolderIDs_NoSync(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{FolderIDs: nil})
+	_, err := uc.UpdateImage(context.Background(), imageID, uuid.New(), UpdateImageParams{FolderIDs: nil})
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, repo.syncFolderCalls)
@@ -545,7 +545,7 @@ func TestImageUsecase_UpdateImage_WithFolderIDs(t *testing.T) {
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
 	folderIDs := []uuid.UUID{folderID}
-	_, err := uc.UpdateImage(context.Background(), imageID, "kp_abc123", UpdateImageParams{FolderIDs: &folderIDs})
+	_, err := uc.UpdateImage(context.Background(), imageID, uuid.New(), UpdateImageParams{FolderIDs: &folderIDs})
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, repo.syncFolderCalls)
@@ -561,7 +561,7 @@ func TestImageUsecase_MoveImageFolder_NoOp(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &folderID, &folderID)
+	item, err := uc.MoveImageFolder(context.Background(), imageID, uuid.New(), &folderID, &folderID)
 
 	require.NoError(t, err)
 	assert.NotNil(t, item)
@@ -574,7 +574,7 @@ func TestImageUsecase_MoveImageFolder_Moves(t *testing.T) {
 	repo := &mockImageRepository{image: &domain.Image{ID: imageID}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	item, err := uc.MoveImageFolder(context.Background(), imageID, "kp_abc123", &from, &to)
+	item, err := uc.MoveImageFolder(context.Background(), imageID, uuid.New(), &from, &to)
 
 	require.NoError(t, err)
 	assert.NotNil(t, item)
@@ -591,7 +591,7 @@ func TestImageUsecase_ListImages_PassesSortAndDirection(t *testing.T) {
 	repo := &mockImageRepository{images: []*domain.Image{}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+	_, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{
 		Sort:      &sortVal,
 		Direction: &dirVal,
 	})
@@ -607,7 +607,7 @@ func TestImageUsecase_ListImages_PassesNilSortAndDirection(t *testing.T) {
 	repo := &mockImageRepository{images: []*domain.Image{}}
 	uc := newImageUsecase(repo, nil, &mockStorageService{})
 
-	_, err := uc.ListImages(context.Background(), "kp_abc123", ListImagesParams{
+	_, err := uc.ListImages(context.Background(), uuid.New(), ListImagesParams{
 		Sort:      nil,
 		Direction: nil,
 	})
@@ -623,10 +623,10 @@ func TestImageUsecase_BulkAddToFolder_AllSucceed(t *testing.T) {
 	folderID := uuid.New()
 	imageIDs := []uuid.UUID{uuid.New(), uuid.New()}
 	repo := &mockImageRepository{filterOwnedResult: imageIDs}
-	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: uuid.New()}}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
 
-	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", imageIDs, folderID)
+	count, err := uc.BulkAddToFolder(context.Background(), uuid.New(), imageIDs, folderID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
@@ -640,7 +640,7 @@ func TestImageUsecase_BulkAddToFolder_FolderNotFoundOrUnowned(t *testing.T) {
 	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
 
-	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", imageIDs, folderID)
+	count, err := uc.BulkAddToFolder(context.Background(), uuid.New(), imageIDs, folderID)
 
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 	assert.Equal(t, 0, count)
@@ -653,10 +653,10 @@ func TestImageUsecase_BulkAddToFolder_UnownedImageExcludedOthersSucceed(t *testi
 	owned := uuid.New()
 	unowned := uuid.New()
 	repo := &mockImageRepository{filterOwnedResult: []uuid.UUID{owned}}
-	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: uuid.New()}}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
 
-	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", []uuid.UUID{owned, unowned}, folderID)
+	count, err := uc.BulkAddToFolder(context.Background(), uuid.New(), []uuid.UUID{owned, unowned}, folderID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
@@ -668,10 +668,10 @@ func TestImageUsecase_BulkAddToFolder_AlreadyInFolderCountsAsSuccess(t *testing.
 	folderID := uuid.New()
 	imageID := uuid.New()
 	repo := &mockImageRepository{filterOwnedResult: []uuid.UUID{imageID}}
-	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123"}}
+	folderRepo := &stubImageFolderRepo{folder: &domain.Folder{ID: folderID, UserID: uuid.New()}}
 	uc := newImageUsecaseWithFolderRepo(repo, nil, &mockStorageService{}, folderRepo)
 
-	count, err := uc.BulkAddToFolder(context.Background(), "kp_abc123", []uuid.UUID{imageID}, folderID)
+	count, err := uc.BulkAddToFolder(context.Background(), uuid.New(), []uuid.UUID{imageID}, folderID)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)

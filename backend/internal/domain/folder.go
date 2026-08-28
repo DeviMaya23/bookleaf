@@ -9,7 +9,7 @@ import (
 
 type Folder struct {
 	ID          uuid.UUID  `gorm:"type:uuid;primaryKey"`
-	UserID      string     `gorm:"column:user_id;type:text;not null;index"`
+	UserID      uuid.UUID  `gorm:"column:user_id;type:uuid;not null;index"`
 	ParentID    *uuid.UUID `gorm:"column:parent_id;type:uuid;index"`
 	Name        string     `gorm:"column:name;not null"`
 	Description *string    `gorm:"column:description"`

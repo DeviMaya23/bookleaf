@@ -4,24 +4,24 @@ import (
 	"context"
 
 	"github.com/devi/bookleaf/internal/worker"
+	"github.com/google/uuid"
 	pgx "github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
-	"github.com/google/uuid"
 )
 
 type riverEnqueuer struct {
 	client *river.Client[pgx.Tx]
 }
 
-func (e *riverEnqueuer) EnqueueAccountWipe(ctx context.Context, userID string) error {
-	args := worker.AccountWipeArgs{UserID: userID}
+func (e *riverEnqueuer) EnqueueAccountWipe(ctx context.Context, idpSubject string) error {
+	args := worker.AccountWipeArgs{IDPSubject: idpSubject}
 	_, err := e.client.Insert(ctx, args, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
 	return err
 }
 
-func (e *riverEnqueuer) EnqueueAccountWipeUnique(ctx context.Context, userID string) error {
-	args := worker.AccountWipeArgs{UserID: userID}
+func (e *riverEnqueuer) EnqueueAccountWipeUnique(ctx context.Context, idpSubject string) error {
+	args := worker.AccountWipeArgs{IDPSubject: idpSubject}
 	_, err := e.client.Insert(ctx, args, &river.InsertOpts{
 		MaxAttempts: args.MaxAttempts(),
 		UniqueOpts: river.UniqueOpts{
@@ -32,8 +32,8 @@ func (e *riverEnqueuer) EnqueueAccountWipeUnique(ctx context.Context, userID str
 	return err
 }
 
-func (e *riverEnqueuer) EnqueueBookletUserDeletion(ctx context.Context, userID string) error {
-	args := worker.BookletUserDeletionArgs{UserID: userID}
+func (e *riverEnqueuer) EnqueueBookletUserDeletion(ctx context.Context, idpSubject string) error {
+	args := worker.BookletUserDeletionArgs{IDPSubject: idpSubject}
 	_, err := e.client.Insert(ctx, args, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
 	return err
 }
@@ -44,13 +44,13 @@ func (e *riverEnqueuer) EnqueueR2Delete(ctx context.Context, r2Path string, thum
 	return err
 }
 
-func (e *riverEnqueuer) EnqueueVision(ctx context.Context, imageID uuid.UUID, userID string) error {
+func (e *riverEnqueuer) EnqueueVision(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error {
 	args := worker.VisionArgs{ImageID: imageID, UserID: userID}
 	_, err := e.client.Insert(ctx, args, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
 	return err
 }
 
-func (e *riverEnqueuer) EnqueueCategoriseImage(ctx context.Context, imageID uuid.UUID, userID string) error {
+func (e *riverEnqueuer) EnqueueCategoriseImage(ctx context.Context, imageID uuid.UUID, userID uuid.UUID) error {
 	args := worker.CategoriseImageArgs{ImageID: imageID, UserID: userID}
 	_, err := e.client.Insert(ctx, args, &river.InsertOpts{MaxAttempts: args.MaxAttempts()})
 	return err

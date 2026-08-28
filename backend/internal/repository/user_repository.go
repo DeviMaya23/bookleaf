@@ -8,8 +8,8 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/usecase"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type userRepository struct {
@@ -22,19 +22,18 @@ func NewUserRepository(db *gorm.DB) usecase.UserRepository {
 	}
 }
 
-func (r *userRepository) GetOrCreate(ctx context.Context, id string) (*domain.User, error) {
-	err := r.db.WithContext(ctx).
-		Clauses(clause.OnConflict{DoNothing: true}).
-		Create(&domain.User{ID: id}).
-		Error
-	if err != nil {
+func (r *userRepository) GetOrCreate(ctx context.Context, idpSubject string) (*domain.User, error) {
+	if err := r.db.WithContext(ctx).Exec(
+		"INSERT INTO users (id, idp_subject) VALUES (gen_random_uuid(), ?) ON CONFLICT (idp_subject) DO NOTHING",
+		idpSubject,
+	).Error; err != nil {
 		return nil, fmt.Errorf("insert user: %w", err)
 	}
 
-	return r.GetByID(ctx, id)
+	return r.GetByIDPSubject(ctx, idpSubject)
 }
 
-func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
+func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	var user domain.User
 
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&user).Error
@@ -48,7 +47,21 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	return &user, nil
 }
 
-func (r *userRepository) SetAccountState(ctx context.Context, id string, state domain.AccountState) error {
+func (r *userRepository) GetByIDPSubject(ctx context.Context, idpSubject string) (*domain.User, error) {
+	var user domain.User
+
+	err := r.db.WithContext(ctx).Where("idp_subject = ?", idpSubject).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, usecase.ErrUserNotFound
+		}
+		return nil, fmt.Errorf("select user by idp subject: %w", err)
+	}
+
+	return &user, nil
+}
+
+func (r *userRepository) SetAccountState(ctx context.Context, id uuid.UUID, state domain.AccountState) error {
 	result := r.db.WithContext(ctx).
 		Model(&domain.User{}).
 		Where("id = ?", id).
@@ -62,7 +75,7 @@ func (r *userRepository) SetAccountState(ctx context.Context, id string, state d
 	return nil
 }
 
-func (r *userRepository) MarkPurged(ctx context.Context, id string, purgedAt time.Time) error {
+func (r *userRepository) MarkPurged(ctx context.Context, id uuid.UUID, purgedAt time.Time) error {
 	result := r.db.WithContext(ctx).
 		Model(&domain.User{}).
 		Where("id = ?", id).
@@ -96,7 +109,7 @@ func (r *userRepository) ListPurgedBefore(ctx context.Context, threshold time.Ti
 	return users, nil
 }
 
-func (r *userRepository) HardDelete(ctx context.Context, id string) error {
+func (r *userRepository) HardDelete(ctx context.Context, id uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Unscoped().
 		Where("id = ?", id).
@@ -110,7 +123,7 @@ func (r *userRepository) HardDelete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *userRepository) Update(ctx context.Context, id string, fields map[string]any) (*domain.User, error) {
+func (r *userRepository) Update(ctx context.Context, id uuid.UUID, fields map[string]any) (*domain.User, error) {
 	result := r.db.WithContext(ctx).
 		Model(&domain.User{}).
 		Where("id = ?", id).

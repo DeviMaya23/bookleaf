@@ -8,6 +8,7 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,54 +16,74 @@ import (
 // --- fake ---
 
 type fakeUserRepo struct {
-	users       map[string]*domain.User
-	getOrCreate error
-	updateErr   error
+	byIDPSubject map[string]*domain.User
+	byID         map[uuid.UUID]*domain.User
+	getOrCreate  error
+	updateErr    error
 }
 
 func newFakeUserRepo() *fakeUserRepo {
-	return &fakeUserRepo{users: make(map[string]*domain.User)}
-}
-
-func (f *fakeUserRepo) GetByID(_ context.Context, id string) (*domain.User, error) {
-	user, ok := f.users[id]
-	if !ok {
-		return nil, ErrUserNotFound
+	return &fakeUserRepo{
+		byIDPSubject: make(map[string]*domain.User),
+		byID:         make(map[uuid.UUID]*domain.User),
 	}
-	return user, nil
 }
 
-func (f *fakeUserRepo) GetOrCreate(_ context.Context, id string) (*domain.User, error) {
+func (f *fakeUserRepo) seed(u *domain.User) {
+	f.byID[u.ID] = u
+	f.byIDPSubject[u.IDPSubject] = u
+}
+
+func (f *fakeUserRepo) GetOrCreate(_ context.Context, idpSubject string) (*domain.User, error) {
 	if f.getOrCreate != nil {
 		return nil, f.getOrCreate
 	}
-	user := &domain.User{ID: id}
-	f.users[id] = user
-	return user, nil
+	if u, ok := f.byIDPSubject[idpSubject]; ok {
+		return u, nil
+	}
+	u := &domain.User{ID: uuid.New(), IDPSubject: idpSubject}
+	f.seed(u)
+	return u, nil
 }
 
-func (f *fakeUserRepo) SetAccountState(_ context.Context, id string, state domain.AccountState) error {
-	user, ok := f.users[id]
+func (f *fakeUserRepo) GetByID(_ context.Context, id uuid.UUID) (*domain.User, error) {
+	u, ok := f.byID[id]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return u, nil
+}
+
+func (f *fakeUserRepo) GetByIDPSubject(_ context.Context, idpSubject string) (*domain.User, error) {
+	u, ok := f.byIDPSubject[idpSubject]
+	if !ok {
+		return nil, ErrUserNotFound
+	}
+	return u, nil
+}
+
+func (f *fakeUserRepo) SetAccountState(_ context.Context, id uuid.UUID, state domain.AccountState) error {
+	u, ok := f.byID[id]
 	if !ok {
 		return ErrUserNotFound
 	}
-	user.AccountState = state
+	u.AccountState = state
 	return nil
 }
 
-func (f *fakeUserRepo) MarkPurged(_ context.Context, id string, purgedAt time.Time) error {
-	user, ok := f.users[id]
+func (f *fakeUserRepo) MarkPurged(_ context.Context, id uuid.UUID, purgedAt time.Time) error {
+	u, ok := f.byID[id]
 	if !ok {
 		return ErrUserNotFound
 	}
-	user.AccountState = domain.AccountStatePurged
-	user.PurgedAt = &purgedAt
+	u.AccountState = domain.AccountStatePurged
+	u.PurgedAt = &purgedAt
 	return nil
 }
 
 func (f *fakeUserRepo) ListByAccountState(_ context.Context, state domain.AccountState) ([]*domain.User, error) {
 	var users []*domain.User
-	for _, u := range f.users {
+	for _, u := range f.byID {
 		if u.AccountState == state {
 			users = append(users, u)
 		}
@@ -72,7 +93,7 @@ func (f *fakeUserRepo) ListByAccountState(_ context.Context, state domain.Accoun
 
 func (f *fakeUserRepo) ListPurgedBefore(_ context.Context, threshold time.Time) ([]*domain.User, error) {
 	var users []*domain.User
-	for _, u := range f.users {
+	for _, u := range f.byID {
 		if u.AccountState == domain.AccountStatePurged && u.PurgedAt != nil && u.PurgedAt.Before(threshold) {
 			users = append(users, u)
 		}
@@ -80,32 +101,34 @@ func (f *fakeUserRepo) ListPurgedBefore(_ context.Context, threshold time.Time) 
 	return users, nil
 }
 
-func (f *fakeUserRepo) HardDelete(_ context.Context, id string) error {
-	if _, ok := f.users[id]; !ok {
+func (f *fakeUserRepo) HardDelete(_ context.Context, id uuid.UUID) error {
+	u, ok := f.byID[id]
+	if !ok {
 		return errors.New("record not found")
 	}
-	delete(f.users, id)
+	delete(f.byID, id)
+	delete(f.byIDPSubject, u.IDPSubject)
 	return nil
 }
 
-func (f *fakeUserRepo) Update(_ context.Context, id string, fields map[string]any) (*domain.User, error) {
+func (f *fakeUserRepo) Update(_ context.Context, id uuid.UUID, fields map[string]any) (*domain.User, error) {
 	if f.updateErr != nil {
 		return nil, f.updateErr
 	}
-	user, ok := f.users[id]
+	u, ok := f.byID[id]
 	if !ok {
 		return nil, errors.New("record not found")
 	}
 	if enabled, ok := fields["vision_enabled"].(bool); ok {
-		user.VisionEnabled = enabled
+		u.VisionEnabled = enabled
 	}
 	if enabled, ok := fields["folder_icons_enabled"].(bool); ok {
-		user.FolderIconsEnabled = enabled
+		u.FolderIconsEnabled = enabled
 	}
 	if enabled, ok := fields["ai_categorisation_enabled"].(bool); ok {
-		user.AICategorisationEnabled = enabled
+		u.AICategorisationEnabled = enabled
 	}
-	return user, nil
+	return u, nil
 }
 
 func newTestUserUsecase(repo UserRepository) *userUsecase {
@@ -116,13 +139,15 @@ func newTestUserUsecase(repo UserRepository) *userUsecase {
 
 func TestUserUsecase_GetOrProvision_ExistingUser(t *testing.T) {
 	repo := newFakeUserRepo()
-	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123"}
+	existing := &domain.User{ID: uuid.New(), IDPSubject: "kp_abc123"}
+	repo.seed(existing)
 	uc := newTestUserUsecase(repo)
 
 	user, err := uc.GetOrProvision(context.Background(), "kp_abc123")
 
 	require.NoError(t, err)
-	assert.Equal(t, "kp_abc123", user.ID)
+	assert.Equal(t, existing.ID, user.ID)
+	assert.Equal(t, "kp_abc123", user.IDPSubject)
 }
 
 func TestUserUsecase_GetOrProvision_NewUser(t *testing.T) {
@@ -132,8 +157,9 @@ func TestUserUsecase_GetOrProvision_NewUser(t *testing.T) {
 	user, err := uc.GetOrProvision(context.Background(), "kp_new123")
 
 	require.NoError(t, err)
-	assert.Equal(t, "kp_new123", user.ID)
-	_, exists := repo.users["kp_new123"]
+	assert.NotEqual(t, uuid.Nil, user.ID)
+	assert.Equal(t, "kp_new123", user.IDPSubject)
+	_, exists := repo.byIDPSubject["kp_new123"]
 	assert.True(t, exists)
 }
 
@@ -149,11 +175,12 @@ func TestUserUsecase_GetOrProvision_ProvisionFails(t *testing.T) {
 
 func TestUserUsecase_UpdatePreferences_VisionEnabledSuccess(t *testing.T) {
 	repo := newFakeUserRepo()
-	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", VisionEnabled: false}
+	userID := uuid.New()
+	repo.seed(&domain.User{ID: userID, IDPSubject: "kp_abc123", VisionEnabled: false})
 	uc := newTestUserUsecase(repo)
 	enabled := true
 
-	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{VisionEnabled: &enabled})
+	user, err := uc.UpdatePreferences(context.Background(), userID, UpdateUserPreferencesParams{VisionEnabled: &enabled})
 
 	require.NoError(t, err)
 	assert.True(t, user.VisionEnabled)
@@ -161,11 +188,12 @@ func TestUserUsecase_UpdatePreferences_VisionEnabledSuccess(t *testing.T) {
 
 func TestUserUsecase_UpdatePreferences_FolderIconsEnabledSuccess(t *testing.T) {
 	repo := newFakeUserRepo()
-	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", FolderIconsEnabled: true}
+	userID := uuid.New()
+	repo.seed(&domain.User{ID: userID, IDPSubject: "kp_abc123", FolderIconsEnabled: true})
 	uc := newTestUserUsecase(repo)
 	disabled := false
 
-	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{FolderIconsEnabled: &disabled})
+	user, err := uc.UpdatePreferences(context.Background(), userID, UpdateUserPreferencesParams{FolderIconsEnabled: &disabled})
 
 	require.NoError(t, err)
 	assert.False(t, user.FolderIconsEnabled)
@@ -173,11 +201,12 @@ func TestUserUsecase_UpdatePreferences_FolderIconsEnabledSuccess(t *testing.T) {
 
 func TestUserUsecase_UpdatePreferences_AICategorisationEnabledSuccess(t *testing.T) {
 	repo := newFakeUserRepo()
-	repo.users["kp_abc123"] = &domain.User{ID: "kp_abc123", AICategorisationEnabled: false}
+	userID := uuid.New()
+	repo.seed(&domain.User{ID: userID, IDPSubject: "kp_abc123", AICategorisationEnabled: false})
 	uc := newTestUserUsecase(repo)
 	enabled := true
 
-	user, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{AICategorisationEnabled: &enabled})
+	user, err := uc.UpdatePreferences(context.Background(), userID, UpdateUserPreferencesParams{AICategorisationEnabled: &enabled})
 
 	require.NoError(t, err)
 	assert.True(t, user.AICategorisationEnabled)
@@ -189,7 +218,7 @@ func TestUserUsecase_UpdatePreferences_RepoError(t *testing.T) {
 	uc := newTestUserUsecase(repo)
 	enabled := true
 
-	_, err := uc.UpdatePreferences(context.Background(), "kp_abc123", UpdateUserPreferencesParams{VisionEnabled: &enabled})
+	_, err := uc.UpdatePreferences(context.Background(), uuid.New(), UpdateUserPreferencesParams{VisionEnabled: &enabled})
 
 	require.Error(t, err)
 }

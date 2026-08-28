@@ -16,7 +16,7 @@ type mockCategorisationUsecase struct {
 	err error
 }
 
-func (m *mockCategorisationUsecase) CategoriseImage(_ context.Context, _ string, _ uuid.UUID) error {
+func (m *mockCategorisationUsecase) CategoriseImage(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 
@@ -33,16 +33,17 @@ func (m *mockCategorisationBroadcaster) Publish(userID string, event domain.Even
 func TestCategorisationWorker_Work_OnSuccessPublishesBroadcastEvent(t *testing.T) {
 	broadcaster := &mockCategorisationBroadcaster{}
 	w := NewCategorisationWorker(&mockCategorisationUsecase{}, broadcaster)
+	userID := uuid.New()
 	imageID := uuid.New()
 	job := &river.Job[CategoriseImageArgs]{
-		Args: CategoriseImageArgs{UserID: "user1", ImageID: imageID},
+		Args: CategoriseImageArgs{UserID: userID, ImageID: imageID},
 	}
 
 	err := w.Work(context.Background(), job)
 
 	require.NoError(t, err)
 	require.Len(t, broadcaster.published, 1)
-	assert.Equal(t, "user1", broadcaster.userIDs[0])
+	assert.Equal(t, userID.String(), broadcaster.userIDs[0])
 	assert.Equal(t, "categorisation_complete", broadcaster.published[0].Type)
 	assert.Contains(t, string(broadcaster.published[0].Payload), imageID.String())
 }
@@ -51,7 +52,7 @@ func TestCategorisationWorker_Work_OnUsecaseErrorBroadcasterNotCalled(t *testing
 	broadcaster := &mockCategorisationBroadcaster{}
 	w := NewCategorisationWorker(&mockCategorisationUsecase{err: errors.New("categorisation failed")}, broadcaster)
 	job := &river.Job[CategoriseImageArgs]{
-		Args: CategoriseImageArgs{UserID: "user1", ImageID: uuid.New()},
+		Args: CategoriseImageArgs{UserID: uuid.New(), ImageID: uuid.New()},
 	}
 
 	err := w.Work(context.Background(), job)

@@ -26,7 +26,7 @@ func (r *pendingUploadRepository) Create(ctx context.Context, pending *domain.Pe
 	return pending, nil
 }
 
-func (r *pendingUploadRepository) GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.PendingUpload, error) {
+func (r *pendingUploadRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.PendingUpload, error) {
 	var pending domain.PendingUpload
 	if err := r.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
@@ -61,7 +61,7 @@ func (r *pendingUploadRepository) Transaction(ctx context.Context, fn func(pendi
 	})
 }
 
-func (r *pendingUploadRepository) ListAllByUserID(ctx context.Context, userID string) ([]*domain.PendingUpload, error) {
+func (r *pendingUploadRepository) ListAllByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.PendingUpload, error) {
 	var pending []*domain.PendingUpload
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
@@ -71,7 +71,7 @@ func (r *pendingUploadRepository) ListAllByUserID(ctx context.Context, userID st
 	return pending, nil
 }
 
-func (r *pendingUploadRepository) DeleteAllByUserID(ctx context.Context, userID string) error {
+func (r *pendingUploadRepository) DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
 		Delete(&domain.PendingUpload{}).Error; err != nil {

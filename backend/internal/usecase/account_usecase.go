@@ -15,13 +15,13 @@ import (
 const purgedAccountTTL = 25 * time.Hour
 
 type BookletClient interface {
-	DeleteUser(ctx context.Context, userID string) error
+	DeleteUser(ctx context.Context, idpSubject string) error
 }
 
 type accountJobEnqueuer interface {
-	EnqueueAccountWipe(ctx context.Context, userID string) error
-	EnqueueAccountWipeUnique(ctx context.Context, userID string) error
-	EnqueueBookletUserDeletion(ctx context.Context, userID string) error
+	EnqueueAccountWipe(ctx context.Context, idpSubject string) error
+	EnqueueAccountWipeUnique(ctx context.Context, idpSubject string) error
+	EnqueueBookletUserDeletion(ctx context.Context, idpSubject string) error
 	EnqueueR2Delete(ctx context.Context, r2Path string, thumbnailPath *string) error
 }
 
@@ -52,11 +52,11 @@ func NewAccountUsecase(
 	}
 }
 
-func (u *accountUsecase) MarkForDeletion(ctx context.Context, userID string) error {
+func (u *accountUsecase) MarkForDeletion(ctx context.Context, idpSubject string) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.MarkForDeletion")
 	defer span.End()
 
-	user, err := u.userRepo.GetByID(ctx, userID)
+	user, err := u.userRepo.GetByIDPSubject(ctx, idpSubject)
 	if err != nil {
 		if !errors.Is(err, ErrUserNotFound) {
 			span.RecordError(err)
@@ -64,10 +64,10 @@ func (u *accountUsecase) MarkForDeletion(ctx context.Context, userID string) err
 			return fmt.Errorf("get user: %w", err)
 		}
 		// User has no Bookleaf row — enqueue wipe job for Kinde-only cleanup.
-		if err := u.enqueuer.EnqueueAccountWipe(ctx, userID); err != nil {
+		if err := u.enqueuer.EnqueueAccountWipe(ctx, idpSubject); err != nil {
 			observability.LoggerFromContext(ctx, u.tel.Logger).Warn("failed to enqueue account wipe job for unprovisioned user",
 				zap.String("event", "account.wipe.enqueue_failed_unprovisioned"),
-				zap.String("user_id", userID),
+				zap.String("idp_subject", idpSubject),
 				zap.Error(err),
 			)
 		}
@@ -78,16 +78,16 @@ func (u *accountUsecase) MarkForDeletion(ctx context.Context, userID string) err
 		return nil
 	}
 
-	if err := u.userRepo.SetAccountState(ctx, userID, domain.AccountStatePendingDeletion); err != nil {
+	if err := u.userRepo.SetAccountState(ctx, user.ID, domain.AccountStatePendingDeletion); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("set account state pending deletion: %w", err)
 	}
 
-	if err := u.enqueuer.EnqueueAccountWipe(ctx, userID); err != nil {
+	if err := u.enqueuer.EnqueueAccountWipe(ctx, idpSubject); err != nil {
 		observability.LoggerFromContext(ctx, u.tel.Logger).Warn("failed to enqueue account wipe job",
 			zap.String("event", "account.wipe.enqueue_failed"),
-			zap.String("user_id", userID),
+			zap.String("user_id", user.ID.String()),
 			zap.Error(err),
 		)
 	}
@@ -95,21 +95,35 @@ func (u *accountUsecase) MarkForDeletion(ctx context.Context, userID string) err
 	return nil
 }
 
-func (u *accountUsecase) WipeAccount(ctx context.Context, userID string) error {
+func (u *accountUsecase) WipeAccount(ctx context.Context, idpSubject string) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.WipeAccount")
 	defer span.End()
 
 	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
-	if err := u.kinde.DeleteUserSessions(ctx, userID); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("delete user sessions: %w", err)
-	}
 
-	if err := u.kinde.DeleteUser(ctx, userID); err != nil {
+	user, err := u.userRepo.GetByIDPSubject(ctx, idpSubject)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			// Unprovisioned: no DB row to wipe; clean up Kinde only.
+			if err := u.kinde.DeleteUserSessions(ctx, idpSubject); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return fmt.Errorf("delete user sessions: %w", err)
+			}
+			if err := u.kinde.DeleteUser(ctx, idpSubject); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return fmt.Errorf("delete kinde user: %w", err)
+			}
+			logger.Info("account wiped (unprovisioned)",
+				zap.String("event", "account.wiped"),
+				zap.String("idp_subject", idpSubject),
+			)
+			return nil
+		}
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("delete kinde user: %w", err)
+		return fmt.Errorf("get user by idp subject: %w", err)
 	}
 
 	type r2Item struct {
@@ -118,38 +132,38 @@ func (u *accountUsecase) WipeAccount(ctx context.Context, userID string) error {
 	}
 	var r2Deletions []r2Item
 
-	err := u.accountRepo.Transaction(ctx, func(repos AccountRepos) error {
-		if err := repos.Folders.ClearAllParents(ctx, userID); err != nil {
+	err = u.accountRepo.Transaction(ctx, func(repos AccountRepos) error {
+		if err := repos.Folders.ClearAllParents(ctx, user.ID); err != nil {
 			return fmt.Errorf("clear folder parents: %w", err)
 		}
 
-		images, err := repos.Images.ListAllByUserID(ctx, userID)
+		images, err := repos.Images.ListAllByUserID(ctx, user.ID)
 		if err != nil {
 			return fmt.Errorf("list images: %w", err)
 		}
 		for _, img := range images {
 			r2Deletions = append(r2Deletions, r2Item{path: img.R2Path, thumbnail: img.ThumbnailPath})
 		}
-		if err := repos.Images.HardDeleteAllByUserID(ctx, userID); err != nil {
+		if err := repos.Images.HardDeleteAllByUserID(ctx, user.ID); err != nil {
 			return fmt.Errorf("hard delete images: %w", err)
 		}
 
-		if err := repos.Folders.DeleteAllByUserID(ctx, userID); err != nil {
+		if err := repos.Folders.DeleteAllByUserID(ctx, user.ID); err != nil {
 			return fmt.Errorf("delete folders: %w", err)
 		}
 
-		if err := repos.Tags.DeleteAllByUserID(ctx, userID); err != nil {
+		if err := repos.Tags.DeleteAllByUserID(ctx, user.ID); err != nil {
 			return fmt.Errorf("delete tags: %w", err)
 		}
 
-		pendingUploads, err := repos.PendingUploads.ListAllByUserID(ctx, userID)
+		pendingUploads, err := repos.PendingUploads.ListAllByUserID(ctx, user.ID)
 		if err != nil {
 			return fmt.Errorf("list pending uploads: %w", err)
 		}
 		for _, p := range pendingUploads {
 			r2Deletions = append(r2Deletions, r2Item{path: p.R2Path})
 		}
-		if err := repos.PendingUploads.DeleteAllByUserID(ctx, userID); err != nil {
+		if err := repos.PendingUploads.DeleteAllByUserID(ctx, user.ID); err != nil {
 			return fmt.Errorf("delete pending uploads: %w", err)
 		}
 
@@ -165,24 +179,36 @@ func (u *accountUsecase) WipeAccount(ctx context.Context, userID string) error {
 		if err := u.enqueuer.EnqueueR2Delete(ctx, item.path, item.thumbnail); err != nil {
 			logger.Warn("failed to enqueue r2 delete job during account wipe",
 				zap.String("event", "account.r2_delete.enqueue_failed"),
-				zap.String("user_id", userID),
+				zap.String("user_id", user.ID.String()),
 				zap.String("r2_path", item.path),
 				zap.Error(err),
 			)
 		}
 	}
 
-	if err := u.userRepo.MarkPurged(ctx, userID, time.Now()); err != nil && !errors.Is(err, ErrUserNotFound) {
+	if err := u.userRepo.MarkPurged(ctx, user.ID, time.Now()); err != nil && !errors.Is(err, ErrUserNotFound) {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("mark purged: %w", err)
 	}
 
+	if err := u.kinde.DeleteUserSessions(ctx, idpSubject); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete user sessions: %w", err)
+	}
+
+	if err := u.kinde.DeleteUser(ctx, idpSubject); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("delete kinde user: %w", err)
+	}
+
 	if u.bookletClient != nil {
-		if err := u.enqueuer.EnqueueBookletUserDeletion(ctx, userID); err != nil {
+		if err := u.enqueuer.EnqueueBookletUserDeletion(ctx, idpSubject); err != nil {
 			logger.Warn("failed to enqueue booklet user deletion job",
 				zap.String("event", "account.booklet_deletion.enqueue_failed"),
-				zap.String("user_id", userID),
+				zap.String("user_id", user.ID.String()),
 				zap.Error(err),
 			)
 		}
@@ -190,7 +216,7 @@ func (u *accountUsecase) WipeAccount(ctx context.Context, userID string) error {
 
 	logger.Info("account wiped",
 		zap.String("event", "account.wiped"),
-		zap.String("user_id", userID),
+		zap.String("user_id", user.ID.String()),
 	)
 
 	return nil
@@ -209,10 +235,10 @@ func (u *accountUsecase) ReconcilePendingDeletions(ctx context.Context) error {
 
 	logger := observability.LoggerFromContext(ctx, u.tel.Logger)
 	for _, user := range users {
-		if err := u.enqueuer.EnqueueAccountWipeUnique(ctx, user.ID); err != nil {
+		if err := u.enqueuer.EnqueueAccountWipeUnique(ctx, user.IDPSubject); err != nil {
 			logger.Warn("failed to enqueue reconcile account wipe job",
 				zap.String("event", "account.wipe.reconcile_enqueue_failed"),
-				zap.String("user_id", user.ID),
+				zap.String("user_id", user.ID.String()),
 				zap.Error(err),
 			)
 		}
@@ -245,7 +271,7 @@ func (u *accountUsecase) SweepPurgedAccounts(ctx context.Context) error {
 		if err := u.userRepo.HardDelete(ctx, user.ID); err != nil {
 			logger.Warn("failed to hard delete purged user",
 				zap.String("event", "account.sweep.hard_delete_failed"),
-				zap.String("user_id", user.ID),
+				zap.String("user_id", user.ID.String()),
 				zap.Error(err),
 			)
 		}
@@ -254,11 +280,11 @@ func (u *accountUsecase) SweepPurgedAccounts(ctx context.Context) error {
 	return nil
 }
 
-func (u *accountUsecase) ProcessBookletUserDeletion(ctx context.Context, userID string) error {
+func (u *accountUsecase) ProcessBookletUserDeletion(ctx context.Context, idpSubject string) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ProcessBookletUserDeletion")
 	defer span.End()
 
-	if err := u.bookletClient.DeleteUser(ctx, userID); err != nil {
+	if err := u.bookletClient.DeleteUser(ctx, idpSubject); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("delete booklet user: %w", err)
@@ -266,7 +292,7 @@ func (u *accountUsecase) ProcessBookletUserDeletion(ctx context.Context, userID 
 
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info("booklet account deleted",
 		zap.String("event", "account.booklet_account_deleted"),
-		zap.String("user_id", userID),
+		zap.String("idp_subject", idpSubject),
 	)
 
 	return nil

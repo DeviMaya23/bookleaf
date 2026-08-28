@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
@@ -14,25 +15,31 @@ import (
 )
 
 type InternalShareUsecase interface {
-	GetPublicFoldersByUser(ctx context.Context, userID string) ([]usecase.FolderShareSummary, error)
+	GetPublicFoldersByUser(ctx context.Context, userID uuid.UUID) ([]usecase.FolderShareSummary, error)
 	GetSharedFolderByFolderID(ctx context.Context, folderID uuid.UUID) (*usecase.SharedFolder, error)
 	CheckFolderPublicStatus(ctx context.Context, folderID uuid.UUID) (string, error)
 }
 
 type InternalAccountUsecase interface {
-	MarkForDeletion(ctx context.Context, userID string) error
+	MarkForDeletion(ctx context.Context, idpSubject string) error
+}
+
+type InternalUserResolver interface {
+	GetByIDPSubject(ctx context.Context, idpSubject string) (*domain.User, error)
 }
 
 type InternalHandler struct {
 	shareUsecase   InternalShareUsecase
 	accountUsecase InternalAccountUsecase
+	userResolver   InternalUserResolver
 	tel            *observability.Telemetry
 }
 
-func NewInternalHandler(shareUsecase InternalShareUsecase, accountUsecase InternalAccountUsecase, tel *observability.Telemetry) *InternalHandler {
+func NewInternalHandler(shareUsecase InternalShareUsecase, accountUsecase InternalAccountUsecase, userResolver InternalUserResolver, tel *observability.Telemetry) *InternalHandler {
 	return &InternalHandler{
 		shareUsecase:   shareUsecase,
 		accountUsecase: accountUsecase,
+		userResolver:   userResolver,
 		tel:            tel,
 	}
 }
@@ -51,9 +58,19 @@ func (h *InternalHandler) ListPublicFolders(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListPublicFolders")
 	defer span.End()
 
-	userID := c.Param("user_id")
+	idpSubject := c.Param("user_id")
 
-	summaries, err := h.shareUsecase.GetPublicFoldersByUser(ctx, userID)
+	user, err := h.userResolver.GetByIDPSubject(ctx, idpSubject)
+	if err != nil {
+		if errors.Is(err, usecase.ErrUserNotFound) {
+			return c.JSON(http.StatusOK, listPublicFoldersResponse{FolderList: []folderShareSummaryResponse{}})
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve user")
+	}
+
+	summaries, err := h.shareUsecase.GetPublicFoldersByUser(ctx, user.ID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -135,9 +152,9 @@ func (h *InternalHandler) DeleteAccount(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.DeleteAccount")
 	defer span.End()
 
-	userID := c.Param("id")
+	idpSubject := c.Param("id")
 
-	if err := h.accountUsecase.MarkForDeletion(ctx, userID); err != nil {
+	if err := h.accountUsecase.MarkForDeletion(ctx, idpSubject); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to schedule account deletion")

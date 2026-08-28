@@ -19,13 +19,13 @@ const shareTokenBytes = 16
 // ShareFolderRepository is the narrow folder lookup ShareUsecase needs,
 // satisfied implicitly by the existing folderRepository.
 type ShareFolderRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID, userID string) (*domain.Folder, error)
+	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Folder, error)
 }
 
 // ShareImageRepository is the narrow ordered image listing ShareUsecase
 // needs, satisfied implicitly by the existing imageRepository.
 type ShareImageRepository interface {
-	ListByFolder(ctx context.Context, userID string, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
+	ListByFolder(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, sortField *string, direction *string) ([]*domain.Image, error)
 }
 
 type FolderShareSummary struct {
@@ -81,7 +81,7 @@ func generateShareToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (u *shareUsecase) CreateShare(ctx context.Context, folderID uuid.UUID, userID string) (string, bool, error) {
+func (u *shareUsecase) CreateShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) (string, bool, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CreateShare")
 	defer span.End()
 
@@ -129,7 +129,7 @@ func (u *shareUsecase) CreateShare(ctx context.Context, folderID uuid.UUID, user
 	return created.Token, true, nil
 }
 
-func (u *shareUsecase) GetShare(ctx context.Context, folderID uuid.UUID, userID string) (string, error) {
+func (u *shareUsecase) GetShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) (string, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetShare")
 	defer span.End()
 
@@ -149,7 +149,7 @@ func (u *shareUsecase) GetShare(ctx context.Context, folderID uuid.UUID, userID 
 	return share.Token, nil
 }
 
-func (u *shareUsecase) DeleteShare(ctx context.Context, folderID uuid.UUID, userID string) error {
+func (u *shareUsecase) DeleteShare(ctx context.Context, folderID uuid.UUID, userID uuid.UUID) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DeleteShare")
 	defer span.End()
 
@@ -243,7 +243,7 @@ func (u *shareUsecase) GetSharedFolder(ctx context.Context, token string) (*Shar
 	}, nil
 }
 
-func (u *shareUsecase) GetPublicFoldersByUser(ctx context.Context, userID string) ([]FolderShareSummary, error) {
+func (u *shareUsecase) GetPublicFoldersByUser(ctx context.Context, userID uuid.UUID) ([]FolderShareSummary, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetPublicFoldersByUser")
 	defer span.End()
 

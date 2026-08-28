@@ -10,7 +10,7 @@ import (
 type CategorisationLog struct {
 	ID            uuid.UUID  `gorm:"type:uuid;primaryKey"`
 	ImageID       *uuid.UUID `gorm:"column:image_id;type:uuid"`
-	UserID        string     `gorm:"column:user_id;not null"`
+	UserID        uuid.UUID  `gorm:"column:user_id;type:uuid;not null"`
 	Reasoning     string     `gorm:"column:reasoning;not null"`
 	FolderID      *uuid.UUID `gorm:"column:folder_id;type:uuid"`
 	NewFolderName *string    `gorm:"column:new_folder_name"`

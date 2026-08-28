@@ -17,10 +17,10 @@ import (
 )
 
 type TagUsecase interface {
-	Create(ctx context.Context, userID string, name string) (*domain.Tag, error)
-	List(ctx context.Context, userID string) ([]*domain.Tag, error)
-	Update(ctx context.Context, id uuid.UUID, userID string, name string) (*domain.Tag, error)
-	Delete(ctx context.Context, id uuid.UUID, userID string) error
+	Create(ctx context.Context, userID uuid.UUID, name string) (*domain.Tag, error)
+	List(ctx context.Context, userID uuid.UUID) ([]*domain.Tag, error)
+	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error)
+	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 }
 
 type TagHandler struct {
@@ -54,8 +54,8 @@ func (h *TagHandler) CreateTag(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.CreateTag")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -84,8 +84,8 @@ func (h *TagHandler) ListTags(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListTags")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -113,8 +113,8 @@ func (h *TagHandler) UpdateTag(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -151,8 +151,8 @@ func (h *TagHandler) DeleteTag(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

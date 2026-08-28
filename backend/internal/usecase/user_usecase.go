@@ -5,6 +5,7 @@ import (
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
 )
@@ -21,16 +22,11 @@ func NewUserUsecase(userRepo UserRepository, tel *observability.Telemetry) *user
 	}
 }
 
-func (u *userUsecase) GetOrProvision(ctx context.Context, kindeID string) (*domain.User, error) {
+func (u *userUsecase) GetOrProvision(ctx context.Context, idpSubject string) (*domain.User, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetOrProvision")
 	defer span.End()
 
-	user, err := u.userRepo.GetByID(ctx, kindeID)
-	if err == nil {
-		return user, nil
-	}
-
-	createdUser, err := u.userRepo.GetOrCreate(ctx, kindeID)
+	user, err := u.userRepo.GetOrCreate(ctx, idpSubject)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -40,16 +36,29 @@ func (u *userUsecase) GetOrProvision(ctx context.Context, kindeID string) (*doma
 	observability.LoggerFromContext(ctx, u.tel.Logger).Info(
 		"user persisted",
 		zap.String("event", "user.created"),
-		zap.String("user_id", createdUser.ID),
+		zap.String("user_id", user.ID.String()),
 	)
-	return createdUser, nil
+	return user, nil
 }
 
-func (u *userUsecase) GetByID(ctx context.Context, kindeID string) (*domain.User, error) {
+func (u *userUsecase) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetByID")
 	defer span.End()
 
-	user, err := u.userRepo.GetByID(ctx, kindeID)
+	user, err := u.userRepo.GetByID(ctx, id)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	return user, nil
+}
+
+func (u *userUsecase) GetByIDPSubject(ctx context.Context, idpSubject string) (*domain.User, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetByIDPSubject")
+	defer span.End()
+
+	user, err := u.userRepo.GetByIDPSubject(ctx, idpSubject)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -64,7 +73,7 @@ type UpdateUserPreferencesParams struct {
 	AICategorisationEnabled *bool
 }
 
-func (u *userUsecase) UpdatePreferences(ctx context.Context, id string, params UpdateUserPreferencesParams) (*domain.User, error) {
+func (u *userUsecase) UpdatePreferences(ctx context.Context, id uuid.UUID, params UpdateUserPreferencesParams) (*domain.User, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdatePreferences")
 	defer span.End()
 

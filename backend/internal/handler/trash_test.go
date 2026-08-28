@@ -28,15 +28,15 @@ type mockTrashUsecase struct {
 	lastListTrashedParams usecase.ListTrashedParams
 	bulkTrashResult       int
 	bulkTrashErr          error
-	lastBulkTrashUser     string
+	lastBulkTrashUser     uuid.UUID
 	lastBulkTrashIDs      []uuid.UUID
 }
 
-func (m *mockTrashUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTrashUsecase) SoftDelete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 
-func (m *mockTrashUsecase) ListTrashed(_ context.Context, _ string, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
+func (m *mockTrashUsecase) ListTrashed(_ context.Context, _ uuid.UUID, params usecase.ListTrashedParams) (*usecase.ListTrashedResult, error) {
 	m.lastListTrashedParams = params
 	if m.err != nil {
 		return nil, m.err
@@ -47,19 +47,19 @@ func (m *mockTrashUsecase) ListTrashed(_ context.Context, _ string, params useca
 	return &usecase.ListTrashedResult{}, nil
 }
 
-func (m *mockTrashUsecase) Restore(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageItem, error) {
+func (m *mockTrashUsecase) Restore(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*usecase.ImageItem, error) {
 	return m.imageItem, m.err
 }
 
-func (m *mockTrashUsecase) DeleteFromTrash(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockTrashUsecase) DeleteFromTrash(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 
-func (m *mockTrashUsecase) EmptyTrash(_ context.Context, _ string) error {
+func (m *mockTrashUsecase) EmptyTrash(_ context.Context, _ uuid.UUID) error {
 	return m.err
 }
 
-func (m *mockTrashUsecase) BulkTrash(_ context.Context, userID string, imageIDs []uuid.UUID) (int, error) {
+func (m *mockTrashUsecase) BulkTrash(_ context.Context, userID uuid.UUID, imageIDs []uuid.UUID) (int, error) {
 	m.lastBulkTrashUser = userID
 	m.lastBulkTrashIDs = imageIDs
 	return m.bulkTrashResult, m.bulkTrashErr

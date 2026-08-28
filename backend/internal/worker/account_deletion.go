@@ -9,11 +9,11 @@ import (
 // AccountWipe
 
 type accountWipeUsecase interface {
-	WipeAccount(ctx context.Context, userID string) error
+	WipeAccount(ctx context.Context, idpSubject string) error
 }
 
 type AccountWipeArgs struct {
-	UserID string `json:"user_id"`
+	IDPSubject string `json:"idp_subject"`
 }
 
 func (AccountWipeArgs) Kind() string     { return "account_wipe" }
@@ -29,17 +29,17 @@ func NewAccountWipeWorker(uc accountWipeUsecase) *AccountWipeWorker {
 }
 
 func (w *AccountWipeWorker) Work(ctx context.Context, job *river.Job[AccountWipeArgs]) error {
-	return w.usecase.WipeAccount(ctx, job.Args.UserID)
+	return w.usecase.WipeAccount(ctx, job.Args.IDPSubject)
 }
 
 // BookletUserDeletion
 
 type bookletUserDeletionUsecase interface {
-	ProcessBookletUserDeletion(ctx context.Context, userID string) error
+	ProcessBookletUserDeletion(ctx context.Context, idpSubject string) error
 }
 
 type BookletUserDeletionArgs struct {
-	UserID string `json:"user_id"`
+	IDPSubject string `json:"idp_subject"`
 }
 
 func (BookletUserDeletionArgs) Kind() string     { return "booklet_user_deletion" }
@@ -55,7 +55,7 @@ func NewBookletUserDeletionWorker(uc bookletUserDeletionUsecase) *BookletUserDel
 }
 
 func (w *BookletUserDeletionWorker) Work(ctx context.Context, job *river.Job[BookletUserDeletionArgs]) error {
-	return w.usecase.ProcessBookletUserDeletion(ctx, job.Args.UserID)
+	return w.usecase.ProcessBookletUserDeletion(ctx, job.Args.IDPSubject)
 }
 
 // AccountWipeReconcile (periodic)

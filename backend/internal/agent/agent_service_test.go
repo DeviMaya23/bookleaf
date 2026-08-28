@@ -30,28 +30,28 @@ type spyAgentImageRepo struct {
 	listByFolderErr       error
 }
 
-func (s *spyAgentImageRepo) GetImageWithLabels(_ context.Context, _ uuid.UUID, _ string, _ float64) (*domain.Image, []string, error) {
+func (s *spyAgentImageRepo) GetImageWithLabels(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ float64) (*domain.Image, []string, error) {
 	if s.getImageWithLabelsErr != nil {
 		return nil, nil, s.getImageWithLabelsErr
 	}
 	return s.image, s.imageLabels, nil
 }
 
-func (s *spyAgentImageRepo) GetFolderTopLabels(_ context.Context, _ string, _ uuid.UUID, _ float64, _ int) (*domain.FolderAggregate, error) {
+func (s *spyAgentImageRepo) GetFolderTopLabels(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ float64, _ int) (*domain.FolderAggregate, error) {
 	if s.folderTopLabelsErr != nil {
 		return nil, s.folderTopLabelsErr
 	}
 	return &domain.FolderAggregate{}, nil
 }
 
-func (s *spyAgentImageRepo) GetFolderImageSamples(_ context.Context, _ string, _ uuid.UUID, _ float64, _ int) ([]*domain.Image, map[uuid.UUID][]string, error) {
+func (s *spyAgentImageRepo) GetFolderImageSamples(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ float64, _ int) ([]*domain.Image, map[uuid.UUID][]string, error) {
 	if s.folderImageSamplesErr != nil {
 		return nil, nil, s.folderImageSamplesErr
 	}
 	return []*domain.Image{}, map[uuid.UUID][]string{}, nil
 }
 
-func (s *spyAgentImageRepo) ListByFolder(_ context.Context, _ string, _ uuid.UUID, _ *string, _ *string) ([]*domain.Image, error) {
+func (s *spyAgentImageRepo) ListByFolder(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ *string, _ *string) ([]*domain.Image, error) {
 	if s.listByFolderErr != nil {
 		return nil, s.listByFolderErr
 	}
@@ -60,7 +60,7 @@ func (s *spyAgentImageRepo) ListByFolder(_ context.Context, _ string, _ uuid.UUI
 
 type spyAgentFolderRepo struct{}
 
-func (s *spyAgentFolderRepo) List(_ context.Context, _ string) ([]*domain.Folder, error) {
+func (s *spyAgentFolderRepo) List(_ context.Context, _ uuid.UUID) ([]*domain.Folder, error) {
 	return []*domain.Folder{{ID: uuid.New(), Name: "Nature"}}, nil
 }
 
@@ -168,7 +168,7 @@ func TestGetFolderSuggestion_InvalidToolInputReturnsLenientError(t *testing.T) {
 			})
 			svc := newTestAgentService(t, tc.imageRepo, &spyAgentFolderRepo{}, srv.URL)
 
-			suggestion, err := svc.GetFolderSuggestion(context.Background(), "kp_user", uuid.New())
+			suggestion, err := svc.GetFolderSuggestion(context.Background(), uuid.New(), uuid.New())
 
 			require.NoError(t, err)
 			assert.Equal(t, existingFolderID, suggestion.FolderID)
@@ -186,7 +186,7 @@ func TestGetFolderSuggestion_ExceedsInvalidInputCapReturnsError(t *testing.T) {
 	imageRepo := &spyAgentImageRepo{image: agentTestImage()}
 	svc := newTestAgentService(t, imageRepo, &spyAgentFolderRepo{}, srv.URL)
 
-	_, err := svc.GetFolderSuggestion(context.Background(), "kp_user", uuid.New())
+	_, err := svc.GetFolderSuggestion(context.Background(), uuid.New(), uuid.New())
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "agent exceeded invalid input cap")

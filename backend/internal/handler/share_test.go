@@ -28,15 +28,15 @@ type mockShareUsecase struct {
 	err          error
 }
 
-func (m *mockShareUsecase) CreateShare(_ context.Context, _ uuid.UUID, _ string) (string, bool, error) {
+func (m *mockShareUsecase) CreateShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (string, bool, error) {
 	return m.token, m.created, m.err
 }
 
-func (m *mockShareUsecase) GetShare(_ context.Context, _ uuid.UUID, _ string) (string, error) {
+func (m *mockShareUsecase) GetShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) (string, error) {
 	return m.token, m.err
 }
 
-func (m *mockShareUsecase) DeleteShare(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockShareUsecase) DeleteShare(_ context.Context, _ uuid.UUID, _ uuid.UUID) error {
 	return m.err
 }
 
@@ -55,7 +55,7 @@ type mockFolderExporter struct {
 	called      bool
 }
 
-func (m *mockFolderExporter) ExportFolder(_ context.Context, _ uuid.UUID, _ string, w io.Writer) error {
+func (m *mockFolderExporter) ExportFolder(_ context.Context, _ uuid.UUID, _ uuid.UUID, w io.Writer) error {
 	m.called = true
 	if m.exportErr != nil {
 		return m.exportErr
@@ -370,19 +370,19 @@ func TestShareHandler_ExportSharedFolder(t *testing.T) {
 	}{
 		{
 			name:         "returns 200 with zip headers",
-			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "My Folder"}},
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: uuid.New(), Name: "My Folder"}},
 			exporter:     &mockFolderExporter{exportBytes: []byte("zip-bytes")},
 			wantFilename: `attachment; filename="My Folder.zip"`,
 		},
 		{
 			name:         "sanitizes folder name with invalid filename characters",
-			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "Trip / 2024"}},
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: uuid.New(), Name: "Trip / 2024"}},
 			exporter:     &mockFolderExporter{},
 			wantFilename: `attachment; filename="Trip  2024.zip"`,
 		},
 		{
 			name:         "falls back to export.zip when name sanitizes to empty",
-			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: "kp_abc123", Name: "///"}},
+			uc:           &mockShareUsecase{folder: &domain.Folder{ID: folderID, UserID: uuid.New(), Name: "///"}},
 			exporter:     &mockFolderExporter{},
 			wantFilename: `attachment; filename="export.zip"`,
 		},

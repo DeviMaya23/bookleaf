@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/devi/bookleaf/internal/domain"
 	"github.com/devi/bookleaf/internal/platform/observability"
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
@@ -33,7 +34,7 @@ type spyInternalShareUsecase struct {
 	err          error
 }
 
-func (s *spyInternalShareUsecase) GetPublicFoldersByUser(_ context.Context, _ string) ([]usecase.FolderShareSummary, error) {
+func (s *spyInternalShareUsecase) GetPublicFoldersByUser(_ context.Context, _ uuid.UUID) ([]usecase.FolderShareSummary, error) {
 	return s.summaries, s.err
 }
 
@@ -45,18 +46,29 @@ func (s *spyInternalShareUsecase) CheckFolderPublicStatus(_ context.Context, _ u
 	return s.token, s.err
 }
 
+type spyUserResolver struct {
+	user *domain.User
+	err  error
+}
+
+func (s *spyUserResolver) GetByIDPSubject(_ context.Context, _ string) (*domain.User, error) {
+	return s.user, s.err
+}
+
 // --- ListPublicFolders ---
 
 func TestInternalHandler_ListPublicFolders_WithFolders(t *testing.T) {
 	folderID1 := uuid.New()
 	folderID2 := uuid.New()
-	spy := &spyInternalShareUsecase{
+	resolvedUser := &domain.User{ID: uuid.New(), IDPSubject: "kp_abc123"}
+	resolver := &spyUserResolver{user: resolvedUser}
+	shareSpy := &spyInternalShareUsecase{
 		summaries: []usecase.FolderShareSummary{
 			{FolderID: folderID1, Token: "tok_one", FolderName: "Travel"},
 			{FolderID: folderID2, Token: "tok_two", FolderName: "Family"},
 		},
 	}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(shareSpy, nil, resolver, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/internal/users/kp_abc123/public-folders", "")
 	c.SetPath("/internal/users/:user_id/public-folders")
 	c.SetParamNames("user_id")
@@ -79,12 +91,32 @@ func TestInternalHandler_ListPublicFolders_WithFolders(t *testing.T) {
 }
 
 func TestInternalHandler_ListPublicFolders_EmptyList(t *testing.T) {
-	spy := &spyInternalShareUsecase{summaries: []usecase.FolderShareSummary{}}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	resolvedUser := &domain.User{ID: uuid.New(), IDPSubject: "kp_abc123"}
+	resolver := &spyUserResolver{user: resolvedUser}
+	shareSpy := &spyInternalShareUsecase{summaries: []usecase.FolderShareSummary{}}
+	h := NewInternalHandler(shareSpy, nil, resolver, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/internal/users/kp_abc123/public-folders", "")
 	c.SetPath("/internal/users/:user_id/public-folders")
 	c.SetParamNames("user_id")
 	c.SetParamValues("kp_abc123")
+
+	err := h.ListPublicFolders(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var body listPublicFoldersResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Empty(t, body.FolderList)
+}
+
+func TestInternalHandler_ListPublicFolders_UnknownIDPSubject(t *testing.T) {
+	resolver := &spyUserResolver{err: usecase.ErrUserNotFound}
+	h := NewInternalHandler(&spyInternalShareUsecase{}, nil, resolver, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/internal/users/kp_unknown/public-folders", "")
+	c.SetPath("/internal/users/:user_id/public-folders")
+	c.SetParamNames("user_id")
+	c.SetParamValues("kp_unknown")
 
 	err := h.ListPublicFolders(c)
 
@@ -112,7 +144,7 @@ func TestInternalHandler_GetFolderContents_Success(t *testing.T) {
 			},
 		},
 	}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/internal/folders/"+folderID.String()+"/contents", "")
 	c.SetPath("/internal/folders/:folder_id/contents")
 	c.SetParamNames("folder_id")
@@ -135,7 +167,7 @@ func TestInternalHandler_GetFolderContents_Success(t *testing.T) {
 func TestInternalHandler_GetFolderContents_NotFound(t *testing.T) {
 	folderID := uuid.New()
 	spy := &spyInternalShareUsecase{err: gorm.ErrRecordNotFound}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/internal/folders/"+folderID.String()+"/contents", "")
 	c.SetPath("/internal/folders/:folder_id/contents")
 	c.SetParamNames("folder_id")
@@ -148,7 +180,7 @@ func TestInternalHandler_GetFolderContents_NotFound(t *testing.T) {
 
 func TestInternalHandler_GetFolderContents_InvalidUUID(t *testing.T) {
 	spy := &spyInternalShareUsecase{}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/internal/folders/not-a-uuid/contents", "")
 	c.SetPath("/internal/folders/:folder_id/contents")
 	c.SetParamNames("folder_id")
@@ -164,7 +196,7 @@ func TestInternalHandler_GetFolderContents_InvalidUUID(t *testing.T) {
 func TestInternalHandler_CheckFolderStatus_Public(t *testing.T) {
 	folderID := uuid.New()
 	spy := &spyInternalShareUsecase{token: "tok_abc123"}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodGet, "/internal/folders/"+folderID.String()+"/status", "")
 	c.SetPath("/internal/folders/:folder_id/status")
 	c.SetParamNames("folder_id")
@@ -183,7 +215,7 @@ func TestInternalHandler_CheckFolderStatus_Public(t *testing.T) {
 func TestInternalHandler_CheckFolderStatus_NotFound(t *testing.T) {
 	folderID := uuid.New()
 	spy := &spyInternalShareUsecase{err: gorm.ErrRecordNotFound}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/internal/folders/"+folderID.String()+"/status", "")
 	c.SetPath("/internal/folders/:folder_id/status")
 	c.SetParamNames("folder_id")
@@ -196,7 +228,7 @@ func TestInternalHandler_CheckFolderStatus_NotFound(t *testing.T) {
 
 func TestInternalHandler_CheckFolderStatus_InvalidUUID(t *testing.T) {
 	spy := &spyInternalShareUsecase{}
-	h := NewInternalHandler(spy, nil, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(spy, nil, nil, observability.NewTelemetry(nil, nil, nil))
 	c, _ := newEchoContext(t, http.MethodGet, "/internal/folders/not-a-uuid/status", "")
 	c.SetPath("/internal/folders/:folder_id/status")
 	c.SetParamNames("folder_id")
@@ -212,7 +244,7 @@ func TestInternalHandler_CheckFolderStatus_InvalidUUID(t *testing.T) {
 func TestInternalHandler_DeleteAccount_CallsMarkForDeletionAndReturns202(t *testing.T) {
 	userID := "kp_abc123"
 	accountSpy := &spyInternalAccountUsecase{}
-	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")
 	c.SetPath("/internal/accounts/:id")
 	c.SetParamNames("id")
@@ -228,7 +260,7 @@ func TestInternalHandler_DeleteAccount_CallsMarkForDeletionAndReturns202(t *test
 func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPendingDeletionUser(t *testing.T) {
 	userID := "kp_pending"
 	accountSpy := &spyInternalAccountUsecase{}
-	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")
 	c.SetPath("/internal/accounts/:id")
 	c.SetParamNames("id")
@@ -243,7 +275,7 @@ func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPendingDeletionUser(t *
 func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPurgedUser(t *testing.T) {
 	userID := "kp_purged"
 	accountSpy := &spyInternalAccountUsecase{}
-	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")
 	c.SetPath("/internal/accounts/:id")
 	c.SetParamNames("id")
@@ -258,7 +290,7 @@ func TestInternalHandler_DeleteAccount_ReturnsAcceptedForPurgedUser(t *testing.T
 func TestInternalHandler_DeleteAccount_ReturnsAcceptedForUnprovisionedUser(t *testing.T) {
 	userID := "kp_unknown"
 	accountSpy := &spyInternalAccountUsecase{}
-	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, observability.NewTelemetry(nil, nil, nil))
+	h := NewInternalHandler(&spyInternalShareUsecase{}, accountSpy, nil, observability.NewTelemetry(nil, nil, nil))
 	c, rec := newEchoContext(t, http.MethodDelete, "/internal/accounts/"+userID, "")
 	c.SetPath("/internal/accounts/:id")
 	c.SetParamNames("id")

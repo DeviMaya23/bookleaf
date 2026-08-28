@@ -4,44 +4,29 @@ Define the persistent user model keyed by Kinde user ID and the database migrati
 ## Requirements
 ### Requirement: User GORM Struct
 
-The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user managed by Kinde.
+The system SHALL define a `User` GORM struct in `internal/domain/user.go` representing an authenticated user with an app-generated UUID primary key and a separate field for the IdP-issued subject.
 
 Fields (all DB columns use snake_case):
-- `ID` — Kinde-generated user ID string, `TEXT` primary key (`id`); e.g. `kp_abc123`
+- `ID` — app-generated UUID, `UUID` primary key (`id`); e.g. `550e8400-e29b-41d4-a716-446655440000`
+- `IDPSubject` — IdP-issued subject string, `TEXT NOT NULL UNIQUE` (`idp_subject`); e.g. `kp_abc123`
 - `VisionEnabled` — boolean flag indicating whether the user has opted into AI organising (`vision_enabled`); defaults to `false`
 - `AICategorisationEnabled` — boolean flag indicating whether AI image categorisation is enabled for the user (`ai_categorisation_enabled`); defaults to `false`
-- `PendingKindeDeletion` — boolean flag indicating the user's app data has been wiped and their Kinde identity deletion is pending (`pending_kinde_deletion`); defaults to `false`
+- `AccountState` — account lifecycle state (`account_state`); defaults to `'active'`
+- `PurgedAt` — nullable timestamp set when the account is purged (`purged_at`)
 - `FolderIconsEnabled` — boolean flag indicating whether folder/system-entry icons are displayed in the sidebar (`folder_icons_enabled`); defaults to `true`
 - `CreatedAt`, `UpdatedAt` — GORM timestamps (`created_at`, `updated_at`)
 - `DeletedAt` — GORM soft-delete timestamp (nullable) (`deleted_at`)
 
-No UUID field. Kinde owns the identity layer; the DB stores only the Kinde user ID as the natural PK and app-specific state.
-
-#### Scenario: User struct uses Kinde ID as primary key
+#### Scenario: User struct uses app-generated UUID as primary key
 
 - **WHEN** the Go package is compiled
-- **THEN** `User` has a `string` `ID` field tagged `gorm:"primaryKey"`
-- **AND** there is no separate UUID or `KindeID` field
+- **THEN** `User` has a `uuid.UUID` `ID` field tagged `gorm:"type:uuid;primaryKey"`
+- **AND** there is no string field holding the Kinde subject as the primary key
 
-#### Scenario: User struct includes vision_enabled field
-
-- **WHEN** the Go package is compiled
-- **THEN** `User` has a `bool` `VisionEnabled` field tagged with `gorm:"column:vision_enabled;default:false"`
-
-#### Scenario: User struct includes ai_categorisation_enabled field
+#### Scenario: User struct has IDPSubject field
 
 - **WHEN** the Go package is compiled
-- **THEN** `User` has a `bool` `AICategorisationEnabled` field tagged with `gorm:"column:ai_categorisation_enabled;default:false"`
-
-#### Scenario: User struct includes pending_kinde_deletion field
-
-- **WHEN** the Go package is compiled
-- **THEN** `User` has a `bool` `PendingKindeDeletion` field tagged with `gorm:"column:pending_kinde_deletion;default:false"`
-
-#### Scenario: User struct includes folder_icons_enabled field
-
-- **WHEN** the Go package is compiled
-- **THEN** `User` has a `bool` `FolderIconsEnabled` field tagged with `gorm:"column:folder_icons_enabled;default:true"`
+- **THEN** `User` has a `string` `IDPSubject` field tagged `gorm:"column:idp_subject;not null;uniqueIndex"`
 
 ### Requirement: Users DB Migration
 

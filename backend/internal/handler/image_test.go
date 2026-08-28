@@ -38,18 +38,18 @@ type mockImageUsecase struct {
 	lastListFolderSort      *string
 	lastListFolderDirection *string
 	lastMoveImageID         uuid.UUID
-	lastMoveUserID          string
+	lastMoveUserID          uuid.UUID
 	lastMoveFromFolderID    *uuid.UUID
 	lastMoveToFolderID      *uuid.UUID
 	moveImageFolderCalls    int
 	bulkAddToFolderResult   int
 	bulkAddToFolderErr      error
-	lastBulkAddToFolderUser string
+	lastBulkAddToFolderUser uuid.UUID
 	lastBulkAddToFolderIDs  []uuid.UUID
 	lastBulkAddToFolderID   uuid.UUID
 }
 
-func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ string, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error) {
+func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ uuid.UUID, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error) {
 	m.lastListFolderImagesID = folderID
 	m.lastListFolderSort = sort
 	m.lastListFolderDirection = direction
@@ -59,7 +59,7 @@ func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ string, folderI
 	return m.listFolderImagesResult, nil
 }
 
-func (m *mockImageUsecase) ListImages(_ context.Context, _ string, params usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
+func (m *mockImageUsecase) ListImages(_ context.Context, _ uuid.UUID, params usecase.ListImagesParams) (*usecase.ListImagesResult, error) {
 	m.lastListImagesParams = params
 	if m.err != nil {
 		return nil, m.err
@@ -70,20 +70,20 @@ func (m *mockImageUsecase) ListImages(_ context.Context, _ string, params usecas
 	return &usecase.ListImagesResult{}, nil
 }
 
-func (m *mockImageUsecase) GetImage(_ context.Context, _ uuid.UUID, _ string) (*usecase.ImageDetail, error) {
+func (m *mockImageUsecase) GetImage(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*usecase.ImageDetail, error) {
 	return m.imageDetail, m.err
 }
 
-func (m *mockImageUsecase) DownloadImage(_ context.Context, _ uuid.UUID, _ string) (string, error) {
+func (m *mockImageUsecase) DownloadImage(_ context.Context, _ uuid.UUID, _ uuid.UUID) (string, error) {
 	return m.downloadURL, m.err
 }
 
-func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ string, params usecase.UpdateImageParams) (*usecase.ImageItem, error) {
+func (m *mockImageUsecase) UpdateImage(_ context.Context, _ uuid.UUID, _ uuid.UUID, params usecase.UpdateImageParams) (*usecase.ImageItem, error) {
 	m.lastUpdateParams = params
 	return m.imageItem, m.err
 }
 
-func (m *mockImageUsecase) MoveImageFolder(_ context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error) {
+func (m *mockImageUsecase) MoveImageFolder(_ context.Context, imageID uuid.UUID, userID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error) {
 	m.moveImageFolderCalls++
 	m.lastMoveImageID = imageID
 	m.lastMoveUserID = userID
@@ -95,11 +95,11 @@ func (m *mockImageUsecase) MoveImageFolder(_ context.Context, imageID uuid.UUID,
 	return m.imageItem, m.err
 }
 
-func (m *mockImageUsecase) UpdateImagePosition(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, _ string) error {
+func (m *mockImageUsecase) UpdateImagePosition(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ uuid.UUID, _ string) error {
 	return m.err
 }
 
-func (m *mockImageUsecase) BulkAddToFolder(_ context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
+func (m *mockImageUsecase) BulkAddToFolder(_ context.Context, userID uuid.UUID, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
 	m.lastBulkAddToFolderUser = userID
 	m.lastBulkAddToFolderIDs = imageIDs
 	m.lastBulkAddToFolderID = folderID

@@ -48,9 +48,9 @@ type completeUploadResponse struct {
 }
 
 type UploadUsecase interface {
-	InitiateUpload(ctx context.Context, userID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
-	CompleteUpload(ctx context.Context, id uuid.UUID, userID string, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
-	BackfillVisionLabels(ctx context.Context, userID string) (int, error)
+	InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
+	CompleteUpload(ctx context.Context, id uuid.UUID, userID uuid.UUID, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
+	BackfillVisionLabels(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 type UploadHandler struct {
@@ -69,8 +69,8 @@ func (h *UploadHandler) InitiateUpload(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.InitiateUpload")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -106,8 +106,8 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
 	}
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 
@@ -145,8 +145,8 @@ func (h *UploadHandler) BackfillVision(c echo.Context) error {
 	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BackfillVision")
 	defer span.End()
 
-	userID, ok := middleware.AuthenticatedUserIDFromContext(c)
-	if !ok || userID == "" {
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
 	}
 

@@ -34,7 +34,7 @@ func (f *fakeFolderRepo) add(folder *domain.Folder) {
 	f.byID[folder.ID] = folder
 }
 
-func (f *fakeFolderRepo) GetByID(_ context.Context, id uuid.UUID, _ string) (*domain.Folder, error) {
+func (f *fakeFolderRepo) GetByID(_ context.Context, id uuid.UUID, _ uuid.UUID) (*domain.Folder, error) {
 	folder, ok := f.byID[id]
 	if !ok {
 		return nil, gorm.ErrRecordNotFound
@@ -42,7 +42,7 @@ func (f *fakeFolderRepo) GetByID(_ context.Context, id uuid.UUID, _ string) (*do
 	return folder, nil
 }
 
-func (f *fakeFolderRepo) FindByName(_ context.Context, _, name string) (*domain.Folder, error) {
+func (f *fakeFolderRepo) FindByName(_ context.Context, _ uuid.UUID, name string) (*domain.Folder, error) {
 	folder, ok := f.folders[strings.ToLower(name)]
 	if !ok {
 		return nil, nil
@@ -131,7 +131,7 @@ func (f *fakeFolderShareRepo) GetByFolderIDWithFolder(_ context.Context, folderI
 	return share, nil
 }
 
-func (f *fakeFolderShareRepo) ListByUserID(_ context.Context, userID string) ([]*FolderShareListItem, error) {
+func (f *fakeFolderShareRepo) ListByUserID(_ context.Context, userID uuid.UUID) ([]*FolderShareListItem, error) {
 	var result []*FolderShareListItem
 	for _, share := range f.byFolderID {
 		if share.Folder.UserID == userID {
@@ -173,6 +173,6 @@ func (f *fakeCategorisationLogRepo) Create(_ context.Context, log *domain.Catego
 	return nil
 }
 
-func (f *fakeCategorisationLogRepo) CountByUserAndMonth(_ context.Context, _ string, _, _ int) (int, error) {
+func (f *fakeCategorisationLogRepo) CountByUserAndMonth(_ context.Context, _ uuid.UUID, _, _ int) (int, error) {
 	return f.monthCount, f.countErr
 }

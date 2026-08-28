@@ -72,7 +72,7 @@ func (u *imageUsecase) thumbnailURL(ctx context.Context, path *string) *string {
 	return &url
 }
 
-func (u *imageUsecase) ListImages(ctx context.Context, userID string, params ListImagesParams) (*ListImagesResult, error) {
+func (u *imageUsecase) ListImages(ctx context.Context, userID uuid.UUID, params ListImagesParams) (*ListImagesResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListImages")
 	defer span.End()
 
@@ -117,7 +117,7 @@ func (u *imageUsecase) ListImages(ctx context.Context, userID string, params Lis
 	return &ListImagesResult{Images: items, NextCursor: nextCursor}, nil
 }
 
-func (u *imageUsecase) ListFolderImages(ctx context.Context, userID string, folderID uuid.UUID, sort *string, direction *string) ([]ImageItem, error) {
+func (u *imageUsecase) ListFolderImages(ctx context.Context, userID uuid.UUID, folderID uuid.UUID, sort *string, direction *string) ([]ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListFolderImages")
 	defer span.End()
 
@@ -150,7 +150,7 @@ func (u *imageUsecase) ListFolderImages(ctx context.Context, userID string, fold
 	return items, nil
 }
 
-func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string) (*ImageDetail, error) {
+func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*ImageDetail, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.GetImage")
 	defer span.End()
 
@@ -175,7 +175,7 @@ func (u *imageUsecase) GetImage(ctx context.Context, id uuid.UUID, userID string
 	}, nil
 }
 
-func (u *imageUsecase) DownloadImage(ctx context.Context, id uuid.UUID, userID string) (string, error) {
+func (u *imageUsecase) DownloadImage(ctx context.Context, id uuid.UUID, userID uuid.UUID) (string, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.DownloadImage")
 	defer span.End()
 
@@ -197,7 +197,7 @@ func (u *imageUsecase) DownloadImage(ctx context.Context, id uuid.UUID, userID s
 	return downloadURL, nil
 }
 
-func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID string, params UpdateImageParams) (*ImageItem, error) {
+func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID uuid.UUID, params UpdateImageParams) (*ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImage")
 	defer span.End()
 
@@ -259,7 +259,7 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 		observability.LoggerFromContext(ctx, u.tel.Logger).Info("image mutated",
 			zap.String("event", "image.mutated"),
 			zap.String("image_id", id.String()),
-			zap.String("user_id", userID),
+			zap.String("user_id", userID.String()),
 			zap.String("operation", "synced_folders"),
 			zap.Strings("folder_ids", folderIDs),
 		)
@@ -268,7 +268,7 @@ func (u *imageUsecase) UpdateImage(ctx context.Context, id uuid.UUID, userID str
 	return &ImageItem{Image: updated, ThumbnailURL: u.thumbnailURL(ctx, updated.ThumbnailPath)}, nil
 }
 
-func (u *imageUsecase) MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID string, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*ImageItem, error) {
+func (u *imageUsecase) MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*ImageItem, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.MoveImageFolder")
 	defer span.End()
 
@@ -302,7 +302,7 @@ func (u *imageUsecase) MoveImageFolder(ctx context.Context, imageID uuid.UUID, u
 	return &ImageItem{Image: img, ThumbnailURL: u.thumbnailURL(ctx, img.ThumbnailPath)}, nil
 }
 
-func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID string, folderID uuid.UUID, position string) error {
+func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, folderID uuid.UUID, position string) error {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateImagePosition")
 	defer span.End()
 
@@ -321,7 +321,7 @@ func (u *imageUsecase) UpdateImagePosition(ctx context.Context, imageID uuid.UUI
 	return nil
 }
 
-func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID string, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
+func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkAddToFolder")
 	defer span.End()
 
@@ -351,7 +351,7 @@ func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID string, image
 			logger.Info("skipping unowned image in bulk add-to-folder",
 				zap.String("event", "image.bulk_add_to_folder.skipped"),
 				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 			)
 			continue
 		}
@@ -360,7 +360,7 @@ func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID string, image
 			logger.Warn("failed to add image to folder in bulk add-to-folder",
 				zap.String("event", "image.bulk_add_to_folder.failed"),
 				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID),
+				zap.String("user_id", userID.String()),
 				zap.Error(err),
 			)
 			continue
@@ -370,7 +370,7 @@ func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID string, image
 
 	logger.Info("bulk add to folder complete",
 		zap.String("event", "image.bulk_add_to_folder.complete"),
-		zap.String("user_id", userID),
+		zap.String("user_id", userID.String()),
 		zap.String("folder_id", folderID.String()),
 		zap.Int("succeeded_count", succeeded),
 	)
