@@ -122,7 +122,7 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
       )}
     >
       <div className="p-4 pb-3">
-        <span className="text-sm font-semibold tracking-tight font-serif">Bookleaf</span>
+        <span className="text-xl font-bold tracking-tight font-title">Bookleaf</span>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">

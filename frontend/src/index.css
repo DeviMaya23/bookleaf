@@ -1,8 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/dm-sans";
-@import "@fontsource-variable/lora";
+@import "@fontsource-variable/archivo";
+@import "@fontsource/copse";
+@import './assets/fonts/balgruf/balgruf.css';
+
 
 @custom-variant dark (&:where([data-theme="sunless"], [data-theme="sunless"] *));
 
@@ -37,8 +39,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: 'DM Sans Variable', sans-serif;
-  --font-serif: 'Lora Variable', Georgia, serif;
+  --font-sans: 'Archivo Variable', sans-serif;
+  --font-serif: 'Copse', serif;
+  --font-title: 'Balgruf', serif;
 }
 
 @layer base {
