@@ -37,7 +37,7 @@ export default function LandingPage() {
       )}
 
       <nav className="flex items-center justify-between border-b border-border px-8 py-4">
-        <span className="font-serif text-lg font-semibold">Bookleaf</span>
+        <span className="font-title text-xl font-bold">Bookleaf</span>
         <Button variant="secondary" onClick={() => login()}>
           Sign in
         </Button>

@@ -1,0 +1,16 @@
+@font-face {
+    font-family: 'Balgruf';
+    src: url('balgruf_italic-webfont.woff2') format('woff2');
+    font-weight: normal;
+    font-style: italic;
+
+}
+
+
+@font-face {
+    font-family: 'Balgruf';
+    src: url('balgruf-webfont.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+
+}
