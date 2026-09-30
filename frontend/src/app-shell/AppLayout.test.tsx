@@ -118,27 +118,41 @@ vi.mock('@/features/upload/components/BatchUploadModal', () => ({
 }))
 
 vi.mock('@/features/right-panel/components/RightPanel', () => ({
-  default: (
-    props:
+  default: ({
+    panelContent,
+    focusMode,
+    mobileOpen = false,
+  }: {
+    panelContent:
       | { mode: 'image'; image: Image }
       | { mode: 'folder'; folder: { name: string } }
-      | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onClose: () => void },
-  ) => (
-    <div data-testid="right-panel" data-mode={props.mode}>
-      {props.mode === 'image' ? (
-        props.image.title
-      ) : props.mode === 'folder' ? (
-        props.folder.name
-      ) : (
-        <>
-          {props.selectedCount} selected
-          <button onClick={() => props.onAddToFolder('folder-1')}>Add selection to folder</button>
-          <button onClick={() => props.onMoveToTrash()}>Move selection to trash</button>
-          <button onClick={() => props.onClose()}>Close selection panel</button>
-        </>
-      )}
-    </div>
-  ),
+      | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void }
+      | { mode: 'neutral'; viewLabel: string }
+    focusMode: boolean
+    mobileOpen?: boolean
+    onMobileClose?: () => void
+  }) => {
+    const isCoarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false
+    if (focusMode && panelContent.mode !== 'selection') return null
+    if (isCoarsePointer && !mobileOpen) return null
+    return (
+      <div data-testid="right-panel" data-mode={panelContent.mode}>
+        {panelContent.mode === 'image' ? (
+          panelContent.image.title
+        ) : panelContent.mode === 'folder' ? (
+          panelContent.folder.name
+        ) : panelContent.mode === 'selection' ? (
+          <>
+            {panelContent.selectedCount} selected
+            <button onClick={() => panelContent.onAddToFolder('folder-1')}>Add selection to folder</button>
+            <button onClick={() => panelContent.onMoveToTrash()}>Move selection to trash</button>
+          </>
+        ) : (
+          panelContent.viewLabel
+        )}
+      </div>
+    )
+  },
 }))
 
 function makeTestImage(overrides?: Partial<Image>): Image {
@@ -365,7 +379,7 @@ describe('AppLayout cross-feature integration', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete image' }))
 
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
   })
 })
 
@@ -526,6 +540,7 @@ describe('AppLayout selection mode — right panel priority and visibility', () 
   })
 
   it('clears the selection when navigating to a different view', async () => {
+    vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
     renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
@@ -534,10 +549,10 @@ describe('AppLayout selection mode — right panel priority and visibility', () 
 
     await userEvent.click(screen.getByRole('link', { name: 'Folder 1' }))
 
-    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
   })
 
-  it('entering select mode closes an open image panel, and it does not resurface once the selection panel is closed', async () => {
+  it('entering select mode clears the selected image so it does not resurface as the selection empties', async () => {
     renderApp('/app')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
@@ -545,41 +560,26 @@ describe('AppLayout selection mode — right panel priority and visibility', () 
     expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
 
     await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
 
     await userEvent.click(selectViaGrid())
     expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Close selection panel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
 
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
   })
 
-  it('entering select mode closes an open folder panel', async () => {
+  it('entering select mode shows neutral panel content (selection is empty on entry)', async () => {
     vi.mocked(getFolders).mockResolvedValue([makeFolder('folder-1', 'Vacation')])
     renderApp('/app/folders/folder-1')
     await waitFor(() => expect(imageGrid()).toBeInTheDocument())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select folder' }))
     await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'folder'))
 
     await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
 
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
-  })
-
-  it('closing the selection panel turns select mode off entirely', async () => {
-    renderApp('/app')
-    await waitFor(() => expect(imageGrid()).toBeInTheDocument())
-
-    await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
-    await userEvent.click(selectViaGrid())
-    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Close selection panel' }))
-
-    expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Select mode' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
   })
 
   it('turns select mode off entirely when navigating to a different view, not just clearing the selection', async () => {
@@ -620,7 +620,7 @@ describe('AppLayout bulk selection actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add selection to folder' }))
 
     expect(bulkAddImagesToFolder).toHaveBeenCalledWith(expect.any(Function), ['img-1'], 'folder-1')
-    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral'))
     expect(imageGrid()).toHaveAttribute('data-select-mode', 'false')
   })
 
@@ -634,7 +634,7 @@ describe('AppLayout bulk selection actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Move selection to trash' }))
 
     expect(bulkTrashImages).toHaveBeenCalledWith(expect.any(Function), ['img-1'])
-    await waitFor(() => expect(screen.queryByTestId('right-panel')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral'))
     expect(imageGrid()).toHaveAttribute('data-select-mode', 'false')
   })
 

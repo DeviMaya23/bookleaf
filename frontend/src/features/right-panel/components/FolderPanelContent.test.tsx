@@ -61,7 +61,7 @@ function renderPanel() {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <FolderPanelContent folder={folder} onClose={vi.fn()} />
+      <FolderPanelContent folder={folder} />
     </QueryClientProvider>,
   )
 }

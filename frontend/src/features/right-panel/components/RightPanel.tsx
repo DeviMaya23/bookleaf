@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { ImageIcon, ExternalLink, X } from 'lucide-react'
+import { ImageIcon, ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateImage } from '@/lib/images'
 import { resolveOrCreateTags } from '@/lib/tags'
@@ -17,44 +17,99 @@ import MobileDrawerShell from './MobileDrawerShell'
 import { useFieldAutosave } from '../hooks/useFieldAutosave'
 import { useImageDetailsData } from '../hooks/useImageDetailsData'
 import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
+import { usePersistedBoolean } from '@/hooks/usePersistedBoolean'
 
-type RightPanelProps =
-  | { mode: 'image'; image: Image; onClose: () => void; autoFocusTitle?: boolean }
-  | { mode: 'folder'; folder: { id: string; name: string; description: string | null }; onClose: () => void }
-  | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onClose: () => void }
+export type PanelContent =
+  | { mode: 'image'; image: Image; autoFocusTitle?: boolean }
+  | { mode: 'folder'; folder: { id: string; name: string; description: string | null } }
+  | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onExitSelectMode: () => void }
+  | { mode: 'neutral'; viewLabel: string }
 
-export default function RightPanel(props: RightPanelProps) {
+interface RightPanelProps {
+  panelContent: PanelContent
+  focusMode: boolean
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}
+
+export default function RightPanel({ panelContent, focusMode, mobileOpen = false, onMobileClose }: RightPanelProps) {
   const isCoarsePointer = useIsCoarsePointer()
+  const [collapsed, setCollapsed] = usePersistedBoolean('bookleaf-right-panel-collapsed', false)
 
-  const content = props.mode === 'folder' ? (
-    <FolderPanelContent key={props.folder.id} folder={props.folder} onClose={props.onClose} />
-  ) : props.mode === 'selection' ? (
-    <SelectionPanelBody
-      selectedCount={props.selectedCount}
-      onAddToFolder={props.onAddToFolder}
-      onMoveToTrash={props.onMoveToTrash}
-      onClose={props.onClose}
-    />
-  ) : (
-    <ImagePanelBody key={props.image.id} image={props.image} onClose={props.onClose} autoFocusTitle={props.autoFocusTitle} />
+  // Selection panel bypasses focus mode gate
+  const isSelection = panelContent.mode === 'selection'
+  if (focusMode && !isSelection) return null
+
+  if (isCoarsePointer) {
+    if (!mobileOpen) return null
+    const handleClose = () => {
+      if (panelContent.mode === 'selection') panelContent.onExitSelectMode()
+      onMobileClose?.()
+    }
+    return <MobileDrawerShell onClose={handleClose}>{deriveContent(panelContent)}</MobileDrawerShell>
+  }
+
+  const chevron = (
+    <button
+      onClick={() => setCollapsed(!collapsed)}
+      className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
+      aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
+    >
+      {collapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+    </button>
   )
 
-  return isCoarsePointer ? (
-    <MobileDrawerShell onClose={props.onClose}>{content}</MobileDrawerShell>
-  ) : (
-    <aside className="hidden sm:flex w-80 flex-shrink-0 border-l h-screen flex-col bg-background overflow-hidden">
-      {content}
+  return (
+    <aside className="hidden sm:flex flex-shrink-0 border-l h-screen flex-col bg-background overflow-hidden transition-all duration-150 relative" style={{ width: collapsed ? '2rem' : '20rem' }}>
+      {collapsed ? (
+        <div className="flex flex-col flex-1 items-center pt-2">
+          {chevron}
+        </div>
+      ) : (
+        <>
+          <div className="absolute top-2 right-2 z-10">
+            {chevron}
+          </div>
+          {deriveContent(panelContent)}
+        </>
+      )}
     </aside>
+  )
+}
+
+function deriveContent(panelContent: PanelContent) {
+  switch (panelContent.mode) {
+    case 'folder':
+      return <FolderPanelContent key={panelContent.folder.id} folder={panelContent.folder} />
+    case 'selection':
+      return (
+        <SelectionPanelBody
+          selectedCount={panelContent.selectedCount}
+          onAddToFolder={panelContent.onAddToFolder}
+          onMoveToTrash={panelContent.onMoveToTrash}
+        />
+      )
+    case 'neutral':
+      return <NeutralPanelBody viewLabel={panelContent.viewLabel} />
+    case 'image':
+      return <ImagePanelBody key={panelContent.image.id} image={panelContent.image} autoFocusTitle={panelContent.autoFocusTitle} />
+  }
+}
+
+function NeutralPanelBody({ viewLabel }: { viewLabel: string }) {
+  return (
+    <div className="px-4 pt-4">
+      <p className="text-base font-semibold">{viewLabel}</p>
+    </div>
   )
 }
 
 interface ImagePanelBodyProps {
   image: Image
-  onClose: () => void
   autoFocusTitle?: boolean
 }
 
-function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps) {
+function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
 
@@ -140,13 +195,6 @@ function ImagePanelBody({ image, onClose, autoFocusTitle }: ImagePanelBodyProps)
             </div>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
-          aria-label="Close panel"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {/* Scrollable body */}

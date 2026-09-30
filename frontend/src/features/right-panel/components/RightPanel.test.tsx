@@ -48,13 +48,13 @@ function makeImage(overrides?: Partial<Image>): Image {
   }
 }
 
-function renderPanel(image: Image, onClose = vi.fn()) {
+function renderPanel(image: Image) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <RightPanel mode="image" image={image} onClose={onClose} />
+      <RightPanel panelContent={{ mode: 'image', image }} focusMode={false} />
     </QueryClientProvider>,
   )
 }
@@ -87,7 +87,7 @@ describe('RightPanel — success scenario', () => {
     expect(screen.getByDisplayValue('https://example.com')).toBeInTheDocument()
   })
 
-  it('is hidden below sm and shown at sm and up', () => {
+  it('is hidden below sm breakpoint', () => {
     renderPanel(makeImage())
 
     expect(screen.getByRole('complementary').className).toMatch(/hidden sm:flex/)
@@ -118,20 +118,107 @@ describe('RightPanel — pointer-capability shell', () => {
   it('renders the drawer shell on a coarse-pointer device', () => {
     mockPointer(true)
 
-    renderPanel(makeImage())
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'image', image: makeImage() }} focusMode={false} mobileOpen={true} />
+      </QueryClientProvider>,
+    )
 
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
     expect(screen.getByTestId('mobile-drawer-shell-backdrop')).toBeInTheDocument()
   })
 
   it('renders the same content component in both shells', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
     mockPointer(true)
-    renderPanel(makeImage())
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'image', image: makeImage() }} focusMode={false} mobileOpen={true} />
+      </QueryClientProvider>,
+    )
     expect(screen.getByDisplayValue('Sunset photo')).toBeInTheDocument()
 
     mockPointer(false)
     renderPanel(makeImage())
     expect(screen.getAllByDisplayValue('Sunset photo').length).toBeGreaterThan(0)
+  })
+})
+
+describe('RightPanel — neutral mode', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders the view label for All', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'All' }} focusMode={false} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText('All')).toBeInTheDocument()
+  })
+
+  it('renders the view label for Trash', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'Trash' }} focusMode={false} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText('Trash')).toBeInTheDocument()
+  })
+
+  it('returns null while focus mode is active', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'All' }} focusMode={true} />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+  })
+})
+
+describe('RightPanel — chevron toggle and collapsed state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('starts expanded by default', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'All' }} focusMode={false} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('complementary').style.width).toBe('20rem')
+  })
+
+  it('collapses when the chevron button is clicked and persists to localStorage', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'All' }} focusMode={false} />
+      </QueryClientProvider>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse panel' }))
+
+    expect(screen.getByRole('complementary').style.width).toBe('2rem')
+    expect(localStorage.getItem('bookleaf-right-panel-collapsed')).toBe('true')
+  })
+
+  it('reads collapsed state from localStorage on mount', () => {
+    localStorage.setItem('bookleaf-right-panel-collapsed', 'true')
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RightPanel panelContent={{ mode: 'neutral', viewLabel: 'All' }} focusMode={false} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('complementary').style.width).toBe('2rem')
   })
 })
 
@@ -218,16 +305,19 @@ describe('RightPanel selection mode', () => {
     vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
   })
 
-  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onClose: () => void }> = {}) {
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void }> = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={queryClient}>
         <RightPanel
-          mode="selection"
-          selectedCount={props.selectedCount ?? 1}
-          onAddToFolder={props.onAddToFolder ?? vi.fn()}
-          onMoveToTrash={props.onMoveToTrash ?? vi.fn()}
-          onClose={props.onClose ?? vi.fn()}
+          panelContent={{
+            mode: 'selection',
+            selectedCount: props.selectedCount ?? 1,
+            onAddToFolder: props.onAddToFolder ?? vi.fn(),
+            onMoveToTrash: props.onMoveToTrash ?? vi.fn(),
+            onExitSelectMode: props.onExitSelectMode ?? vi.fn(),
+          }}
+          focusMode={false}
         />
       </QueryClientProvider>,
     )

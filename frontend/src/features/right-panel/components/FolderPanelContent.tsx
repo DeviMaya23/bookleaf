@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { Loader2, Download, X, Copy } from 'lucide-react'
+import { Loader2, Download, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -12,14 +12,13 @@ import DisableShareDialog from './DisableShareDialog'
 
 interface FolderPanelContentProps {
   folder: { id: string; name: string; description: string | null }
-  onClose: () => void
 }
 
 function formatImageCount(count: number): string {
   return count === 1 ? '1 image' : `${count} images`
 }
 
-export default function FolderPanelContent({ folder, onClose }: FolderPanelContentProps) {
+export default function FolderPanelContent({ folder }: FolderPanelContentProps) {
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
   const [isExporting, setIsExporting] = useState(false)
@@ -118,7 +117,7 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
 
   return (
     <>
-      <div className="relative flex-shrink-0 border-b px-4 pt-4 pb-3">
+      <div className="flex-shrink-0 border-b px-4 pt-4 pb-3">
         <input
           value={nameField.value}
           onChange={(e) => nameField.onChange(e.target.value)}
@@ -128,13 +127,6 @@ export default function FolderPanelContent({ folder, onClose }: FolderPanelConte
         {folderDetail && (
           <p className="text-xs text-muted-foreground mt-0.5">{formatImageCount(folderDetail.image_count)}</p>
         )}
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors"
-          aria-label="Close panel"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
