@@ -6,13 +6,15 @@ Detail panel for the selected image, rendered as a 320px sibling to the main con
 
 ### Requirement: Right panel opens when an image card is clicked
 
-The system SHALL render the right panel (`RightPanel` component) when an image is selected. On fine-pointer devices, the panel SHALL render as a 320px sidebar, a sibling to the main content area in `AppLayout`, opened by clicking an image card; this behavior is unchanged from before. On coarse-pointer devices (`useIsCoarsePointer()` is true), the panel SHALL render as a bottom drawer instead of a sidebar, and SHALL be opened via the "View details" item in the image card's context menu (per `fe-gallery-view`) rather than by tapping the card — tapping a card on a coarse-pointer device opens the lightbox instead, per `fe-image-lightbox`. The panel SHALL be hidden (not rendered in either shell) when no image is selected. The panel SHALL NOT be rendered while focus mode is active, even if an image is selected.
+On fine-pointer devices, the system SHALL switch the right panel's content to image mode when an image card is clicked. The panel itself SHALL always be present (per `fe-right-panel-docked`) — clicking an image changes what is shown, not whether the panel is mounted. On coarse-pointer devices, the behavior is unchanged: the bottom drawer opens via "View details" in the image card's context menu, and tapping a card opens the lightbox instead.
 
-#### Scenario: Clicking an image card opens the right panel as a sidebar on a fine-pointer device
+The panel SHALL NOT render while focus mode is active, per `focus-mode`.
+
+#### Scenario: Clicking an image card switches the panel to image content on a fine-pointer device
 
 - **WHEN** a user on a fine-pointer device clicks an image card in the gallery
-- **THEN** the right panel becomes visible as a sidebar on the right side of the layout
-- **AND** the panel displays the selected image's metadata
+- **THEN** the right panel displays that image's metadata
+- **AND** the panel layout does not reflow
 
 #### Scenario: Selecting "View details" opens the right panel as a bottom drawer on a coarse-pointer device
 
@@ -26,15 +28,10 @@ The system SHALL render the right panel (`RightPanel` component) when an image i
 - **THEN** the right panel is not opened
 - **AND** the lightbox opens instead, per `fe-image-lightbox`
 
-#### Scenario: Panel is hidden when no image is selected
-
-- **WHEN** no image has been selected
-- **THEN** the right panel is not rendered in either shell
-
 #### Scenario: Panel stays hidden while focus mode is active
 
 - **WHEN** focus mode is active
-- **AND** an image becomes selected
+- **AND** the user clicks an image card
 - **THEN** the right panel is not rendered, even though an image is now selected
 
 ---
@@ -58,7 +55,7 @@ The system SHALL poll `GET /images/:id` every 1000ms while the selected image's 
 
 ### Requirement: Right panel displays a thumbnail at the top
 
-The system SHALL display the image's `thumbnail_url` at the top of the right panel. The thumbnail SHALL be rendered at full panel width with natural aspect ratio (not a fixed height). A close button (✕) SHALL be overlaid on the thumbnail (top-right corner). The thumbnail itself SHALL be a static display element with no click-to-open behavior.
+The system SHALL display the image's `thumbnail_url` at the top of the right panel. The thumbnail SHALL be rendered at full panel width with natural aspect ratio. The thumbnail itself SHALL be a static display element with no click-to-open behavior. There is no close button overlaid on the thumbnail.
 
 #### Scenario: Thumbnail is shown at panel top
 
@@ -70,11 +67,6 @@ The system SHALL display the image's `thumbnail_url` at the top of the right pan
 - **WHEN** the user clicks the thumbnail in the right panel
 - **THEN** no viewer or overlay opens
 - **AND** the right panel remains as is
-
-#### Scenario: Close button dismisses the panel
-
-- **WHEN** the user clicks the ✕ close button overlaid on the thumbnail
-- **THEN** the right panel closes and no image is selected
 
 ---
 
@@ -296,20 +288,18 @@ The system SHALL render a Tags section in `RightPanel` between the Folders secti
 
 ### Requirement: Right panel opens or updates when a folder is selected
 
-The system SHALL render the right panel showing folder content (via `FolderPanelContent`) when the user selects a folder in the sidebar that differs from the currently active folder, on a fine-pointer device — opening the sidebar shell. On a coarse-pointer device (`useIsCoarsePointer()` is true), selecting a different folder SHALL NOT open the panel; the panel is opened for that folder only via the "View details" item in the folder's context menu, per `folder-management`. If the panel happens to already be open (e.g. left open from a previous "View details" action) when the user selects a different folder, it SHALL update to show the newly selected folder's content rather than closing, on either pointer type. Selecting the currently active folder again SHALL be a no-op — the panel's existing content, whatever it is currently displaying, SHALL remain unchanged.
+The system SHALL update the right panel's content to show folder details (via `FolderPanelContent`) when the user selects a folder in the sidebar, on a fine-pointer device. On a coarse-pointer device, selecting a different folder SHALL NOT open the panel; the panel is opened for that folder only via the "View details" item in the folder's context menu, per `folder-management`. If the panel is already open when the user selects a different folder, it SHALL update to show the newly selected folder's content, on either pointer type. Selecting the currently active folder again SHALL be a no-op.
 
-#### Scenario: Selecting a different folder opens or updates the panel with folder content on a fine-pointer device
+#### Scenario: Selecting a different folder updates the panel with folder content on a fine-pointer device
 
 - **WHEN** a user on a fine-pointer device selects a sidebar folder that is not the currently active folder
-- **THEN** the right panel becomes visible (or updates, if already visible) in the sidebar shell
-- **AND** the panel displays that folder's metadata via `FolderPanelContent`
+- **THEN** the right panel updates to display that folder's metadata via `FolderPanelContent`
 
 #### Scenario: Selecting a different folder does not open the panel on a coarse-pointer device
 
 - **WHEN** a user on a coarse-pointer device selects a sidebar folder that is not the currently active folder
 - **AND** the right panel is not currently open
 - **THEN** the right panel remains closed
-- **AND** the panel can be opened for that folder via "View details" in the folder's context menu, per `folder-management`
 
 #### Scenario: An already-open panel updates to the newly selected folder on a coarse-pointer device
 
@@ -371,24 +361,21 @@ The system SHALL ensure that selecting an image card always results in the right
 
 ### Requirement: Right panel shows a selection-actions mode when images are selected
 
-The system SHALL render the right panel in a `selection` mode whenever `selectedIds` is non-empty, regardless of whether focus mode is active. This mode SHALL take priority over the `image` and `folder` panel modes — while `selectedIds` is non-empty, the panel SHALL show selection content even if a `selectedImage` or active folder would otherwise apply. The panel SHALL be hidden when `selectedIds` is empty, the same as the existing "hidden when no image is selected" rule for the `image` mode.
+The system SHALL render the right panel in a `selection` mode whenever `selectedIds` is non-empty, regardless of whether focus mode is active. This mode SHALL take priority over the `image`, `folder`, and `neutral` panel modes — while `selectedIds` is non-empty, the panel SHALL show selection content even if a `selectedImage` or active folder would otherwise apply.
 
 The selection panel SHALL display:
 - The current count of selected images.
 - An "Add to folder" action that opens a single-select folder picker; choosing a folder immediately calls `POST /images/bulk/add-to-folder` with the current `selectedIds` and the chosen folder.
 - A "Move to trash" action that immediately calls `POST /images/bulk/trash` with the current `selectedIds`, with no confirmation step.
 
-Unlike the `image`/`folder` modes, the selection panel SHALL remain visible while focus mode is active; the user dismisses it manually (e.g. via a close control) rather than it being hidden automatically.
+The selection panel has no close control. The toolbar's Select mode toggle is the sole affordance for exiting select mode.
+
+Unlike the `image`/`folder`/`neutral` modes, the selection panel SHALL remain visible while focus mode is active.
 
 #### Scenario: Selection panel appears once at least one image is selected
 
 - **WHEN** the user is in select mode and selects one image
 - **THEN** the right panel renders in `selection` mode showing a count of 1
-
-#### Scenario: Selection panel is hidden when selection is empty
-
-- **WHEN** select mode is active but no images are currently selected
-- **THEN** the right panel is not rendered
 
 #### Scenario: Selection panel takes priority over the image panel
 
@@ -414,8 +401,7 @@ Unlike the `image`/`folder` modes, the selection panel SHALL remain visible whil
 #### Scenario: A successful bulk action exits select mode entirely
 
 - **WHEN** a bulk add-to-folder or bulk trash request completes successfully
-- **THEN** `selectedIds` and the anchor are cleared, `selectMode` is turned off, and the selection panel is hidden
-- **AND** the right panel does not fall back to showing a previously-selected image or folder as a result
+- **THEN** `selectedIds` and the anchor are cleared, `selectMode` is turned off, and the selection panel is no longer shown
 
 ---
 
@@ -437,15 +423,3 @@ The system SHALL clear `selectedImage` and `folderPanelOpen` (the same way `hand
 - **THEN** the right panel closes (no `folder` mode content is shown)
 - **AND** it does not reopen once the user later empties their multi-select
 
----
-
-### Requirement: Closing the selection panel exits select mode entirely
-
-The system SHALL, when the user dismisses the selection panel via its close control, perform the same full reset as a successful bulk action or the toolbar toggle-off: clear `selectedIds` and the anchor, and turn `selectMode` off. The user must re-enter select mode via the toolbar toggle to select again.
-
-#### Scenario: Closing the selection panel turns select mode off
-
-- **WHEN** select mode is active with one or more images selected
-- **AND** the user clicks the close control on the selection panel
-- **THEN** `selectedIds` and the anchor are cleared, and `selectMode` is turned off
-- **AND** the select-mode toolbar toggle reflects the off state

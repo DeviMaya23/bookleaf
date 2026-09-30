@@ -1,4 +1,9 @@
 import '@testing-library/jest-dom'
+import { beforeEach } from 'vitest'
+
+beforeEach(() => {
+  localStorage.clear()
+})
 
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({

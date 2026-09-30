@@ -22,7 +22,7 @@ import ImageViewer from '@/features/viewer/components/ImageViewer'
 import ImageLightbox from '@/features/viewer/components/ImageLightbox'
 import UploadModal from '@/features/upload/components/UploadModal'
 import BatchUploadModal from '@/features/upload/components/BatchUploadModal'
-import RightPanel from '@/features/right-panel/components/RightPanel'
+import RightPanel, { type PanelContent } from '@/features/right-panel/components/RightPanel'
 import MobileTopBar from './components/MobileTopBar'
 import FloatingUploadButton from './components/FloatingUploadButton'
 import { getFolders } from '@/lib/folders'
@@ -49,7 +49,6 @@ export default function AppLayout() {
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
   const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([])
   const [selectedImage, setSelectedImage] = useState<Image | null>(null)
-  const [folderPanelOpen, setFolderPanelOpen] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [isFileDragOver, setIsFileDragOver] = useState(false)
@@ -60,6 +59,7 @@ export default function AppLayout() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [mainSelectedId, setMainSelectedId] = useState<string | null>(null)
+  const [coarsePointerPanelOpen, setCoarsePointerPanelOpen] = useState(false)
   const isCoarsePointer = useIsCoarsePointer()
 
   const folderId = view.type === 'folder' ? view.id : null
@@ -75,11 +75,14 @@ export default function AppLayout() {
     setMainSelectedId(null)
   }, [viewKey])
 
+  useEffect(() => {
+    setCoarsePointerPanelOpen(false)
+  }, [view.type])
+
   const handleSelectModeToggle = useCallback((pressed: boolean) => {
     setSelectMode(pressed)
     if (pressed) {
       setSelectedImage(null)
-      setFolderPanelOpen(false)
       setAutoFocusTitle(false)
     } else {
       setSelectedIds(new Set())
@@ -181,6 +184,24 @@ export default function AppLayout() {
     ? folders.find((f) => f.id === view.id) ?? null
     : null
 
+  const viewLabel = view.type === 'unsorted'
+    ? 'Unsorted'
+    : view.type === 'trash'
+      ? 'Trash'
+      : view.type === 'folder'
+        ? (activeFolder?.name ?? '')
+        : 'All'
+
+  const panelContent: PanelContent = selectedIds.size > 0
+    ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode }
+    : selectMode
+      ? { mode: 'neutral', viewLabel }
+      : selectedImage
+        ? { mode: 'image', image: selectedImage, autoFocusTitle }
+        : activeFolder
+          ? { mode: 'folder', folder: activeFolder }
+          : { mode: 'neutral', viewLabel }
+
   useSSEEvents()
 
   const handleImageSelect = useCallback((img: Image) => {
@@ -190,25 +211,22 @@ export default function AppLayout() {
     }
     setAutoFocusTitle(false)
     setSelectedImage(img)
-    setFolderPanelOpen(false)
   }, [isCoarsePointer])
 
   const handleViewDetails = useCallback((img: Image) => {
     setAutoFocusTitle(false)
     setSelectedImage(img)
-    setFolderPanelOpen(false)
   }, [])
 
   const handleFolderViewDetails = useCallback(() => {
-    setFolderPanelOpen(true)
     setSelectedImage(null)
     setAutoFocusTitle(false)
+    setCoarsePointerPanelOpen(true)
   }, [])
 
   const handleImageDoubleClick = useCallback((img: Image) => {
     if (isCoarsePointer) return
     setSelectedImage(img)
-    setFolderPanelOpen(false)
     setViewerImage(img)
   }, [isCoarsePointer])
 
@@ -253,7 +271,6 @@ export default function AppLayout() {
       }
       setAutoFocusTitle(true)
       setSelectedImage(imageDetail)
-      setFolderPanelOpen(false)
     } catch (err) {
       if ((err as Error).message === 'heic_safari_only') {
         toast.error('HEIC uploads are only supported in Safari.')
@@ -287,7 +304,6 @@ export default function AppLayout() {
             <FolderSidebar
               view={view}
               onFolderSelect={() => {
-                if (!isCoarsePointer) setFolderPanelOpen(true)
                 setSelectedImage(null)
                 setAutoFocusTitle(false)
               }}
@@ -410,28 +426,7 @@ export default function AppLayout() {
             </ScrollArea>
           )}
         </main>
-        {selectedIds.size > 0 ? (
-          <RightPanel
-            mode="selection"
-            selectedCount={selectedIds.size}
-            onAddToFolder={handleAddSelectionToFolder}
-            onMoveToTrash={handleMoveSelectionToTrash}
-            onClose={exitSelectMode}
-          />
-        ) : selectedImage && !focusMode ? (
-          <RightPanel
-            mode="image"
-            image={selectedImage}
-            onClose={() => { setSelectedImage(null); setAutoFocusTitle(false) }}
-            autoFocusTitle={autoFocusTitle}
-          />
-        ) : folderPanelOpen && activeFolder && !focusMode ? (
-          <RightPanel
-            mode="folder"
-            folder={activeFolder}
-            onClose={() => setFolderPanelOpen(false)}
-          />
-        ) : null}
+        <RightPanel panelContent={panelContent} focusMode={focusMode} mobileOpen={coarsePointerPanelOpen} onMobileClose={() => setCoarsePointerPanelOpen(false)} />
         <FloatingUploadButton onClick={() => setUploadOpen(true)} />
         <UploadModal
           open={uploadOpen}
