@@ -79,7 +79,7 @@ export default function SelectionPanelBody({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {selectedCount > 0 && <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
             Add to folder
@@ -125,7 +125,7 @@ export default function SelectionPanelBody({
             </button>
           </div>
         </div>
-      </div>
+      </div>}
 
       <Dialog open={trashConfirmOpen} onOpenChange={(open) => { if (!open) setTrashConfirmOpen(false) }}>
         <DialogContent>

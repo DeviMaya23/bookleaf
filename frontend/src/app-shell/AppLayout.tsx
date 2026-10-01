@@ -208,15 +208,13 @@ export default function AppLayout() {
         ? (activeFolder?.name ?? '')
         : 'All'
 
-  const panelContent: PanelContent = selectedIds.size > 0
+  const panelContent: PanelContent = selectMode
     ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode, onDownloadZip: handleDownloadSelection }
-    : selectMode
-      ? { mode: 'neutral', viewLabel }
-      : selectedImage
-        ? { mode: 'image', image: selectedImage, autoFocusTitle }
-        : activeFolder
-          ? { mode: 'folder', folder: activeFolder }
-          : { mode: 'neutral', viewLabel }
+    : selectedImage
+      ? { mode: 'image', image: selectedImage, autoFocusTitle }
+      : activeFolder
+        ? { mode: 'folder', folder: activeFolder }
+        : { mode: 'neutral', viewLabel }
 
   useSSEEvents()
 
