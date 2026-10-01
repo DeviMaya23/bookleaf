@@ -49,6 +49,10 @@ type mockImageUsecase struct {
 	lastBulkAddToFolderUser uuid.UUID
 	lastBulkAddToFolderIDs  []uuid.UUID
 	lastBulkAddToFolderID   uuid.UUID
+	bulkAddTagsResult       int
+	bulkAddTagsErr          error
+	lastBulkAddTagsImageIDs []uuid.UUID
+	lastBulkAddTagsTagIDs   []uuid.UUID
 }
 
 func (m *mockImageUsecase) ListFolderImages(_ context.Context, _ uuid.UUID, folderID uuid.UUID, sort *string, direction *string) ([]usecase.ImageItem, error) {
@@ -109,6 +113,11 @@ func (m *mockImageUsecase) BulkAddToFolder(_ context.Context, userID uuid.UUID, 
 }
 func (m *mockImageUsecase) BulkExportImages(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ io.Writer) error {
 	return m.err
+}
+func (m *mockImageUsecase) BulkAddTags(_ context.Context, _ uuid.UUID, imageIDs []uuid.UUID, tagIDs []uuid.UUID) (int, error) {
+	m.lastBulkAddTagsImageIDs = imageIDs
+	m.lastBulkAddTagsTagIDs = tagIDs
+	return m.bulkAddTagsResult, m.bulkAddTagsErr
 }
 
 func strPtr(s string) *string { return &s }
@@ -1098,3 +1107,57 @@ func TestImageHandler_BulkExport_MalformedImageIDReturns400(t *testing.T) {
 }
 
 var _ = strings.NewReader // keep strings import used
+
+// --- BulkAddTags ---
+
+func TestImageHandler_BulkAddTags_ValidRequestReturnsCount(t *testing.T) {
+	imageID := uuid.New()
+	tagID := uuid.New()
+	uc := &mockImageUsecase{bulkAddTagsResult: 1}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q], "tag_ids": [%q]}`, imageID, tagID)
+	c, rec := newEchoContext(t, http.MethodPost, "/images/bulk/tag", body)
+
+	err := h.BulkAddTags(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, float64(1), resp["succeeded_count"])
+	assert.Equal(t, []uuid.UUID{imageID}, uc.lastBulkAddTagsImageIDs)
+	assert.Equal(t, []uuid.UUID{tagID}, uc.lastBulkAddTagsTagIDs)
+}
+
+func TestImageHandler_BulkAddTags_MalformedImageIDReturns400(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": ["not-a-uuid"], "tag_ids": [%q]}`, uuid.New())
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/tag", body)
+
+	err := h.BulkAddTags(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_BulkAddTags_MalformedTagIDReturns400(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q], "tag_ids": ["not-a-uuid"]}`, uuid.New())
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/tag", body)
+
+	err := h.BulkAddTags(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestImageHandler_BulkAddTags_TagNotFoundReturns404(t *testing.T) {
+	uc := &mockImageUsecase{bulkAddTagsErr: gorm.ErrRecordNotFound}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q], "tag_ids": [%q]}`, uuid.New(), uuid.New())
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/tag", body)
+
+	err := h.BulkAddTags(c)
+
+	assertHTTPError(t, err, http.StatusNotFound)
+}

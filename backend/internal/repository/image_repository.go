@@ -397,6 +397,21 @@ func (r *imageRepository) SoftDelete(ctx context.Context, id uuid.UUID, userID u
 	return nil
 }
 
+func (r *imageRepository) BulkSoftDelete(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	result := r.db.WithContext(ctx).
+		Unscoped().
+		Model(&domain.Image{}).
+		Where("id IN ? AND user_id = ? AND deleted_at IS NULL", ids, userID).
+		Update("deleted_at", gorm.Expr("NOW()"))
+	if result.Error != nil {
+		return 0, fmt.Errorf("bulk soft delete images: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 func (r *imageRepository) Restore(ctx context.Context, id uuid.UUID, userID uuid.UUID) error {
 	result := r.db.WithContext(ctx).
 		Unscoped().

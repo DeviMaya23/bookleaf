@@ -34,7 +34,7 @@ import { getMe } from '@/features/auth/lib/me'
 import { handleFileAutoUpload } from './lib/dragHandlers'
 import { bulkAddImagesToFolder, bulkTrashImages, bulkExportImages } from '@/lib/images'
 import type { Image } from '@/lib/images'
-import { getTags } from '@/lib/tags'
+import { getTags, bulkAddTags, resolveOrCreateTags } from '@/lib/tags'
 import { useAppView } from './useAppView'
 import { useAppDragAndDrop } from './useAppDragAndDrop'
 import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
@@ -96,23 +96,6 @@ export default function AppLayout() {
     setMainSelectedId(null)
   }, [])
 
-  const bulkAddToFolderMutation = useMutation({
-    mutationFn: ({ imageIds, folderId }: { imageIds: string[]; folderId: string }) =>
-      bulkAddImagesToFolder(getToken, imageIds, folderId),
-    onSuccess: (result, { imageIds }) => {
-      queryClient.invalidateQueries({ queryKey: ['images'] })
-      if (result.succeeded_count < imageIds.length) {
-        toast.warning(`Added ${result.succeeded_count} of ${imageIds.length} images to folder`)
-      } else {
-        toast.success(`Added ${result.succeeded_count} image${result.succeeded_count === 1 ? '' : 's'} to folder`)
-      }
-      exitSelectMode()
-    },
-    onError: () => {
-      toast.error('Failed to add images to folder')
-    },
-  })
-
   const bulkTrashMutation = useMutation({
     mutationFn: (imageIds: string[]) => bulkTrashImages(getToken, imageIds),
     onSuccess: (result, imageIds) => {
@@ -129,9 +112,51 @@ export default function AppLayout() {
     },
   })
 
-  const handleAddSelectionToFolder = useCallback((targetFolderId: string) => {
-    bulkAddToFolderMutation.mutate({ imageIds: Array.from(selectedIds), folderId: targetFolderId })
-  }, [bulkAddToFolderMutation, selectedIds])
+  const handleApplySelection = useCallback(async ({ folderIds, tags }: { folderIds: string[]; tags: { id: string; name: string }[] }) => {
+    const imageIds = Array.from(selectedIds)
+    const ops: Promise<void>[] = []
+
+    if (folderIds.length > 0) {
+      for (const folderId of folderIds) {
+        ops.push(
+          bulkAddImagesToFolder(getToken, imageIds, folderId).then((result) => {
+            queryClient.invalidateQueries({ queryKey: ['images'] })
+            if (result.succeeded_count < imageIds.length) {
+              toast.warning(`Added ${result.succeeded_count} of ${imageIds.length} images to folder`)
+            }
+          }).catch(() => {
+            toast.error('Failed to add images to folder')
+            throw new Error('folder')
+          })
+        )
+      }
+    }
+
+    if (tags.length > 0) {
+      ops.push(
+        (async () => {
+          const allTags = queryClient.getQueryData<{ id: string; name: string }[]>(['tags']) ?? []
+          const resolved = await resolveOrCreateTags(getToken, tags, allTags, queryClient)
+          const resolvedTagIds = resolved.map((t) => t.id)
+          const result = await bulkAddTags(getToken, imageIds, resolvedTagIds)
+          queryClient.invalidateQueries({ queryKey: ['images'] })
+          if (result.succeeded_count < imageIds.length) {
+            toast.warning(`Tagged ${result.succeeded_count} of ${imageIds.length} images`)
+          }
+        })().catch(() => {
+          toast.error('Failed to add tags to images')
+          throw new Error('tags')
+        })
+      )
+    }
+
+    const results = await Promise.allSettled(ops)
+    const allSucceeded = results.every((r) => r.status === 'fulfilled')
+    if (allSucceeded && ops.length > 0) {
+      toast.success(`Applied to ${imageIds.length} image${imageIds.length === 1 ? '' : 's'}`)
+      exitSelectMode()
+    }
+  }, [selectedIds, getToken, queryClient, exitSelectMode])
 
   const handleMoveSelectionToTrash = useCallback(() => {
     bulkTrashMutation.mutate(Array.from(selectedIds))
@@ -209,7 +234,7 @@ export default function AppLayout() {
         : 'All'
 
   const panelContent: PanelContent = (selectMode || selectedIds.size > 0)
-    ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode, onDownloadZip: handleDownloadSelection }
+    ? { mode: 'selection', selectedCount: selectedIds.size, onApply: handleApplySelection, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode, onDownloadZip: handleDownloadSelection }
     : selectedImage
       ? { mode: 'image', image: selectedImage, autoFocusTitle }
       : activeFolder

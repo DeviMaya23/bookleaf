@@ -19,4 +19,6 @@ type TrashRepository interface {
 	HardDelete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	// FilterOwnedImageIDs returns the subset of ids that exist (non-deleted) and belong to userID.
 	FilterOwnedImageIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) ([]uuid.UUID, error)
+	// BulkSoftDelete soft-deletes all qualifying ids in a single statement. Returns the number of rows affected.
+	BulkSoftDelete(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) (int64, error)
 }

@@ -1,8 +1,4 @@
-## Purpose
-
-Defines the `POST /images/bulk/trash` endpoint for soft-deleting many images in a single request.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: POST /images/bulk/trash — Bulk Move Images to Trash
 

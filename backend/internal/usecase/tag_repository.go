@@ -14,6 +14,9 @@ type TagRepository interface {
 	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 	ReplaceImageTags(ctx context.Context, imageID uuid.UUID, tagIDs []uuid.UUID) error
+	// AppendImageTagsBulk adds tag associations for every (imageID, tagID) pair in a single transaction.
+	// Pairs that already exist are silently ignored (ON CONFLICT DO NOTHING).
+	AppendImageTagsBulk(ctx context.Context, imageIDs []uuid.UUID, tagIDs []uuid.UUID) error
 	// DeleteAllByUserID permanently deletes all of a user's tags.
 	DeleteAllByUserID(ctx context.Context, userID uuid.UUID) error
 }

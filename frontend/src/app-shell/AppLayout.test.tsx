@@ -34,6 +34,8 @@ vi.mock('@/lib/folders', async (importOriginal) => ({
 vi.mock('@/lib/tags', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/tags')>()),
   getTags: vi.fn().mockResolvedValue([]),
+  bulkAddTags: vi.fn(),
+  resolveOrCreateTags: vi.fn().mockImplementation((_, tags) => Promise.resolve(tags)),
 }))
 
 vi.mock('@/lib/images', async (importOriginal) => ({
@@ -126,7 +128,7 @@ vi.mock('@/features/right-panel/components/RightPanel', () => ({
     panelContent:
       | { mode: 'image'; image: Image }
       | { mode: 'folder'; folder: { name: string } }
-      | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void }
+      | { mode: 'selection'; selectedCount: number; onApply: (params: { folderIds: string[]; tags: { id: string; name: string }[] }) => void; onMoveToTrash: () => void }
       | { mode: 'neutral'; viewLabel: string }
     focusMode: boolean
     mobileOpen?: boolean
@@ -144,7 +146,7 @@ vi.mock('@/features/right-panel/components/RightPanel', () => ({
         ) : panelContent.mode === 'selection' ? (
           <>
             {panelContent.selectedCount} selected
-            <button onClick={() => panelContent.onAddToFolder('folder-1')}>Add selection to folder</button>
+            <button onClick={() => panelContent.onApply({ folderIds: ['folder-1'], tags: [] })}>Add selection to folder</button>
             <button onClick={() => panelContent.onMoveToTrash()}>Move selection to trash</button>
           </>
         ) : (
