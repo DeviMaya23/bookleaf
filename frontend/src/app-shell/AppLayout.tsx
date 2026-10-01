@@ -208,7 +208,7 @@ export default function AppLayout() {
         ? (activeFolder?.name ?? '')
         : 'All'
 
-  const panelContent: PanelContent = selectMode
+  const panelContent: PanelContent = (selectMode || selectedIds.size > 0)
     ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode, onDownloadZip: handleDownloadSelection }
     : selectedImage
       ? { mode: 'image', image: selectedImage, autoFocusTitle }
