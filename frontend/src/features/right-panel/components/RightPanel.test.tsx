@@ -305,7 +305,7 @@ describe('RightPanel selection mode', () => {
     vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
   })
 
-  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void }> = {}) {
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }> = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={queryClient}>
@@ -316,6 +316,7 @@ describe('RightPanel selection mode', () => {
             onAddToFolder: props.onAddToFolder ?? vi.fn(),
             onMoveToTrash: props.onMoveToTrash ?? vi.fn(),
             onExitSelectMode: props.onExitSelectMode ?? vi.fn(),
+            onDownloadZip: props.onDownloadZip ?? vi.fn().mockResolvedValue(undefined),
           }}
           focusMode={false}
         />

@@ -40,4 +40,7 @@ type ImageRepository interface {
 	ListAllByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Image, error)
 	// HardDeleteAllByUserID permanently deletes all of a user's images, including soft-deleted ones.
 	HardDeleteAllByUserID(ctx context.Context, userID uuid.UUID) error
+	// GetManyByIDs returns non-deleted images matching the given IDs that belong to userID.
+	// Results include Tags and ImageFolders preloaded. IDs not found or not owned are silently omitted.
+	GetManyByIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) ([]*domain.Image, error)
 }

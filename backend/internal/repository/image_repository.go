@@ -506,6 +506,21 @@ func (r *imageRepository) ListAllByUserID(ctx context.Context, userID uuid.UUID)
 	return images, nil
 }
 
+func (r *imageRepository) GetManyByIDs(ctx context.Context, ids []uuid.UUID, userID uuid.UUID) ([]*domain.Image, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var images []*domain.Image
+	if err := r.db.WithContext(ctx).
+		Preload("Tags").
+		Preload("ImageFolders").
+		Where("id IN (?) AND user_id = ?", ids, userID).
+		Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("get images by ids: %w", err)
+	}
+	return images, nil
+}
+
 func (r *imageRepository) HardDeleteAllByUserID(ctx context.Context, userID uuid.UUID) error {
 	if err := r.db.WithContext(ctx).
 		Unscoped().

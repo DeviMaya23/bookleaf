@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel/codes"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -27,6 +29,7 @@ type ImageUsecase interface {
 	MoveImageFolder(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, fromFolderID *uuid.UUID, toFolderID *uuid.UUID) (*usecase.ImageItem, error)
 	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, folderID uuid.UUID, position string) error
 	BulkAddToFolder(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error)
+	BulkExportImages(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, w io.Writer) error
 }
 
 type ImageHandler struct {
@@ -543,6 +546,42 @@ func (h *ImageHandler) BulkAddToFolder(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, bulkOperationResponse{SucceededCount: count})
+}
+
+type bulkExportRequest struct {
+	ImageIDs []string `json:"image_ids"`
+}
+
+func (h *ImageHandler) BulkExport(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkExport")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req bulkExportRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	imageIDs, err := parseUUIDStrings(req.ImageIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, "application/zip")
+	c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="bookleaf-export.zip"`)
+	c.Response().WriteHeader(http.StatusOK)
+
+	if err := h.imageUsecase.BulkExportImages(ctx, userID, imageIDs, c.Response()); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		observability.LoggerFromContext(ctx, h.tel.Logger).Error("bulk export failed", zap.Error(err))
+	}
+
+	return nil
 }
 
 // parseUUIDStrings parses a slice of UUID strings, returning an error if any entry is malformed.
