@@ -269,12 +269,16 @@ func (m *mockStorageService) DeleteObject(_ context.Context, key string) error {
 func (m *mockStorageService) Ping(_ context.Context) error { return m.err }
 
 type mockTagRepository struct {
-	tag                *domain.Tag
-	tags               []*domain.Tag
-	err                error
-	replaceCalls       int
-	lastReplaceImageID uuid.UUID
-	lastReplaceTagIDs  []uuid.UUID
+	tag                    *domain.Tag
+	tags                   []*domain.Tag
+	err                    error
+	replaceCalls           int
+	lastReplaceImageID     uuid.UUID
+	lastReplaceTagIDs      []uuid.UUID
+	appendBulkCalls        int
+	lastAppendBulkImageIDs []uuid.UUID
+	lastAppendBulkTagIDs   []uuid.UUID
+	appendBulkErr          error
 }
 
 func (m *mockTagRepository) Create(_ context.Context, _ *domain.Tag) (*domain.Tag, error) {
@@ -299,6 +303,12 @@ func (m *mockTagRepository) ReplaceImageTags(_ context.Context, imageID uuid.UUI
 		m.lastReplaceTagIDs = nil
 	}
 	return m.err
+}
+func (m *mockTagRepository) AppendImageTagsBulk(_ context.Context, imageIDs []uuid.UUID, tagIDs []uuid.UUID) error {
+	m.appendBulkCalls++
+	m.lastAppendBulkImageIDs = append([]uuid.UUID(nil), imageIDs...)
+	m.lastAppendBulkTagIDs = append([]uuid.UUID(nil), tagIDs...)
+	return m.appendBulkErr
 }
 func (m *mockTagRepository) DeleteAllByUserID(_ context.Context, _ uuid.UUID) error {
 	return m.err
@@ -724,4 +734,61 @@ func TestImageUsecase_BulkAddToFolder_AlreadyInFolderCountsAsSuccess(t *testing.
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+}
+
+// --- BulkAddTags ---
+
+func TestImageUsecase_BulkAddTags_TagsAppliedToOwnedImages(t *testing.T) {
+	userID := uuid.New()
+	tagID1, tagID2 := uuid.New(), uuid.New()
+	imageID1, imageID2 := uuid.New(), uuid.New()
+	tagRepo := &mockTagRepository{
+		tags: []*domain.Tag{
+			{ID: tagID1, UserID: userID, Name: "summer"},
+			{ID: tagID2, UserID: userID, Name: "travel"},
+		},
+	}
+	imageRepo := &mockImageRepository{filterOwnedResult: []uuid.UUID{imageID1, imageID2}}
+	uc := newImageUsecase(imageRepo, tagRepo, &mockStorageService{})
+
+	count, err := uc.BulkAddTags(context.Background(), userID, []uuid.UUID{imageID1, imageID2}, []uuid.UUID{tagID1, tagID2})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, count)
+	assert.Equal(t, 1, tagRepo.appendBulkCalls)
+	assert.ElementsMatch(t, []uuid.UUID{imageID1, imageID2}, tagRepo.lastAppendBulkImageIDs)
+	assert.ElementsMatch(t, []uuid.UUID{tagID1, tagID2}, tagRepo.lastAppendBulkTagIDs)
+}
+
+func TestImageUsecase_BulkAddTags_UnownedTagReturnsError(t *testing.T) {
+	userID := uuid.New()
+	ownedTagID := uuid.New()
+	unownedTagID := uuid.New()
+	tagRepo := &mockTagRepository{
+		tags: []*domain.Tag{{ID: ownedTagID, UserID: userID, Name: "mine"}},
+	}
+	imageRepo := &mockImageRepository{}
+	uc := newImageUsecase(imageRepo, tagRepo, &mockStorageService{})
+
+	_, err := uc.BulkAddTags(context.Background(), userID, []uuid.UUID{uuid.New()}, []uuid.UUID{ownedTagID, unownedTagID})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	assert.Equal(t, 0, tagRepo.appendBulkCalls)
+}
+
+func TestImageUsecase_BulkAddTags_AllUnownedImagesReturnsZero(t *testing.T) {
+	userID := uuid.New()
+	tagID := uuid.New()
+	tagRepo := &mockTagRepository{
+		tags: []*domain.Tag{{ID: tagID, UserID: userID, Name: "tag"}},
+	}
+	imageRepo := &mockImageRepository{filterOwnedResult: []uuid.UUID{}}
+	uc := newImageUsecase(imageRepo, tagRepo, &mockStorageService{})
+
+	count, err := uc.BulkAddTags(context.Background(), userID, []uuid.UUID{uuid.New()}, []uuid.UUID{tagID})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+	assert.Equal(t, 0, tagRepo.appendBulkCalls)
 }

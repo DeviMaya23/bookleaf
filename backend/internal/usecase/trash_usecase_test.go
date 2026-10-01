@@ -16,19 +16,22 @@ import (
 // --- test doubles ---
 
 type mockTrashRepository struct {
-	image              *domain.Image
-	images             []*domain.Image
-	err                error
-	hardDeleteCalls    int
-	lastListName       *string
-	lastListSort       *string
-	lastListDirection  *string
-	filterOwnedCalls   int
-	lastFilterOwnedIDs []uuid.UUID
-	filterOwnedResult  []uuid.UUID
-	softDeleteFailIDs  map[uuid.UUID]struct{}
-	softDeleteCalls    int
-	lastSoftDeleteIDs  []uuid.UUID
+	image                *domain.Image
+	images               []*domain.Image
+	err                  error
+	hardDeleteCalls      int
+	lastListName         *string
+	lastListSort         *string
+	lastListDirection    *string
+	filterOwnedCalls     int
+	lastFilterOwnedIDs   []uuid.UUID
+	filterOwnedResult    []uuid.UUID
+	softDeleteFailIDs    map[uuid.UUID]struct{}
+	softDeleteCalls      int
+	lastSoftDeleteIDs    []uuid.UUID
+	bulkSoftDeleteCalls  int
+	lastBulkSoftDeleteIDs []uuid.UUID
+	bulkSoftDeleteErr    error
 }
 
 func (m *mockTrashRepository) GetByID(_ context.Context, _ uuid.UUID, _ uuid.UUID) (*domain.Image, error) {
@@ -71,6 +74,15 @@ func (m *mockTrashRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.
 		return m.filterOwnedResult, m.err
 	}
 	return ids, m.err
+}
+
+func (m *mockTrashRepository) BulkSoftDelete(_ context.Context, ids []uuid.UUID, _ uuid.UUID) (int64, error) {
+	m.bulkSoftDeleteCalls++
+	m.lastBulkSoftDeleteIDs = ids
+	if m.bulkSoftDeleteErr != nil {
+		return 0, m.bulkSoftDeleteErr
+	}
+	return int64(len(ids)), nil
 }
 
 type mockTrashJobEnqueuer struct {
@@ -303,23 +315,8 @@ func TestTrashUsecase_BulkTrash_AllSucceed(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, count)
-	assert.Equal(t, 3, repo.softDeleteCalls)
-}
-
-func TestTrashUsecase_BulkTrash_AlreadyTrashedExcludedOthersSucceed(t *testing.T) {
-	alreadyTrashed := uuid.New()
-	valid := uuid.New()
-	repo := &mockTrashRepository{
-		filterOwnedResult: []uuid.UUID{alreadyTrashed, valid},
-		softDeleteFailIDs: map[uuid.UUID]struct{}{alreadyTrashed: {}},
-	}
-	uc := newTrashUsecase(repo, &mockStorageService{}, &mockTrashJobEnqueuer{})
-
-	count, err := uc.BulkTrash(context.Background(), uuid.New(), []uuid.UUID{alreadyTrashed, valid})
-
-	require.NoError(t, err)
-	assert.Equal(t, 1, count)
-	assert.Equal(t, 2, repo.softDeleteCalls)
+	assert.Equal(t, 1, repo.bulkSoftDeleteCalls)
+	assert.ElementsMatch(t, imageIDs, repo.lastBulkSoftDeleteIDs)
 }
 
 func TestTrashUsecase_BulkTrash_UnownedImageExcludedOthersSucceed(t *testing.T) {
@@ -332,8 +329,8 @@ func TestTrashUsecase_BulkTrash_UnownedImageExcludedOthersSucceed(t *testing.T) 
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
-	assert.Equal(t, 1, repo.softDeleteCalls)
-	assert.Equal(t, []uuid.UUID{owned}, repo.lastSoftDeleteIDs)
+	assert.Equal(t, 1, repo.bulkSoftDeleteCalls)
+	assert.Equal(t, []uuid.UUID{owned}, repo.lastBulkSoftDeleteIDs)
 }
 
 func TestTrashUsecase_BulkTrash_AllInvalidReturnsZeroNoError(t *testing.T) {
@@ -345,5 +342,5 @@ func TestTrashUsecase_BulkTrash_AllInvalidReturnsZeroNoError(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, count)
-	assert.Equal(t, 0, repo.softDeleteCalls)
+	assert.Equal(t, 0, repo.bulkSoftDeleteCalls)
 }

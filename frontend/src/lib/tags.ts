@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { apiFetch } from './api'
+import type { BulkActionResult } from './images'
 
 export interface Tag {
   id: string
@@ -23,6 +24,20 @@ export async function createTag(getToken: GetToken, name: string): Promise<Tag |
   })
   if (res.status === 409) return null
   if (!res.ok) throw new Error('Failed to create tag')
+  return res.json()
+}
+
+export async function bulkAddTags(
+  getToken: GetToken,
+  imageIds: string[],
+  tagIds: string[],
+): Promise<BulkActionResult> {
+  const res = await apiFetch('/images/bulk/tag', getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_ids: imageIds, tag_ids: tagIds }),
+  })
+  if (!res.ok) throw new Error('Failed to bulk add tags')
   return res.json()
 }
 

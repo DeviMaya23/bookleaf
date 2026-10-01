@@ -8,6 +8,7 @@ import (
 	"github.com/devi/bookleaf/internal/usecase"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type tagRepository struct {
@@ -91,6 +92,30 @@ func (r *tagRepository) ReplaceImageTags(ctx context.Context, imageID uuid.UUID,
 		}
 		if err := tx.Table("image_tags").Create(&rows).Error; err != nil {
 			return fmt.Errorf("insert image tags: %w", err)
+		}
+		return nil
+	})
+}
+
+func (r *tagRepository) AppendImageTagsBulk(ctx context.Context, imageIDs []uuid.UUID, tagIDs []uuid.UUID) error {
+	if len(imageIDs) == 0 || len(tagIDs) == 0 {
+		return nil
+	}
+	type imageTag struct {
+		ImageID uuid.UUID `gorm:"column:image_id"`
+		TagID   uuid.UUID `gorm:"column:tag_id"`
+	}
+	rows := make([]imageTag, 0, len(imageIDs)*len(tagIDs))
+	for _, imageID := range imageIDs {
+		for _, tagID := range tagIDs {
+			rows = append(rows, imageTag{ImageID: imageID, TagID: tagID})
+		}
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("image_tags").
+			Clauses(clause.OnConflict{DoNothing: true}).
+			Create(&rows).Error; err != nil {
+			return fmt.Errorf("bulk append image tags: %w", err)
 		}
 		return nil
 	})

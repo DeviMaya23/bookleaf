@@ -25,7 +25,7 @@ vi.mock('@/lib/tags', () => ({
 }))
 
 import { updateImage } from '@/lib/images'
-import { resolveOrCreateTags } from '@/lib/tags'
+import { getTags, resolveOrCreateTags } from '@/lib/tags'
 import { getFolders } from '@/lib/folders'
 
 function makeImage(overrides?: Partial<Image>): Image {
@@ -305,7 +305,7 @@ describe('RightPanel selection mode', () => {
     vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
   })
 
-  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }> = {}) {
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onApply: (params: { folderIds: string[]; tags: { id: string; name: string }[] }) => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }> = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={queryClient}>
@@ -313,7 +313,7 @@ describe('RightPanel selection mode', () => {
           panelContent={{
             mode: 'selection',
             selectedCount: props.selectedCount ?? 1,
-            onAddToFolder: props.onAddToFolder ?? vi.fn(),
+            onApply: props.onApply ?? vi.fn(),
             onMoveToTrash: props.onMoveToTrash ?? vi.fn(),
             onExitSelectMode: props.onExitSelectMode ?? vi.fn(),
             onDownloadZip: props.onDownloadZip ?? vi.fn().mockResolvedValue(undefined),
@@ -330,15 +330,42 @@ describe('RightPanel selection mode', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
-  it('calls onAddToFolder with the chosen folder id when Apply is clicked', async () => {
-    const onAddToFolder = vi.fn()
-    renderSelectionPanel({ onAddToFolder })
+  it('calls onApply with folder id when a folder is added and Apply is clicked', async () => {
+    const onApply = vi.fn()
+    renderSelectionPanel({ onApply })
 
     await userEvent.type(screen.getByPlaceholderText('Add to folder…'), 'nat')
     await userEvent.click(await screen.findByText('Nature'))
     await userEvent.click(screen.getByRole('button', { name: /^apply$/i }))
 
-    expect(onAddToFolder).toHaveBeenCalledWith('folder-1')
+    expect(onApply).toHaveBeenCalledWith({ folderIds: ['folder-1'], tags: [] })
+  })
+
+  it('calls onApply with tag when a tag is added and Apply is clicked', async () => {
+    vi.mocked(getFolders).mockResolvedValue([])
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'nature' }])
+    const onApply = vi.fn()
+    renderSelectionPanel({ onApply })
+
+    await userEvent.type(screen.getByPlaceholderText('Add tags…'), 'nat')
+    await userEvent.click(await screen.findByText('nature'))
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }))
+
+    expect(onApply).toHaveBeenCalledWith({ folderIds: [], tags: [{ id: 'tag-1', name: 'nature' }] })
+  })
+
+  it('calls onApply with both folder and tag when Apply is clicked', async () => {
+    vi.mocked(getTags).mockResolvedValue([{ id: 'tag-1', name: 'summer' }])
+    const onApply = vi.fn()
+    renderSelectionPanel({ onApply })
+
+    await userEvent.type(screen.getByPlaceholderText('Add to folder…'), 'nat')
+    await userEvent.click(await screen.findByText('Nature'))
+    await userEvent.type(screen.getByPlaceholderText('Add tags…'), 'sum')
+    await userEvent.click(await screen.findByText('summer'))
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }))
+
+    expect(onApply).toHaveBeenCalledWith({ folderIds: ['folder-1'], tags: [{ id: 'tag-1', name: 'summer' }] })
   })
 
   it('filters the folder list as the user types in the search input', async () => {

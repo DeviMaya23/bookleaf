@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 const (
@@ -397,6 +398,47 @@ func (u *imageUsecase) BulkExportImages(ctx context.Context, userID uuid.UUID, i
 	}
 
 	return nil
+}
+
+func (u *imageUsecase) BulkAddTags(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, tagIDs []uuid.UUID) (int, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkAddTags")
+	defer span.End()
+
+	userTags, err := u.tagRepo.ListByUserID(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("list user tags: %w", err)
+	}
+
+	ownedTagSet := make(map[uuid.UUID]struct{}, len(userTags))
+	for _, t := range userTags {
+		ownedTagSet[t.ID] = struct{}{}
+	}
+	for _, tagID := range tagIDs {
+		if _, ok := ownedTagSet[tagID]; !ok {
+			return 0, fmt.Errorf("tag not found: %w", gorm.ErrRecordNotFound)
+		}
+	}
+
+	ownedImageIDs, err := u.imageRepo.FilterOwnedImageIDs(ctx, imageIDs, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("filter owned image ids: %w", err)
+	}
+
+	if len(ownedImageIDs) == 0 {
+		return 0, nil
+	}
+
+	if err := u.tagRepo.AppendImageTagsBulk(ctx, ownedImageIDs, tagIDs); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, fmt.Errorf("append image tags bulk: %w", err)
+	}
+
+	return len(ownedImageIDs), nil
 }
 
 func downloadFileExtension(mimeType string) string {

@@ -22,7 +22,7 @@ import { usePersistedBoolean } from '@/hooks/usePersistedBoolean'
 export type PanelContent =
   | { mode: 'image'; image: Image; autoFocusTitle?: boolean }
   | { mode: 'folder'; folder: { id: string; name: string; description: string | null } }
-  | { mode: 'selection'; selectedCount: number; onAddToFolder: (folderId: string) => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }
+  | { mode: 'selection'; selectedCount: number; onApply: (params: { folderIds: string[]; tags: { id: string; name: string }[] }) => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }
   | { mode: 'neutral'; viewLabel: string }
 
 interface RightPanelProps {
@@ -85,7 +85,7 @@ function deriveContent(panelContent: PanelContent) {
       return (
         <SelectionPanelBody
           selectedCount={panelContent.selectedCount}
-          onAddToFolder={panelContent.onAddToFolder}
+          onApply={panelContent.onApply}
           onMoveToTrash={panelContent.onMoveToTrash}
           onExitSelectMode={panelContent.onExitSelectMode}
           onDownloadZip={panelContent.onDownloadZip}

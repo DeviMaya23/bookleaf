@@ -37,6 +37,9 @@ func (s *stubTagRepo) Delete(_ context.Context, _ uuid.UUID, _ uuid.UUID) error 
 func (s *stubTagRepo) ReplaceImageTags(_ context.Context, _ uuid.UUID, _ []uuid.UUID) error {
 	return s.err
 }
+func (s *stubTagRepo) AppendImageTagsBulk(_ context.Context, _ []uuid.UUID, _ []uuid.UUID) error {
+	return s.err
+}
 func (s *stubTagRepo) DeleteAllByUserID(_ context.Context, _ uuid.UUID) error {
 	return s.err
 }

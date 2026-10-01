@@ -298,34 +298,18 @@ func (u *trashUsecase) BulkTrash(ctx context.Context, userID uuid.UUID, imageIDs
 		return 0, err
 	}
 
-	ownedSet := make(map[uuid.UUID]struct{}, len(ownedIDs))
-	for _, id := range ownedIDs {
-		ownedSet[id] = struct{}{}
+	if len(ownedIDs) == 0 {
+		return 0, nil
 	}
 
-	succeeded := 0
-	for _, imageID := range imageIDs {
-		if _, ok := ownedSet[imageID]; !ok {
-			logger.Info("skipping unowned image in bulk trash",
-				zap.String("event", "image.bulk_trash.skipped"),
-				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID.String()),
-			)
-			continue
-		}
-
-		if err := u.imageRepo.SoftDelete(ctx, imageID, userID); err != nil {
-			logger.Info("skipping image in bulk trash",
-				zap.String("event", "image.bulk_trash.skipped"),
-				zap.String("image_id", imageID.String()),
-				zap.String("user_id", userID.String()),
-				zap.Error(err),
-			)
-			continue
-		}
-		succeeded++
+	affected, err := u.imageRepo.BulkSoftDelete(ctx, ownedIDs, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return 0, err
 	}
 
+	succeeded := int(affected)
 	logger.Info("bulk trash complete",
 		zap.String("event", "image.bulk_trash.complete"),
 		zap.String("user_id", userID.String()),

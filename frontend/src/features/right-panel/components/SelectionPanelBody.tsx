@@ -12,11 +12,14 @@ import {
 } from '@/components/ui/dialog'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
+import { getTags } from '@/lib/tags'
+import type { Tag } from '@/lib/tags'
 import FolderInput from './FolderInput'
+import TagInput from './TagInput'
 
 interface SelectionPanelBodyProps {
   selectedCount: number
-  onAddToFolder: (folderId: string) => void
+  onApply: (params: { folderIds: string[]; tags: Tag[] }) => void
   onMoveToTrash: () => void
   onExitSelectMode: () => void
   onDownloadZip: () => Promise<void>
@@ -24,13 +27,14 @@ interface SelectionPanelBodyProps {
 
 export default function SelectionPanelBody({
   selectedCount,
-  onAddToFolder,
+  onApply,
   onMoveToTrash,
   onExitSelectMode,
   onDownloadZip,
 }: SelectionPanelBodyProps) {
   const { getToken } = useKindeAuth()
   const [pendingFolders, setPendingFolders] = useState<Folder[]>([])
+  const [pendingTags, setPendingTags] = useState<Tag[]>([])
   const [isDownloading, setIsDownloading] = useState(false)
   const [trashConfirmOpen, setTrashConfirmOpen] = useState(false)
 
@@ -40,11 +44,19 @@ export default function SelectionPanelBody({
     staleTime: 60_000,
   })
 
+  const { data: allTags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => getTags(getToken),
+    staleTime: 60_000,
+  })
+
   const handleApply = () => {
-    for (const folder of pendingFolders) {
-      onAddToFolder(folder.id)
-    }
+    onApply({
+      folderIds: pendingFolders.map((f) => f.id),
+      tags: pendingTags,
+    })
     setPendingFolders([])
+    setPendingTags([])
   }
 
   const handleDownload = async () => {
@@ -61,7 +73,9 @@ export default function SelectionPanelBody({
     onMoveToTrash()
   }
 
-  const suggestions = folders.filter((f) => !pendingFolders.some((p) => p.id === f.id))
+  const folderSuggestions = folders.filter((f) => !pendingFolders.some((p) => p.id === f.id))
+  const tagSuggestions = allTags.filter((t) => !pendingTags.some((p) => p.id === t.id))
+  const applyDisabled = pendingFolders.length === 0 && pendingTags.length === 0
 
   return (
     <>
@@ -80,20 +94,34 @@ export default function SelectionPanelBody({
       </div>
 
       {selectedCount > 0 && <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Add to folder
-          </p>
-          <FolderInput
-            folders={pendingFolders}
-            onChange={setPendingFolders}
-            suggestions={suggestions}
-          />
+        <div className="space-y-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Add to folder
+            </p>
+            <FolderInput
+              folders={pendingFolders}
+              onChange={setPendingFolders}
+              suggestions={folderSuggestions}
+            />
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Add tags
+            </p>
+            <TagInput
+              tags={pendingTags}
+              onChange={setPendingTags}
+              suggestions={tagSuggestions}
+            />
+          </div>
+
           <button
             type="button"
             onClick={handleApply}
-            disabled={pendingFolders.length === 0}
-            className="mt-2 w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 disabled:pointer-events-none hover:bg-muted/60"
+            disabled={applyDisabled}
+            className="w-full rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 disabled:pointer-events-none hover:bg-muted/60"
           >
             Apply
           </button>

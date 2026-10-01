@@ -30,6 +30,7 @@ type ImageUsecase interface {
 	UpdateImagePosition(ctx context.Context, imageID uuid.UUID, userID uuid.UUID, folderID uuid.UUID, position string) error
 	BulkAddToFolder(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, folderID uuid.UUID) (int, error)
 	BulkExportImages(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, w io.Writer) error
+	BulkAddTags(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, tagIDs []uuid.UUID) (int, error)
 }
 
 type ImageHandler struct {
@@ -582,6 +583,48 @@ func (h *ImageHandler) BulkExport(c echo.Context) error {
 	}
 
 	return nil
+}
+
+type bulkAddTagsRequest struct {
+	ImageIDs []string `json:"image_ids"`
+	TagIDs   []string `json:"tag_ids"`
+}
+
+func (h *ImageHandler) BulkAddTags(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.BulkAddTags")
+	defer span.End()
+
+	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
+	if !ok {
+		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	var req bulkAddTagsRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+	}
+
+	imageIDs, err := parseUUIDStrings(req.ImageIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid image id")
+	}
+
+	tagIDs, err := parseUUIDStrings(req.TagIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid tag id")
+	}
+
+	count, err := h.imageUsecase.BulkAddTags(ctx, userID, imageIDs, tagIDs)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "tag not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to bulk add tags")
+	}
+
+	return c.JSON(http.StatusOK, bulkOperationResponse{SucceededCount: count})
 }
 
 // parseUUIDStrings parses a slice of UUID strings, returning an error if any entry is malformed.
