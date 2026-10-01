@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
@@ -376,6 +377,26 @@ func (u *imageUsecase) BulkAddToFolder(ctx context.Context, userID uuid.UUID, im
 	)
 
 	return succeeded, nil
+}
+
+func (u *imageUsecase) BulkExportImages(ctx context.Context, userID uuid.UUID, imageIDs []uuid.UUID, w io.Writer) error {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.BulkExportImages")
+	defer span.End()
+
+	images, err := u.imageRepo.GetManyByIDs(ctx, imageIDs, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("get images by ids: %w", err)
+	}
+
+	if err := writeImagesToZip(ctx, images, u.store, w); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func downloadFileExtension(mimeType string) string {

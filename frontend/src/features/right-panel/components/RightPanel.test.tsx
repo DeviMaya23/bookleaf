@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -305,7 +305,7 @@ describe('RightPanel selection mode', () => {
     vi.mocked(getFolders).mockResolvedValue([{ id: 'folder-1', name: 'Nature', description: null, icon: null, parent_id: null, created_at: '', updated_at: '' }])
   })
 
-  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void }> = {}) {
+  function renderSelectionPanel(props: Partial<{ selectedCount: number; onAddToFolder: () => void; onMoveToTrash: () => void; onExitSelectMode: () => void; onDownloadZip: () => Promise<void> }> = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     return render(
       <QueryClientProvider client={queryClient}>
@@ -316,6 +316,7 @@ describe('RightPanel selection mode', () => {
             onAddToFolder: props.onAddToFolder ?? vi.fn(),
             onMoveToTrash: props.onMoveToTrash ?? vi.fn(),
             onExitSelectMode: props.onExitSelectMode ?? vi.fn(),
+            onDownloadZip: props.onDownloadZip ?? vi.fn().mockResolvedValue(undefined),
           }}
           focusMode={false}
         />
@@ -329,12 +330,13 @@ describe('RightPanel selection mode', () => {
     expect(screen.getByText('1 selected')).toBeInTheDocument()
   })
 
-  it('calls onAddToFolder with the chosen folder id', async () => {
+  it('calls onAddToFolder with the chosen folder id when Apply is clicked', async () => {
     const onAddToFolder = vi.fn()
     renderSelectionPanel({ onAddToFolder })
 
-    const folderOption = await screen.findByText('Nature')
-    await userEvent.click(folderOption)
+    await userEvent.type(screen.getByPlaceholderText('Add to folder…'), 'nat')
+    await userEvent.click(await screen.findByText('Nature'))
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }))
 
     expect(onAddToFolder).toHaveBeenCalledWith('folder-1')
   })
@@ -346,10 +348,7 @@ describe('RightPanel selection mode', () => {
     ])
     renderSelectionPanel()
 
-    await screen.findByText('Nature')
-    expect(screen.getByText('Work')).toBeInTheDocument()
-
-    await userEvent.type(screen.getByPlaceholderText('Search folders…'), 'nat')
+    await userEvent.type(screen.getByPlaceholderText('Add to folder…'), 'nat')
 
     expect(screen.getByText('Nature')).toBeInTheDocument()
     expect(screen.queryByText('Work')).not.toBeInTheDocument()
@@ -360,6 +359,8 @@ describe('RightPanel selection mode', () => {
     renderSelectionPanel({ onMoveToTrash })
 
     await userEvent.click(screen.getByRole('button', { name: /move to trash/i }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /move to trash/i }))
 
     expect(onMoveToTrash).toHaveBeenCalled()
   })

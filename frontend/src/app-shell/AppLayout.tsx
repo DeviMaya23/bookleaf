@@ -32,7 +32,7 @@ import MaintenancePage from '@/components/MaintenancePage'
 import { useSSEEvents } from './useSSEEvents'
 import { getMe } from '@/features/auth/lib/me'
 import { handleFileAutoUpload } from './lib/dragHandlers'
-import { bulkAddImagesToFolder, bulkTrashImages } from '@/lib/images'
+import { bulkAddImagesToFolder, bulkTrashImages, bulkExportImages } from '@/lib/images'
 import type { Image } from '@/lib/images'
 import { getTags } from '@/lib/tags'
 import { useAppView } from './useAppView'
@@ -137,6 +137,22 @@ export default function AppLayout() {
     bulkTrashMutation.mutate(Array.from(selectedIds))
   }, [bulkTrashMutation, selectedIds])
 
+  const handleDownloadSelection = useCallback(async () => {
+    try {
+      const blob = await bulkExportImages(getToken, Array.from(selectedIds))
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'bookleaf-export.zip'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Failed to download images')
+    }
+  }, [getToken, selectedIds])
+
   const handleSelectionChange = useCallback((ids: Set<string>, anchorId: string | null) => {
     setSelectedIds(ids)
     setMainSelectedId(anchorId)
@@ -192,15 +208,13 @@ export default function AppLayout() {
         ? (activeFolder?.name ?? '')
         : 'All'
 
-  const panelContent: PanelContent = selectedIds.size > 0
-    ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode }
-    : selectMode
-      ? { mode: 'neutral', viewLabel }
-      : selectedImage
-        ? { mode: 'image', image: selectedImage, autoFocusTitle }
-        : activeFolder
-          ? { mode: 'folder', folder: activeFolder }
-          : { mode: 'neutral', viewLabel }
+  const panelContent: PanelContent = (selectMode || selectedIds.size > 0)
+    ? { mode: 'selection', selectedCount: selectedIds.size, onAddToFolder: handleAddSelectionToFolder, onMoveToTrash: handleMoveSelectionToTrash, onExitSelectMode: exitSelectMode, onDownloadZip: handleDownloadSelection }
+    : selectedImage
+      ? { mode: 'image', image: selectedImage, autoFocusTitle }
+      : activeFolder
+        ? { mode: 'folder', folder: activeFolder }
+        : { mode: 'neutral', viewLabel }
 
   useSSEEvents()
 

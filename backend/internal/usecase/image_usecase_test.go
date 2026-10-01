@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -159,6 +160,54 @@ func (m *mockImageRepository) FilterOwnedImageIDs(_ context.Context, ids []uuid.
 		return m.filterOwnedResult, m.err
 	}
 	return ids, m.err
+}
+func (m *mockImageRepository) GetManyByIDs(_ context.Context, _ []uuid.UUID, _ uuid.UUID) ([]*domain.Image, error) {
+	return m.images, m.err
+}
+
+// --- BulkExportImages ---
+
+func TestImageUsecase_BulkExportImages_ZipContainsEntries(t *testing.T) {
+	img1 := &domain.Image{ID: uuid.New(), Title: "Sunset", MIMEType: "image/jpeg", R2Path: "path/sunset.jpg"}
+	img2 := &domain.Image{ID: uuid.New(), Title: "Portrait", MIMEType: "image/png", R2Path: "path/portrait.png"}
+	repo := &mockImageRepository{images: []*domain.Image{img1, img2}}
+	store := &mockStorageService{objectBytes: []byte("data")}
+	uc := newImageUsecase(repo, nil, store)
+
+	var buf bytes.Buffer
+	err := uc.BulkExportImages(context.Background(), uuid.New(), []uuid.UUID{img1.ID, img2.ID}, &buf)
+
+	require.NoError(t, err)
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+	names := make([]string, len(zr.File))
+	for i, f := range zr.File {
+		names[i] = f.Name
+	}
+	assert.ElementsMatch(t, []string{"Sunset.jpg", "Portrait.png"}, names)
+}
+
+func TestImageUsecase_BulkExportImages_UnownedIDsDropped(t *testing.T) {
+	repo := &mockImageRepository{images: nil}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
+
+	var buf bytes.Buffer
+	err := uc.BulkExportImages(context.Background(), uuid.New(), []uuid.UUID{uuid.New()}, &buf)
+
+	require.NoError(t, err)
+	_, zipErr := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	assert.NoError(t, zipErr)
+}
+
+func TestImageUsecase_BulkExportImages_GetManyByIDsError(t *testing.T) {
+	repo := &mockImageRepository{err: errors.New("db failure")}
+	uc := newImageUsecase(repo, nil, &mockStorageService{})
+
+	var buf bytes.Buffer
+	err := uc.BulkExportImages(context.Background(), uuid.New(), []uuid.UUID{uuid.New()}, &buf)
+
+	require.Error(t, err)
+	assert.Empty(t, buf.Bytes())
 }
 
 type mockStorageService struct {

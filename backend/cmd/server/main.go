@@ -364,6 +364,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	protected.DELETE("/images/trash/:id", trashHandler.DeleteFromTrash)
 	protected.POST("/images/bulk/add-to-folder", imageHandler.BulkAddToFolder)
 	protected.POST("/images/bulk/trash", trashHandler.BulkTrash)
+	protected.POST("/images/bulk/export", imageHandler.BulkExport)
 	protected.GET("/images", imageHandler.ListImages)
 	protected.GET("/images/in-folder/:id", imageHandler.ListFolderImages)
 	protected.GET("/images/:id", imageHandler.GetImage)

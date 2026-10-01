@@ -560,7 +560,7 @@ describe('AppLayout selection mode — right panel priority and visibility', () 
     expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'image')
 
     await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
-    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
 
     await userEvent.click(selectViaGrid())
     expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
@@ -579,7 +579,7 @@ describe('AppLayout selection mode — right panel priority and visibility', () 
 
     await userEvent.click(screen.getByRole('button', { name: 'Select mode' }))
 
-    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'neutral')
+    expect(screen.getByTestId('right-panel')).toHaveAttribute('data-mode', 'selection')
   })
 
   it('turns select mode off entirely when navigating to a different view, not just clearing the selection', async () => {

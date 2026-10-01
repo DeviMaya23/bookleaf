@@ -312,3 +312,13 @@ export async function bulkTrashImages(
   return res.json()
 }
 
+export async function bulkExportImages(getToken: GetToken, imageIds: string[]): Promise<Blob> {
+  const res = await apiFetch('/images/bulk/export', getToken, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_ids: imageIds }),
+  })
+  if (!res.ok) throw new Error('Failed to export images')
+  return res.blob()
+}
+

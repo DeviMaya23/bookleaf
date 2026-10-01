@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,6 +106,9 @@ func (m *mockImageUsecase) BulkAddToFolder(_ context.Context, userID uuid.UUID, 
 	m.lastBulkAddToFolderIDs = imageIDs
 	m.lastBulkAddToFolderID = folderID
 	return m.bulkAddToFolderResult, m.bulkAddToFolderErr
+}
+func (m *mockImageUsecase) BulkExportImages(_ context.Context, _ uuid.UUID, _ []uuid.UUID, _ io.Writer) error {
+	return m.err
 }
 
 func strPtr(s string) *string { return &s }
@@ -1063,3 +1068,33 @@ func TestImageHandler_BulkAddToFolder_FolderNotFoundReturns404(t *testing.T) {
 
 	assertHTTPError(t, err, http.StatusNotFound)
 }
+
+// --- BulkExport ---
+
+func TestImageHandler_BulkExport_ValidRequestReturnsZipHeaders(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := fmt.Sprintf(`{"image_ids": [%q]}`, imageID)
+	c, rec := newEchoContext(t, http.MethodPost, "/images/bulk/export", body)
+
+	err := h.BulkExport(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/zip", rec.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename="bookleaf-export.zip"`, rec.Header().Get("Content-Disposition"))
+}
+
+func TestImageHandler_BulkExport_MalformedImageIDReturns400(t *testing.T) {
+	uc := &mockImageUsecase{}
+	h := NewImageHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	body := `{"image_ids": ["not-a-uuid"]}`
+	c, _ := newEchoContext(t, http.MethodPost, "/images/bulk/export", body)
+
+	err := h.BulkExport(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+var _ = strings.NewReader // keep strings import used
