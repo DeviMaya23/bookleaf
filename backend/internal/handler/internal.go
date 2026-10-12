@@ -28,19 +28,25 @@ type InternalUserResolver interface {
 	GetByIDPSubject(ctx context.Context, idpSubject string) (*domain.User, error)
 }
 
-type InternalHandler struct {
-	shareUsecase   InternalShareUsecase
-	accountUsecase InternalAccountUsecase
-	userResolver   InternalUserResolver
-	tel            *observability.Telemetry
+type InternalFolderImagesUsecase interface {
+	ListFolderImages(ctx context.Context, userID uuid.UUID, folderID uuid.UUID) ([]usecase.FolderImageThumbnail, error)
 }
 
-func NewInternalHandler(shareUsecase InternalShareUsecase, accountUsecase InternalAccountUsecase, userResolver InternalUserResolver, tel *observability.Telemetry) *InternalHandler {
+type InternalHandler struct {
+	shareUsecase        InternalShareUsecase
+	accountUsecase      InternalAccountUsecase
+	userResolver        InternalUserResolver
+	folderImagesUsecase InternalFolderImagesUsecase
+	tel                 *observability.Telemetry
+}
+
+func NewInternalHandler(shareUsecase InternalShareUsecase, accountUsecase InternalAccountUsecase, userResolver InternalUserResolver, folderImagesUsecase InternalFolderImagesUsecase, tel *observability.Telemetry) *InternalHandler {
 	return &InternalHandler{
-		shareUsecase:   shareUsecase,
-		accountUsecase: accountUsecase,
-		userResolver:   userResolver,
-		tel:            tel,
+		shareUsecase:        shareUsecase,
+		accountUsecase:      accountUsecase,
+		userResolver:        userResolver,
+		folderImagesUsecase: folderImagesUsecase,
+		tel:                 tel,
 	}
 }
 
@@ -146,6 +152,57 @@ func (h *InternalHandler) CheckFolderStatus(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, shareTokenResponse{Token: token})
+}
+
+type folderImageThumbnailResponse struct {
+	ImageID      string `json:"image_id"`
+	ThumbnailURL string `json:"thumbnail_url"`
+}
+
+type listFolderImagesResponse struct {
+	Images []folderImageThumbnailResponse `json:"images"`
+}
+
+func (h *InternalHandler) ListFolderImages(c echo.Context) error {
+	ctx, span := h.tel.Tracer.Start(c.Request().Context(), "handler.ListFolderImages")
+	defer span.End()
+
+	idpSubject := c.Param("user_id")
+
+	user, err := h.userResolver.GetByIDPSubject(ctx, idpSubject)
+	if err != nil {
+		if errors.Is(err, usecase.ErrUserNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "user not found")
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to resolve user")
+	}
+
+	folderID, err := uuid.Parse(c.Param("folder_id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid folder id")
+	}
+
+	thumbnails, err := h.folderImagesUsecase.ListFolderImages(ctx, user.ID, folderID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(http.StatusNotFound, "folder not found")
+		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list folder images")
+	}
+
+	images := make([]folderImageThumbnailResponse, len(thumbnails))
+	for i, t := range thumbnails {
+		images[i] = folderImageThumbnailResponse{
+			ImageID:      t.ImageID.String(),
+			ThumbnailURL: t.ThumbnailURL,
+		}
+	}
+
+	return c.JSON(http.StatusOK, listFolderImagesResponse{Images: images})
 }
 
 func (h *InternalHandler) DeleteAccount(c echo.Context) error {

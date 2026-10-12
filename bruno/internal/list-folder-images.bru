@@ -1,0 +1,19 @@
+meta {
+  name: List Folder Images
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/internal/users/{{userId}}/folders/{{folderId}}/images
+  body: none
+  auth: none
+}
+
+headers {
+  X-Bookleaf-Internal-Secret: {{internalApiSecret}}
+}
+
+vars:pre-request {
+  folderId: 00000000-0000-0000-0000-000000000000
+}
