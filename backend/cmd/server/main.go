@@ -320,7 +320,8 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	imageHandler := httphandler.NewImageHandler(imageUsecase, tel)
 	trashHandler := httphandler.NewTrashHandler(trashUsecase, tel)
 	shareHandler := httphandler.NewShareHandler(shareUsecase, folderUsecase, tel)
-	internalHandler := httphandler.NewInternalHandler(shareUsecase, accountUsecase, userUsecase, tel)
+	folderImagesUsecase := usecase.NewFolderImagesUsecase(folderRepository, imageRepository, storageService, tel)
+	internalHandler := httphandler.NewInternalHandler(shareUsecase, accountUsecase, userUsecase, folderImagesUsecase, tel)
 	uploadHandler := httphandler.NewUploadHandler(uploadUsecase, tel)
 	healthHandler := httphandler.NewHealthHandler(db, storageService)
 
@@ -331,6 +332,7 @@ func initApp(ctx context.Context, cfg *config.Config, db *gorm.DB, tel *observab
 	internalGroup := e.Group("/internal")
 	internalGroup.Use(authmiddleware.NewInternalSecretMiddleware(cfg.InternalAPISecret))
 	internalGroup.GET("/users/:user_id/public-folders", internalHandler.ListPublicFolders)
+	internalGroup.GET("/users/:user_id/folders/:folder_id/images", internalHandler.ListFolderImages)
 	internalGroup.GET("/folders/:folder_id/contents", internalHandler.GetFolderContents)
 	internalGroup.GET("/folders/:folder_id/status", internalHandler.CheckFolderStatus)
 	internalGroup.DELETE("/accounts/:id", internalHandler.DeleteAccount)
