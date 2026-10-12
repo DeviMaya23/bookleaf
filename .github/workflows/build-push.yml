@@ -55,12 +55,12 @@ jobs:
           image: australia-southeast1-docker.pkg.dev/bookleaf-393/bookleaf/backend:latest
           flags: --service-account=ci-github@bookleaf-393.iam.gserviceaccount.com
           secrets: |
-            DATABASE_HOST=DATABASE_HOST:latest
-            DATABASE_USER=DATABASE_USER:latest
-            DATABASE_PASSWORD=DATABASE_PASSWORD:latest
-            R2_ACCESS_KEY_ID=R2_ACCESS_KEY_ID:latest
-            R2_SECRET_ACCESS_KEY=R2_SECRET_ACCESS_KEY:latest
+            DATABASE_PASSWORD=BOOKLEAF_DATABASE_PASSWORD:latest
+            R2_SECRET_ACCESS_KEY=BOOKLEAF_R2_SECRET_ACCESS_KEY:latest
             GOOGLE_VISION_API_KEY=GOOGLE_VISION_API_KEY:latest
+            KINDE_M2M_CLIENT_SECRET=BOOKVERSE_KINDE_M2M_CLIENT_SECRET:latest
+            ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+            INTERNAL_API_SECRET=BOOKLEAF_INTERNAL_API_SECRET:latest
           env_vars: |
             DATABASE_NAME=bookleaf
             DATABASE_PORT=5432
