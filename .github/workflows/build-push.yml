@@ -80,6 +80,6 @@ jobs:
             OTEL_EXPORTER=gcp
             ANTHROPIC_MODEL=claude-haiku-4-5-20251001
             KINDE_M2M_CLIENT_ID=58985a0c78ab4ba28a2b049e518b98e8
-            R2_ACCESS_KEY_ID={{ vars.R2_ACCESS_KEY_ID }}
+            R2_ACCESS_KEY_ID=${{ vars.R2_ACCESS_KEY_ID }}
 
 
