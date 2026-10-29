@@ -156,6 +156,25 @@ describe("saveImage", () => {
 
     await expect(saveImage(baseArgs)).rejects.toThrow("POST /complete failed: 500");
   });
+
+  it("includes file_size in the POST /images request body", async () => {
+    vi.mocked(apiFetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          upload_url: "https://r2.test/upload",
+          thumbnail_upload_url: "https://r2.test/thumb",
+          id: "img-1",
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}));
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+
+    await saveImage(baseArgs);
+
+    const [, initOptions] = vi.mocked(apiFetch).mock.calls[0]
+    const body = JSON.parse((initOptions as RequestInit).body as string)
+    expect(body.file_size).toBe(baseArgs.blob.size)
+  });
 });
 
 describe("handleSave", () => {
@@ -399,6 +418,18 @@ describe("persistImage", () => {
     expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ variant: "error", title: "Bookleaf" }),
+    );
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("sends an oversized error toast and makes no API call when blob exceeds 50 MB", async () => {
+    const oversizedBlob = new Blob([new Uint8Array(52_428_801)]);
+
+    await persistImage({ ...baseArgs, blob: oversizedBlob });
+
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variant: "error", title: "File too large." }),
     );
     expect(apiFetch).not.toHaveBeenCalled();
   });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
@@ -37,7 +37,14 @@ function makeImageFile(name = 'photo.jpg', type = 'image/jpeg'): File {
 }
 
 describe('UploadModal', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // mockReset clears the once queue so unconsumed once values from a
+    // previous test (e.g. a drop that fired no dataTransfer files) don't
+    // carry over and corrupt the next test's mock sequence.
+    vi.mocked(validateImageFile).mockReset()
+    vi.mocked(validateImageFile).mockReturnValue(null)
+  })
 
   it('closes modal and shows success toast on successful upload', async () => {
     const user = userEvent.setup()
@@ -122,6 +129,61 @@ describe('UploadModal', () => {
 
     expect(screen.getByText('Unsupported file type.')).toBeInTheDocument()
     expect(screen.queryByRole('img', { name: 'document.pdf' })).not.toBeInTheDocument()
+  })
+
+  it('shows oversized inline error and disables upload button for an oversized file via initialFile', () => {
+    vi.mocked(validateImageFile).mockReturnValueOnce('oversized')
+    const file = makeImageFile('huge.jpg', 'image/jpeg')
+
+    renderModal(null, file)
+
+    expect(screen.getByText('File is too large. Maximum size is 50 MB.')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'huge.jpg' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled()
+  })
+
+  it('shows oversized inline error when an oversized file is selected via the picker', async () => {
+    const user = userEvent.setup()
+    vi.mocked(validateImageFile).mockReturnValueOnce('oversized')
+
+    renderModal()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeImageFile('huge.jpg', 'image/jpeg'))
+
+    expect(screen.getByText('File is too large. Maximum size is 50 MB.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled()
+  })
+
+  it('shows oversized inline error when an oversized file is dropped onto the drop zone', () => {
+    vi.mocked(validateImageFile).mockReturnValueOnce('oversized')
+    const file = makeImageFile('huge.jpg', 'image/jpeg')
+
+    renderModal()
+
+    const dropZone = screen.getByRole('button', { name: /drop an image/i })
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } })
+
+    expect(screen.getByText('File is too large. Maximum size is 50 MB.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload/i })).toBeDisabled()
+  })
+
+  it('clears oversized error when a valid file is selected afterwards', async () => {
+    const user = userEvent.setup()
+    vi.mocked(validateImageFile)
+      .mockReturnValueOnce('oversized')
+      .mockReturnValueOnce(null)
+
+    const oversizedFile = makeImageFile('huge.jpg', 'image/jpeg')
+    renderModal(null, oversizedFile)
+
+    expect(screen.getByText('File is too large. Maximum size is 50 MB.')).toBeInTheDocument()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, makeImageFile('small.jpg', 'image/jpeg'))
+
+    expect(screen.queryByText('File is too large. Maximum size is 50 MB.')).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'small.jpg' })).toBeInTheDocument()
   })
 
   it('shows error toast and keeps modal open when upload fails', async () => {

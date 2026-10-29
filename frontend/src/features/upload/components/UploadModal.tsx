@@ -64,6 +64,12 @@ export default function UploadModal({ open, onOpenChange, folderId, initialFile 
       revokePreview()
       return
     }
+    if (err === 'oversized') {
+      setTypeError('File is too large. Maximum size is 50 MB.')
+      setFile(null)
+      revokePreview()
+      return
+    }
     setTypeError(null)
     revokePreview()
     const url = URL.createObjectURL(selected)

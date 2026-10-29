@@ -24,9 +24,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const MaxImageFileSizeBytes int64 = 52_428_800
+
 var (
 	ErrInvalidImageTitle = errors.New("image title is required")
 	ErrInvalidMIMEType   = errors.New("mime type is required")
+	ErrMissingFileSize   = errors.New("file_size is required")
+	ErrFileSizeTooLarge  = errors.New("file exceeds the 50 MB limit")
 )
 
 type UploadImageRepository interface {
@@ -108,7 +112,7 @@ func NewImageUploadUsecase(
 	}
 }
 
-func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error) {
+func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, fileSize int64, sourceURL *string, folderID *uuid.UUID, description *string) (*UploadInitResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.InitiateUpload")
 	defer span.End()
 
@@ -117,6 +121,12 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUI
 	}
 	if strings.TrimSpace(mimeType) == "" {
 		return nil, ErrInvalidMIMEType
+	}
+	if fileSize <= 0 {
+		return nil, ErrMissingFileSize
+	}
+	if fileSize > MaxImageFileSizeBytes {
+		return nil, ErrFileSizeTooLarge
 	}
 
 	id := uuid.New()
@@ -159,7 +169,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUI
 		zap.String("r2_key", r2Path),
 	)
 
-	uploadURL, err := u.store.GeneratePresignedPutURL(ctx, r2Path, mimeType, uploadURLTTL)
+	uploadURL, err := u.store.GeneratePresignedPutURL(ctx, r2Path, mimeType, fileSize, uploadURLTTL)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -167,7 +177,7 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUI
 	}
 
 	thumbnailKey := fmt.Sprintf("users/%s/thumbnails/%s.jpg", userID, id.String())
-	thumbnailUploadURL, err := u.store.GeneratePresignedPutURL(ctx, thumbnailKey, "image/jpeg", uploadURLTTL)
+	thumbnailUploadURL, err := u.store.GeneratePresignedPutURL(ctx, thumbnailKey, "image/jpeg", 0, uploadURLTTL)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -186,6 +196,10 @@ func (u *imageUploadUsecase) InitiateUpload(ctx context.Context, userID uuid.UUI
 func (u *imageUploadUsecase) CompleteUpload(ctx context.Context, id uuid.UUID, userID uuid.UUID, width, height *int, fileSize *int64, phash *string) (*CompleteUploadResult, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.CompleteUpload")
 	defer span.End()
+
+	if fileSize != nil && *fileSize > MaxImageFileSizeBytes {
+		return nil, ErrFileSizeTooLarge
+	}
 
 	start := time.Now()
 	result := &CompleteUploadResult{ImageID: id}
