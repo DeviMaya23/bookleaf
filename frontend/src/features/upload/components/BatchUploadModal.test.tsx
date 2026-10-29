@@ -9,15 +9,13 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 }))
 
 vi.mock('@/lib/upload', () => ({
-  validateImageFile: vi.fn((file: File) => {
-    const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
-    return ACCEPTED_TYPES.includes(file.type) ? null : 'unsupported_type'
-  }),
+  validateImageFile: vi.fn(),
   fileBaseName: vi.fn((name: string) => name.replace(/\.[^.]+$/, '')),
   uploadImageFile: vi.fn(),
+  MAX_FILE_SIZE_BYTES: 52_428_800,
 }))
 
-import { uploadImageFile } from '@/lib/upload'
+import { uploadImageFile, validateImageFile } from '@/lib/upload'
 
 function renderModal(props: Partial<{ folderId: string | null; initialFiles: File[] }> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -41,7 +39,10 @@ function makeFile(name = 'photo.jpg', type = 'image/jpeg', sizeBytes = 1024): Fi
 }
 
 describe('BatchUploadModal', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(validateImageFile).mockReturnValue(null)
+  })
 
   describe('upload flow', () => {
     it('uploads all files successfully and invalidates the image query per file', async () => {
@@ -174,9 +175,14 @@ describe('BatchUploadModal', () => {
       const user = userEvent.setup()
       vi.mocked(uploadImageFile).mockResolvedValue({ image_id: 'img-1', duplicates: [] })
 
-      const oversized = makeFile('big.jpg', 'image/jpeg', 51 * 1024 * 1024)
-      const unsupported = makeFile('doc.pdf', 'application/pdf', 100)
-      const valid = makeFile('ok.png', 'image/png', 100)
+      const oversized = makeFile('big.jpg', 'image/jpeg')
+      const unsupported = makeFile('doc.pdf', 'application/pdf')
+      const valid = makeFile('ok.png', 'image/png')
+
+      vi.mocked(validateImageFile)
+        .mockReturnValueOnce('oversized')
+        .mockReturnValueOnce('unsupported_type')
+        .mockReturnValueOnce(null)
 
       renderModal({ initialFiles: [oversized, unsupported, valid] })
 

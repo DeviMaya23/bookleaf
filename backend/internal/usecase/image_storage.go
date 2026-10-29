@@ -7,7 +7,7 @@ import (
 )
 
 type StorageService interface {
-	GeneratePresignedPutURL(ctx context.Context, key, contentType string, ttl time.Duration) (string, error)
+	GeneratePresignedPutURL(ctx context.Context, key, contentType string, contentLength int64, ttl time.Duration) (string, error)
 	GeneratePresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	GeneratePresignedDownloadURL(ctx context.Context, key, filename string, ttl time.Duration) (string, error)
 	GetObject(ctx context.Context, key string) (io.ReadCloser, error)

@@ -19,15 +19,19 @@ vi.mock('@/lib/browser', () => ({
   isSafari: vi.fn(),
 }))
 
-import { validateImageFile, fileBaseName, uploadImageFile } from './upload'
+import { validateImageFile, fileBaseName, uploadImageFile, MAX_FILE_SIZE_BYTES } from './upload'
 import { initiateUpload, putToR2, completeUpload } from '@/lib/images'
 import { generateThumbnail, convertHeicToJpeg } from '@/lib/thumbnail'
 import { isSafari } from '@/lib/browser'
 
 const getToken = vi.fn().mockResolvedValue('token')
 
-function makeFile(name: string, type: string): File {
-  return new File(['bytes'], name, { type })
+function makeFile(name: string, type: string, size?: number): File {
+  const file = new File(['bytes'], name, { type })
+  if (size !== undefined) {
+    Object.defineProperty(file, 'size', { configurable: true, value: size })
+  }
+  return file
 }
 
 const defaultInitiateResult = {
@@ -60,6 +64,16 @@ describe('validateImageFile', () => {
     vi.mocked(isSafari).mockReturnValue(true)
     expect(validateImageFile(makeFile('photo.heic', 'image/heic'))).toBeNull()
   })
+
+  it('returns oversized for a file exceeding MAX_FILE_SIZE_BYTES', () => {
+    const file = makeFile('huge.jpg', 'image/jpeg', MAX_FILE_SIZE_BYTES + 1)
+    expect(validateImageFile(file)).toBe('oversized')
+  })
+
+  it('returns null for a file exactly at MAX_FILE_SIZE_BYTES', () => {
+    const file = makeFile('exact.jpg', 'image/jpeg', MAX_FILE_SIZE_BYTES)
+    expect(validateImageFile(file)).toBeNull()
+  })
 })
 
 describe('fileBaseName', () => {
@@ -85,6 +99,7 @@ describe('uploadImageFile', () => {
     expect(initiateUpload).toHaveBeenCalledWith(getToken, {
       title: 'sunset',
       mimeType: 'image/jpeg',
+      fileSize: file.size,
       folderId: 'folder-1',
       description: undefined,
       sourceUrl: undefined,
@@ -124,6 +139,7 @@ describe('uploadImageFile', () => {
     expect(initiateUpload).toHaveBeenCalledWith(getToken, {
       title: 'My Title',
       mimeType: 'image/jpeg',
+      fileSize: file.size,
       folderId: 'folder-1',
       description: 'A nice photo',
       sourceUrl: 'https://example.com/ref',

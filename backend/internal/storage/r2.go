@@ -49,18 +49,23 @@ func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) *r2Storage 
 	}
 }
 
-func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentType string, ttl time.Duration) (string, error) {
+func (r *r2Storage) GeneratePresignedPutURL(ctx context.Context, key, contentType string, contentLength int64, ttl time.Duration) (string, error) {
 	ctx, span := r.tel.Tracer.Start(ctx, "storage.GeneratePresignedPutURL")
 	defer span.End()
 
 	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
 	start := time.Now()
 
-	resp, err := r.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+	input := &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
-	}, s3.WithPresignExpires(ttl))
+	}
+	if contentLength > 0 {
+		input.ContentLength = aws.Int64(contentLength)
+	}
+
+	resp, err := r.presign.PresignPutObject(ctx, input, s3.WithPresignExpires(ttl))
 
 	status := "success"
 	if err != nil {

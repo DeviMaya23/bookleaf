@@ -17,6 +17,7 @@ import (
 type initiateImageUploadRequest struct {
 	Title       string     `json:"title"`
 	MIMEType    string     `json:"mime_type"`
+	FileSize    int64      `json:"file_size"`
 	SourceURL   *string    `json:"source_url"`
 	FolderID    *uuid.UUID `json:"folder_id"`
 	Description *string    `json:"description"`
@@ -48,7 +49,7 @@ type completeUploadResponse struct {
 }
 
 type UploadUsecase interface {
-	InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
+	InitiateUpload(ctx context.Context, userID uuid.UUID, title, mimeType string, fileSize int64, sourceURL *string, folderID *uuid.UUID, description *string) (*usecase.UploadInitResult, error)
 	CompleteUpload(ctx context.Context, id uuid.UUID, userID uuid.UUID, width, height *int, fileSize *int64, phash *string) (*usecase.CompleteUploadResult, error)
 	BackfillVisionLabels(ctx context.Context, userID uuid.UUID) (int, error)
 }
@@ -79,12 +80,15 @@ func (h *UploadHandler) InitiateUpload(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
 
-	result, err := h.uploadUsecase.InitiateUpload(ctx, userID, req.Title, req.MIMEType, req.SourceURL, req.FolderID, req.Description)
+	result, err := h.uploadUsecase.InitiateUpload(ctx, userID, req.Title, req.MIMEType, req.FileSize, req.SourceURL, req.FolderID, req.Description)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
-		if errors.Is(err, usecase.ErrInvalidImageTitle) || errors.Is(err, usecase.ErrInvalidMIMEType) {
+		if errors.Is(err, usecase.ErrInvalidImageTitle) || errors.Is(err, usecase.ErrInvalidMIMEType) || errors.Is(err, usecase.ErrMissingFileSize) {
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		if errors.Is(err, usecase.ErrFileSizeTooLarge) {
+			return echo.NewHTTPError(http.StatusRequestEntityTooLarge, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to initiate image upload")
 	}
@@ -122,6 +126,9 @@ func (h *UploadHandler) CompleteUpload(c echo.Context) error {
 		span.SetStatus(codes.Error, err.Error())
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return echo.NewHTTPError(http.StatusNotFound, "image not found")
+		}
+		if errors.Is(err, usecase.ErrFileSizeTooLarge) {
+			return echo.NewHTTPError(http.StatusRequestEntityTooLarge, err.Error())
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to complete image upload")
 	}

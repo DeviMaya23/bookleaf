@@ -315,6 +315,8 @@ export default function AppLayout() {
         toast.error('HEIC uploads are only supported in Safari.')
       } else if ((err as Error).message === 'unsupported_type') {
         toast.error('Unsupported file type. Use JPEG, PNG, GIF, WEBP, or AVIF.')
+      } else if ((err as Error).message === 'oversized') {
+        toast.error('File is too large. Maximum size is 50 MB.')
       } else {
         toast.error('Upload failed. Please try again.')
       }

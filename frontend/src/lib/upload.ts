@@ -7,7 +7,9 @@ type GetToken = () => Promise<string | undefined>
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/heic']
 
-export type FileValidationError = 'unsupported_type' | 'heic_safari_only'
+export const MAX_FILE_SIZE_BYTES = 52_428_800
+
+export type FileValidationError = 'unsupported_type' | 'heic_safari_only' | 'oversized'
 
 export function validateImageFile(file: File): FileValidationError | null {
   if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -15,6 +17,9 @@ export function validateImageFile(file: File): FileValidationError | null {
   }
   if (file.type === 'image/heic' && !isSafari()) {
     return 'heic_safari_only'
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return 'oversized'
   }
   return null
 }
@@ -48,6 +53,7 @@ export async function uploadImageFile(
   const initiated = await initiateUpload(getToken, {
     title,
     mimeType,
+    fileSize: uploadBlob.size,
     folderId: folderId ?? undefined,
     description,
     sourceUrl,

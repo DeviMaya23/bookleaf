@@ -134,6 +134,7 @@ export async function emptyTrash(getToken: GetToken): Promise<void> {
 export interface InitiateUploadParams {
   title: string
   mimeType: string
+  fileSize: number
   folderId?: string
   description?: string
   sourceUrl?: string
@@ -150,9 +151,10 @@ export async function initiateUpload(
   getToken: GetToken,
   params: InitiateUploadParams,
 ): Promise<InitiateUploadResult> {
-  const body: Record<string, string> = {
+  const body: Record<string, string | number> = {
     title: params.title,
     mime_type: params.mimeType,
+    file_size: params.fileSize,
   }
   if (params.folderId) body.folder_id = params.folderId
   if (params.description) body.description = params.description

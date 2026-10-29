@@ -31,7 +31,7 @@ type mockUploadUsecase struct {
 	lastBackfillUserID uuid.UUID
 }
 
-func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _ uuid.UUID, _, _ string, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
+func (m *mockUploadUsecase) InitiateUpload(_ context.Context, _ uuid.UUID, _, _ string, _ int64, _ *string, _ *uuid.UUID, description *string) (*usecase.UploadInitResult, error) {
 	m.lastDescription = description
 	return m.uploadResult, m.err
 }
@@ -135,6 +135,26 @@ func TestUploadHandler_InitiateUpload_PassesDescription(t *testing.T) {
 	assert.Equal(t, "golden hour", *uc.lastDescription)
 }
 
+func TestUploadHandler_InitiateUpload_MissingFileSize_Returns400(t *testing.T) {
+	uc := &mockUploadUsecase{err: usecase.ErrMissingFileSize}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images", `{"title":"sunset","mime_type":"image/jpeg"}`)
+
+	err := h.InitiateUpload(c)
+
+	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestUploadHandler_InitiateUpload_OversizedFile_Returns413(t *testing.T) {
+	uc := &mockUploadUsecase{err: usecase.ErrFileSizeTooLarge}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images", `{"title":"sunset","mime_type":"image/jpeg","file_size":999999999}`)
+
+	err := h.InitiateUpload(c)
+
+	assertHTTPError(t, err, http.StatusRequestEntityTooLarge)
+}
+
 // --- CompleteUpload ---
 
 func TestUploadHandler_CompleteUpload(t *testing.T) {
@@ -234,6 +254,20 @@ func TestUploadHandler_CompleteUpload_InvalidUUID(t *testing.T) {
 	err := h.CompleteUpload(c)
 
 	assertHTTPError(t, err, http.StatusBadRequest)
+}
+
+func TestUploadHandler_CompleteUpload_OversizedFile_Returns413(t *testing.T) {
+	imageID := uuid.New()
+	uc := &mockUploadUsecase{err: usecase.ErrFileSizeTooLarge}
+	h := NewUploadHandler(uc, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContext(t, http.MethodPost, "/images/"+imageID.String()+"/complete", `{"file_size":999999999}`)
+	c.SetPath("/images/:id/complete")
+	c.SetParamNames("id")
+	c.SetParamValues(imageID.String())
+
+	err := h.CompleteUpload(c)
+
+	assertHTTPError(t, err, http.StatusRequestEntityTooLarge)
 }
 
 // --- BackfillVision ---

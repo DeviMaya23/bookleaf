@@ -15,8 +15,6 @@ import { validateImageFile, fileBaseName, uploadImageFile } from '@/lib/upload'
 
 const MAX_CONCURRENT = 3
 const MAX_FILES = 20
-const MAX_SIZE_BYTES = 50 * 1024 * 1024
-
 type FileStatus = 'PENDING' | 'UPLOADING' | 'SUCCESS' | 'FAILED_FINAL' | 'OVERSIZED' | 'UNSUPPORTED'
 
 interface BatchFile {
@@ -39,12 +37,11 @@ function makeId(file: File): string {
 }
 
 function makeBatchFile(file: File): BatchFile {
-  const unsupported = validateImageFile(file) !== null
-  const status: FileStatus = unsupported
-    ? 'UNSUPPORTED'
-    : file.size > MAX_SIZE_BYTES
-      ? 'OVERSIZED'
-      : 'PENDING'
+  const validationError = validateImageFile(file)
+  const status: FileStatus =
+    validationError === 'oversized' ? 'OVERSIZED' :
+    validationError !== null ? 'UNSUPPORTED' :
+    'PENDING'
   return { id: makeId(file), file, status, retryCount: 0 }
 }
 

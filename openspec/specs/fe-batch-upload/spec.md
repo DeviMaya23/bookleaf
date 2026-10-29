@@ -86,16 +86,18 @@ For each file in the batch, the system SHALL execute the existing three-step upl
 
 The thumbnail-generation step SHALL decode the image (via `createImageBitmap`, the same decode used to build the thumbnail PUT to R2) to determine its pixel dimensions; the system SHALL reuse this decode to capture `width` and `height` rather than performing a second decode. `file_size` SHALL be the byte length of the uploaded blob. `phash` SHALL be computed on the 32×32 greyscale thumbnail canvas, producing a 64-character binary string, and included in the `POST /images/:id/complete` request body.
 
+The `POST /images` initiate request body SHALL include `file_size` (the byte length of the blob to be uploaded). This value is used by the server to validate the size limit and to sign the presigned PUT URL's `Content-Length` header.
+
 #### Scenario: Each file follows the three-step upload sequence
 - **WHEN** a file is uploaded as part of a batch
-- **THEN** `POST /images` is called with the file's title (filename without extension), MIME type, and optional `folder_id`
+- **THEN** `POST /images` is called with the file's title (filename without extension), MIME type, `file_size`, and optional `folder_id`
 - **AND** the file bytes are PUT to the returned presigned URL
 - **AND** `POST /images/:id/complete` is called after the PUT succeeds, with `width`, `height`, `file_size`, and `phash` in the request body
 
 #### Scenario: Dimensions and file size are derived from the decoded bitmap and uploaded blob
 - **WHEN** a file in a batch is uploaded
 - **THEN** the `width` and `height` sent to `POST /images/:id/complete` match the `ImageBitmap` dimensions produced while generating that file's thumbnail
-- **AND** the `file_size` sent matches the byte length of the blob that was PUT to the presigned upload URL
+- **AND** the `file_size` sent to both `POST /images` and `POST /images/:id/complete` matches the byte length of the blob that was PUT to the presigned upload URL
 
 #### Scenario: phash is computed and sent for each file
 - **WHEN** a file in a batch is uploaded

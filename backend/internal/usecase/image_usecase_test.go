@@ -224,12 +224,14 @@ type mockStorageService struct {
 	deleteCalls     int
 	deletedKeys     []string
 
+	putContentLengths    []int64
 	lastDownloadKey      string
 	lastDownloadFilename string
 	lastDownloadTTL      time.Duration
 }
 
-func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
+func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ string, contentLength int64, _ time.Duration) (string, error) {
+	m.putContentLengths = append(m.putContentLengths, contentLength)
 	return m.putURL, m.err
 }
 func (m *mockStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {

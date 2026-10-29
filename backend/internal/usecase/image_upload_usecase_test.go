@@ -249,7 +249,7 @@ func newImageUploadUsecase(
 func TestImageUploadUsecase_InitiateUpload_BlankTitle(t *testing.T) {
 	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, &mockStorageService{}, nil)
 
-	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "   ", "image/jpeg", nil, nil, nil)
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "   ", "image/jpeg", 1024, nil, nil, nil)
 
 	require.ErrorIs(t, err, ErrInvalidImageTitle)
 }
@@ -257,7 +257,7 @@ func TestImageUploadUsecase_InitiateUpload_BlankTitle(t *testing.T) {
 func TestImageUploadUsecase_InitiateUpload_BlankMimeType(t *testing.T) {
 	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, &mockStorageService{}, nil)
 
-	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "   ", nil, nil, nil)
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "   ", 1024, nil, nil, nil)
 
 	require.ErrorIs(t, err, ErrInvalidMIMEType)
 }
@@ -267,7 +267,7 @@ func TestImageUploadUsecase_InitiateUpload_R2PathFormat(t *testing.T) {
 	pendingRepo := &mockPendingUploadRepository{}
 	uc := newImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, nil)
 
-	result, err := uc.InitiateUpload(context.Background(), userID, "sunset", "image/jpeg", nil, nil, nil)
+	result, err := uc.InitiateUpload(context.Background(), userID, "sunset", "image/jpeg", 1024, nil, nil, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, pendingRepo.createdPending)
@@ -285,7 +285,7 @@ func TestImageUploadUsecase_InitiateUpload_FolderFound(t *testing.T) {
 	folderRepo := newFakeFolderRepo(&domain.Folder{ID: folderID, UserID: uuid.New()})
 	uc := newImageUploadUsecase(&mockImageRepository{}, pendingRepo, folderRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, nil)
 
-	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", nil, &folderID, nil)
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", 1024, nil, &folderID, nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, pendingRepo.createdPending.FolderID)
@@ -298,7 +298,7 @@ func TestImageUploadUsecase_InitiateUpload_FolderNotFound(t *testing.T) {
 	folderRepo := &stubImageFolderRepo{err: gorm.ErrRecordNotFound}
 	uc := newImageUploadUsecase(&mockImageRepository{}, pendingRepo, folderRepo, nil, &mockStorageService{putURL: "https://r2.example.com/upload"}, nil)
 
-	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", nil, &folderID, nil)
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", 1024, nil, &folderID, nil)
 
 	require.NoError(t, err)
 	assert.Nil(t, pendingRepo.createdPending.FolderID)
@@ -308,13 +308,60 @@ func TestImageUploadUsecase_InitiateUpload_CreatePendingFails(t *testing.T) {
 	pendingRepo := &mockPendingUploadRepository{createErr: errors.New("db error")}
 	uc := newImageUploadUsecase(&mockImageRepository{}, pendingRepo, nil, nil, &mockStorageService{}, nil)
 
-	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", nil, nil, nil)
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", 1024, nil, nil, nil)
 
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "create pending upload record")
 }
 
+func TestImageUploadUsecase_InitiateUpload_ZeroFileSizeReturnsErrMissingFileSize(t *testing.T) {
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, &mockStorageService{}, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", 0, nil, nil, nil)
+
+	require.ErrorIs(t, err, ErrMissingFileSize)
+}
+
+func TestImageUploadUsecase_InitiateUpload_OversizedFileReturnsErrFileSizeTooLarge(t *testing.T) {
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, &mockStorageService{}, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", MaxImageFileSizeBytes+1, nil, nil, nil)
+
+	require.ErrorIs(t, err, ErrFileSizeTooLarge)
+}
+
+func TestImageUploadUsecase_InitiateUpload_PassesFileSizeAsContentLength(t *testing.T) {
+	store := &mockStorageService{putURL: "https://r2.example.com/upload"}
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, store, nil)
+	const fileSize int64 = 1_048_576
+
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", fileSize, nil, nil, nil)
+
+	require.NoError(t, err)
+	require.Len(t, store.putContentLengths, 2, "expected two presigned PUT calls (image + thumbnail)")
+	assert.Equal(t, fileSize, store.putContentLengths[0], "main image presigned URL must include fileSize as contentLength")
+	assert.Equal(t, int64(0), store.putContentLengths[1], "thumbnail presigned URL must not sign contentLength")
+}
+
+func TestImageUploadUsecase_InitiateUpload_FileSizeAtLimitIsAccepted(t *testing.T) {
+	store := &mockStorageService{putURL: "https://r2.example.com/upload"}
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, store, nil)
+
+	_, err := uc.InitiateUpload(context.Background(), uuid.New(), "sunset", "image/jpeg", MaxImageFileSizeBytes, nil, nil, nil)
+
+	require.NoError(t, err)
+}
+
 // --- CompleteUpload ---
+
+func TestImageUploadUsecase_CompleteUpload_OversizedFileReturnsErrFileSizeTooLarge(t *testing.T) {
+	uc := newImageUploadUsecase(&mockImageRepository{}, &mockPendingUploadRepository{}, nil, nil, &mockStorageService{}, nil)
+	oversized := MaxImageFileSizeBytes + 1
+
+	_, err := uc.CompleteUpload(context.Background(), uuid.New(), uuid.New(), nil, nil, &oversized, nil)
+
+	require.ErrorIs(t, err, ErrFileSizeTooLarge)
+}
 
 func TestImageUploadUsecase_CompleteUpload_PersistsClientSuppliedValues(t *testing.T) {
 	imageID := uuid.New()

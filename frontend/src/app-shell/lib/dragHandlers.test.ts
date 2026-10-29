@@ -197,4 +197,12 @@ describe('handleFileAutoUpload', () => {
     await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('unsupported_type')
     expect(uploadImageFile).not.toHaveBeenCalled()
   })
+
+  it('throws oversized for a file over the size limit', async () => {
+    vi.mocked(validateImageFile).mockReturnValueOnce('oversized')
+    const file = makeFile('huge.jpg', 'image/jpeg')
+
+    await expect(handleFileAutoUpload(getToken, file, null)).rejects.toThrow('oversized')
+    expect(uploadImageFile).not.toHaveBeenCalled()
+  })
 })

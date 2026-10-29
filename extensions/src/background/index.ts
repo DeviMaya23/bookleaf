@@ -365,6 +365,7 @@ export async function saveImage({
     body: JSON.stringify({
       title,
       mime_type: mimeType,
+      file_size: blob.size,
       source_url: pageUrl || undefined,
       ...(folderId ? { folder_id: folderId } : {}),
     }),
@@ -435,6 +436,11 @@ export async function persistImage({
   silent?: boolean;
   folderId?: string;
 }): Promise<void> {
+  if (blob.size > 52_428_800) {
+    if (!silent) await sendToast(tabId, "error", "File too large.", "Images must be under 50 MB.");
+    return;
+  }
+
   const auth = await getAuth();
 
   if (!isTokenValid(auth)) {
