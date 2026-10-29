@@ -21,6 +21,7 @@ describe('useAppView', () => {
     expect(viewAt('/app')).toEqual({ type: 'all' })
     expect(viewAt('/app/unsorted')).toEqual({ type: 'unsorted' })
     expect(viewAt('/app/trash')).toEqual({ type: 'trash' })
+    expect(viewAt('/app/tags')).toEqual({ type: 'tags' })
     expect(viewAt('/folders/folder-1')).toEqual({ type: 'folder', id: 'folder-1' })
   })
 })

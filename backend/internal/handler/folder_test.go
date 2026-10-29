@@ -81,6 +81,11 @@ func newEchoContext(t *testing.T, method, path, body string) (echo.Context, *htt
 	return c, rec
 }
 
+func newEchoContextWithQuery(t *testing.T, method, path, query, body string) (echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	return newEchoContext(t, method, path+"?"+query, body)
+}
+
 func assertHTTPError(t *testing.T, err error, wantStatus int) {
 	t.Helper()
 	require.Error(t, err)

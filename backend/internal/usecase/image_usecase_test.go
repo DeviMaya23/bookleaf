@@ -312,6 +312,10 @@ func (m *mockTagRepository) AppendImageTagsBulk(_ context.Context, imageIDs []uu
 	m.lastAppendBulkTagIDs = append([]uuid.UUID(nil), tagIDs...)
 	return m.appendBulkErr
 }
+func (m *mockTagRepository) ListByUserIDWithCount(_ context.Context, _ uuid.UUID) ([]*domain.TagWithCount, error) {
+	return nil, nil
+}
+
 func (m *mockTagRepository) DeleteAllByUserID(_ context.Context, _ uuid.UUID) error {
 	return m.err
 }

@@ -30,6 +30,7 @@ export function queryKeyFor({ view, debouncedSearch, sortBy, sortDir, filterTagI
     case 'unsorted': return ['images', 'unsorted', debouncedSearch, sortKey, filterTagIds, filterMimeTypes, searchLabels]
     case 'trash': return ['images', 'trash', debouncedSearch, sortKey]
     case 'folder': return ['images', 'folder', view.id, sortKey]
+    case 'tags': return ['images', 'tags']
   }
 }
 
@@ -43,6 +44,7 @@ export function fetcherFor({ view, getToken, debouncedSearch, sortBy, sortDir, f
       // sortBy never resolves to 'created_at' for Trash (sortFieldOptions excludes it).
       case 'trash': return getTrashedImages(getToken, pageParam, debouncedSearch, sort as 'deleted_at' | 'title' | undefined, direction)
       case 'folder': return getFolderImages(getToken, view.id, sort as 'created_at' | 'title' | undefined, direction)
+      case 'tags': return Promise.resolve({ images: [], next_cursor: null })
     }
   }
 }

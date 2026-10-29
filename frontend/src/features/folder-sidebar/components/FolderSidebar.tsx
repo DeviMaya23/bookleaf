@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useDndContext } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
-import { PlusIcon } from 'lucide-react'
+import { PlusIcon, TagIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getFolders } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
@@ -143,6 +143,17 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
           iconsEnabled={iconsEnabled}
           onClick={() => { navigate('/app/unsorted'); onMobileClose?.() }}
         />
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-md cursor-pointer text-sm select-none ${
+            view.type === 'tags'
+              ? 'bg-accent text-accent-foreground font-medium'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+          }`}
+          onClick={() => { navigate('/app/tags'); onMobileClose?.() }}
+        >
+          {iconsEnabled && <TagIcon className="w-3.5 h-3.5 shrink-0" />}
+          Tags
+        </div>
         <TrashEntry active={view.type === 'trash'} iconsEnabled={iconsEnabled} onClick={() => { navigate('/app/trash'); onMobileClose?.() }} />
 
         <div className="pt-2 pb-1">

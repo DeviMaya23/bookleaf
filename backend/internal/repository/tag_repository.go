@@ -37,6 +37,29 @@ func (r *tagRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]*
 	return tags, nil
 }
 
+func (r *tagRepository) ListByUserIDWithCount(ctx context.Context, userID uuid.UUID) ([]*domain.TagWithCount, error) {
+	type row struct {
+		domain.Tag
+		ImageCount int `gorm:"column:image_count"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("tags").
+		Select("tags.*, COUNT(image_tags.image_id) AS image_count").
+		Joins("LEFT JOIN image_tags ON image_tags.tag_id = tags.id").
+		Where("tags.user_id = ?", userID).
+		Group("tags.id").
+		Order("tags.name ASC").
+		Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("list tags with count: %w", err)
+	}
+	result := make([]*domain.TagWithCount, len(rows))
+	for i, r := range rows {
+		result[i] = &domain.TagWithCount{Tag: r.Tag, ImageCount: r.ImageCount}
+	}
+	return result, nil
+}
+
 func (r *tagRepository) GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Tag, error) {
 	var tag domain.Tag
 	if err := r.db.WithContext(ctx).

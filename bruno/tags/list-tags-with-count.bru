@@ -1,0 +1,11 @@
+meta {
+  name: List Tags With Count
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/tags?include_count=true
+  body: none
+  auth: inherit
+}

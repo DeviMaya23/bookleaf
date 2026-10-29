@@ -11,5 +11,6 @@ export function useAppView(): AppView {
   if (folderId) return { type: 'folder', id: folderId }
   if (pathname === '/app/unsorted') return { type: 'unsorted' }
   if (pathname === '/app/trash') return { type: 'trash' }
+  if (pathname === '/app/tags') return { type: 'tags' }
   return { type: 'all' }
 }

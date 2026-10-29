@@ -20,6 +20,7 @@ export function defaultSortForViewType(viewType: AppView['type']): { sortBy: Sor
   return { sortBy: 'created_at', sortDir: 'desc' }
 }
 
+
 export type FilterSection = 'tags' | 'mimeTypes' | 'folders' | 'labelSearch'
 
 export function filterSectionsForViewType(viewType: AppView['type'], visionEnabled: boolean): FilterSection[] {
@@ -28,6 +29,7 @@ export function filterSectionsForViewType(viewType: AppView['type'], visionEnabl
     case 'unsorted': return visionEnabled ? ['tags', 'mimeTypes', 'labelSearch'] : ['tags', 'mimeTypes']
     case 'folder': return ['tags', 'mimeTypes']
     case 'trash': return []
+    case 'tags': return []
   }
 }
 

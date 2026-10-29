@@ -24,3 +24,8 @@ func (t *Tag) BeforeCreate(*gorm.DB) error {
 	}
 	return nil
 }
+
+type TagWithCount struct {
+	Tag
+	ImageCount int
+}

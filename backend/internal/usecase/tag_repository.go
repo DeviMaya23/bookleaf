@@ -10,6 +10,7 @@ import (
 type TagRepository interface {
 	Create(ctx context.Context, tag *domain.Tag) (*domain.Tag, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.Tag, error)
+	ListByUserIDWithCount(ctx context.Context, userID uuid.UUID) ([]*domain.TagWithCount, error)
 	GetByID(ctx context.Context, id uuid.UUID, userID uuid.UUID) (*domain.Tag, error)
 	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error

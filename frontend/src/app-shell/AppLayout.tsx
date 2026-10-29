@@ -3,6 +3,7 @@ import { Plus, UploadCloud, ChevronDown, Images, Focus, MousePointerClick } from
 import { DndContext } from '@dnd-kit/core'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate as useRouterNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -36,6 +37,7 @@ import { bulkAddImagesToFolder, bulkTrashImages, bulkExportImages } from '@/lib/
 import type { Image } from '@/lib/images'
 import { getTags, bulkAddTags, resolveOrCreateTags } from '@/lib/tags'
 import { useAppView } from './useAppView'
+import TagsView from '@/features/tags/components/TagsView'
 import { useAppDragAndDrop } from './useAppDragAndDrop'
 import { useIsCoarsePointer } from '@/hooks/useIsCoarsePointer'
 
@@ -44,6 +46,9 @@ export default function AppLayout() {
   const view = useAppView()
   const { getToken } = useKindeAuth()
   const queryClient = useQueryClient()
+  const location = useLocation()
+  const routerNavigate = useRouterNavigate()
+
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadInitialFile, setUploadInitialFile] = useState<File | null>(null)
   const [batchUploadOpen, setBatchUploadOpen] = useState(false)
@@ -219,6 +224,17 @@ export default function AppLayout() {
   })
 
   const gallery = useGalleryControls(view, tags, folders, me?.vision_enabled ?? false)
+
+  useEffect(() => {
+    const state = location.state as Record<string, unknown> | null
+    const tagIds = Array.isArray(state?.filterTagIds) ? (state.filterTagIds as string[]) : null
+    if (tagIds && tagIds.length > 0) {
+      gallery.setFilterTagIds(tagIds)
+      routerNavigate(location.pathname, { replace: true, state: null })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state])
+
   const { sensors, handleDragStart, handleDragEnd, sortEndTrigger, dragOverlay } = useAppDragAndDrop(folders)
 
   const activeFolder: Folder | null = view.type === 'folder'
@@ -386,7 +402,8 @@ export default function AppLayout() {
           ) : (
             <ScrollArea className="h-full">
               <div className="p-6">
-                <GalleryToolbar
+                {view.type === 'tags' ? <TagsView /> : null}
+                {view.type !== 'tags' && <GalleryToolbar
                   view={view}
                   controls={gallery}
                   controlsDisabled={selectMode}
@@ -442,8 +459,8 @@ export default function AppLayout() {
                       </DropdownMenu>
                     </>
                   }
-                />
-                <ImageGrid
+                />}
+                {view.type !== 'tags' && <ImageGrid
                   view={view}
                   searchTerm={gallery.searchTerm}
                   debouncedSearchTerm={gallery.debouncedSearchTerm}
@@ -462,7 +479,7 @@ export default function AppLayout() {
                   selectedIds={selectedIds}
                   mainSelectedId={mainSelectedId}
                   onSelectionChange={handleSelectionChange}
-                />
+                />}
               </div>
             </ScrollArea>
           )}

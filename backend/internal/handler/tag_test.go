@@ -18,9 +18,10 @@ import (
 )
 
 type mockTagUsecase struct {
-	tag  *domain.Tag
-	tags []*domain.Tag
-	err  error
+	tag           *domain.Tag
+	tags          []*domain.Tag
+	tagsWithCount []*domain.TagWithCount
+	err           error
 }
 
 func (m *mockTagUsecase) Create(_ context.Context, _ uuid.UUID, _ string) (*domain.Tag, error) {
@@ -29,6 +30,10 @@ func (m *mockTagUsecase) Create(_ context.Context, _ uuid.UUID, _ string) (*doma
 
 func (m *mockTagUsecase) List(_ context.Context, _ uuid.UUID) ([]*domain.Tag, error) {
 	return m.tags, m.err
+}
+
+func (m *mockTagUsecase) ListWithCount(_ context.Context, _ uuid.UUID) ([]*domain.TagWithCount, error) {
+	return m.tagsWithCount, m.err
 }
 
 func (m *mockTagUsecase) Update(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (*domain.Tag, error) {
@@ -146,6 +151,52 @@ func TestTagHandler_ListTags_GenericError(t *testing.T) {
 	err := h.ListTags(c)
 
 	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+func TestTagHandler_ListTags_WithCount_ReturnsImageCount(t *testing.T) {
+	tagID := uuid.New()
+	now := time.Now().UTC()
+	h := NewTagHandler(&mockTagUsecase{
+		tagsWithCount: []*domain.TagWithCount{
+			{Tag: domain.Tag{ID: tagID, Name: "travel", CreatedAt: now, UpdatedAt: now}, ImageCount: 5},
+		},
+	}, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContextWithQuery(t, http.MethodGet, "/tags", "include_count=true", "")
+
+	err := h.ListTags(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	assert.Equal(t, float64(5), resp[0]["image_count"])
+}
+
+func TestTagHandler_ListTags_WithCount_GenericError(t *testing.T) {
+	h := NewTagHandler(&mockTagUsecase{err: errors.New("db error")}, observability.NewTelemetry(nil, nil, nil))
+	c, _ := newEchoContextWithQuery(t, http.MethodGet, "/tags", "include_count=true", "")
+
+	err := h.ListTags(c)
+
+	assertHTTPError(t, err, http.StatusInternalServerError)
+}
+
+func TestTagHandler_ListTags_NoCount_OmitsImageCountField(t *testing.T) {
+	h := NewTagHandler(&mockTagUsecase{
+		tags: []*domain.Tag{{ID: uuid.New(), Name: "travel"}},
+	}, observability.NewTelemetry(nil, nil, nil))
+	c, rec := newEchoContext(t, http.MethodGet, "/tags", "")
+
+	err := h.ListTags(c)
+
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp, 1)
+	_, hasCount := resp[0]["image_count"]
+	assert.False(t, hasCount)
 }
 
 // --- UpdateTag ---
