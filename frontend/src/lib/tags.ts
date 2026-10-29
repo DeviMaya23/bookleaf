@@ -9,10 +9,37 @@ export interface Tag {
 
 type GetToken = () => Promise<string | undefined>
 
+export interface TagWithCount extends Tag {
+  image_count: number
+}
+
 export async function getTags(getToken: GetToken): Promise<Tag[]> {
   const res = await apiFetch('/tags', getToken)
   if (!res.ok) throw new Error('Failed to fetch tags')
   return res.json()
+}
+
+export async function getTagsWithCount(getToken: GetToken): Promise<TagWithCount[]> {
+  const res = await apiFetch('/tags?include_count=true', getToken)
+  if (!res.ok) throw new Error('Failed to fetch tags')
+  return res.json()
+}
+
+// Returns null on 409 (duplicate name — caller shows inline error)
+export async function updateTag(getToken: GetToken, id: string, name: string): Promise<Tag | null> {
+  const res = await apiFetch(`/tags/${id}`, getToken, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (res.status === 409) return null
+  if (!res.ok) throw new Error('Failed to update tag')
+  return res.json()
+}
+
+export async function deleteTag(getToken: GetToken, id: string): Promise<void> {
+  const res = await apiFetch(`/tags/${id}`, getToken, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete tag')
 }
 
 // Returns null on 409 (tag already exists for this user — caller resolves via re-fetch)

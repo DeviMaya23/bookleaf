@@ -3,3 +3,4 @@ export type AppView =
   | { type: 'unsorted' }
   | { type: 'trash' }
   | { type: 'folder'; id: string }
+  | { type: 'tags' }

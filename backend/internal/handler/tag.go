@@ -19,6 +19,7 @@ import (
 type TagUsecase interface {
 	Create(ctx context.Context, userID uuid.UUID, name string) (*domain.Tag, error)
 	List(ctx context.Context, userID uuid.UUID) ([]*domain.Tag, error)
+	ListWithCount(ctx context.Context, userID uuid.UUID) ([]*domain.TagWithCount, error)
 	Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error)
 	Delete(ctx context.Context, id uuid.UUID, userID uuid.UUID) error
 }
@@ -37,11 +38,15 @@ type updateTagRequest struct {
 }
 
 type tagResponse struct {
-	ID        uuid.UUID  `json:"id"`
-	Name      string     `json:"name"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	ID         uuid.UUID  `json:"id"`
+	Name       string     `json:"name"`
+	ImageCount *int       `json:"image_count,omitempty"`
+	CreatedAt  *time.Time `json:"created_at,omitempty"`
+	UpdatedAt  *time.Time `json:"updated_at,omitempty"`
 }
+
+// TagWithCount is a local alias to avoid importing domain in tests.
+type TagWithCount = domain.TagWithCount
 
 func NewTagHandler(tagUsecase TagUsecase, tel *observability.Telemetry) *TagHandler {
 	return &TagHandler{
@@ -87,6 +92,20 @@ func (h *TagHandler) ListTags(c echo.Context) error {
 	userID, ok := middleware.AuthenticatedUserUUIDFromContext(c)
 	if !ok {
 		return echo.NewHTTPError(http.StatusInternalServerError, "authenticated user id missing in context")
+	}
+
+	if c.QueryParam("include_count") == "true" {
+		tags, err := h.tagUsecase.ListWithCount(ctx, userID)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to list tags")
+		}
+		response := make([]tagResponse, 0, len(tags))
+		for _, tag := range tags {
+			response = append(response, toTagResponseWithCount(tag))
+		}
+		return c.JSON(http.StatusOK, response)
 	}
 
 	tags, err := h.tagUsecase.List(ctx, userID)
@@ -176,5 +195,18 @@ func toTagResponse(tag *domain.Tag) tagResponse {
 		Name:      tag.Name,
 		CreatedAt: &createdAt,
 		UpdatedAt: &updatedAt,
+	}
+}
+
+func toTagResponseWithCount(tag *domain.TagWithCount) tagResponse {
+	createdAt := tag.CreatedAt
+	updatedAt := tag.UpdatedAt
+	count := tag.ImageCount
+	return tagResponse{
+		ID:         tag.ID,
+		Name:       tag.Name,
+		ImageCount: &count,
+		CreatedAt:  &createdAt,
+		UpdatedAt:  &updatedAt,
 	}
 }

@@ -26,6 +26,7 @@ function App() {
         <Route index element={<AppLayout />} />
         <Route path="unsorted" element={<AppLayout />} />
         <Route path="trash" element={<AppLayout />} />
+        <Route path="tags" element={<AppLayout />} />
         <Route path="folders/:folderId" element={<AppLayout />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

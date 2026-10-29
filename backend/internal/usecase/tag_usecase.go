@@ -62,6 +62,20 @@ func (u *tagUsecase) List(ctx context.Context, userID uuid.UUID) ([]*domain.Tag,
 	return tags, nil
 }
 
+func (u *tagUsecase) ListWithCount(ctx context.Context, userID uuid.UUID) ([]*domain.TagWithCount, error) {
+	ctx, span := u.tel.Tracer.Start(ctx, "usecase.ListTagsWithCount")
+	defer span.End()
+
+	tags, err := u.tagRepo.ListByUserIDWithCount(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, fmt.Errorf("list tags with count: %w", err)
+	}
+
+	return tags, nil
+}
+
 func (u *tagUsecase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (*domain.Tag, error) {
 	ctx, span := u.tel.Tracer.Start(ctx, "usecase.UpdateTag")
 	defer span.End()
