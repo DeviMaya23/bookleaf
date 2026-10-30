@@ -48,6 +48,13 @@ func (s *spyShareStorage) GeneratePresignedGetURL(_ context.Context, key string,
 	return s.url + "?key=" + key, nil
 }
 
+func (s *spyShareStorage) GenerateDeterministicPresignedGetURL(_ context.Context, key string) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.url + "?key=" + key, nil
+}
+
 func (s *spyShareStorage) GeneratePresignedDownloadURL(_ context.Context, key, filename string, _ time.Duration) (string, error) {
 	if s.err != nil {
 		return "", s.err

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/devi/bookleaf/internal/platform/config"
@@ -17,12 +19,33 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	thumbnailPresignWindowSize = 24 * time.Hour
+	thumbnailPresignExpiry     = 48 * time.Hour
+)
+
 type r2Storage struct {
 	client             *s3.Client
 	presign            *s3.PresignClient
 	bucket             string
 	tel                *observability.Telemetry
 	presignURLDuration metric.Float64Histogram
+	now                func() time.Time
+}
+
+// deterministicSigner replaces the signing time chosen by the SDK with a fixed
+// one so that presigned URLs are identical for every request in the same window.
+type deterministicSigner struct {
+	inner       *v4.Signer
+	signingTime time.Time
+}
+
+func (d deterministicSigner) PresignHTTP(
+	ctx context.Context, credentials aws.Credentials, r *http.Request,
+	payloadHash string, service string, region string, _ time.Time,
+	optFns ...func(*v4.SignerOptions),
+) (string, http.Header, error) {
+	return d.inner.PresignHTTP(ctx, credentials, r, payloadHash, service, region, d.signingTime, optFns...)
 }
 
 func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) *r2Storage {
@@ -46,6 +69,7 @@ func NewR2Storage(cfg config.R2Config, tel *observability.Telemetry) *r2Storage 
 		bucket:             cfg.BucketName,
 		tel:                tel,
 		presignURLDuration: presignURLDuration,
+		now:                time.Now,
 	}
 }
 
@@ -137,6 +161,50 @@ func (r *r2Storage) GeneratePresignedGetURL(ctx context.Context, key string, ttl
 	return resp.URL, nil
 }
 
+// GenerateDeterministicPresignedGetURL signs with the start of the current UTC
+// window instead of the current time, so the URL is stable for the whole window.
+func (r *r2Storage) GenerateDeterministicPresignedGetURL(ctx context.Context, key string) (string, error) {
+	ctx, span := r.tel.Tracer.Start(ctx, "storage.GenerateDeterministicPresignedGetURL")
+	defer span.End()
+
+	logger := observability.LoggerFromContext(ctx, r.tel.Logger)
+	start := time.Now()
+
+	windowStart := r.now().UTC().Truncate(thumbnailPresignWindowSize)
+	signer := deterministicSigner{inner: v4.NewSigner(), signingTime: windowStart}
+
+	resp, err := r.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(r.bucket),
+		Key:    aws.String(key),
+	}, s3.WithPresignExpires(thumbnailPresignExpiry), func(o *s3.PresignOptions) {
+		o.Presigner = signer
+	})
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	r.presignURLDuration.Record(ctx, float64(time.Since(start).Milliseconds()),
+		metric.WithAttributes(
+			attribute.String("r2.operation", "presigned_get_deterministic"),
+			attribute.String("r2.status", status),
+		),
+	)
+
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		logger.Error("deterministic presigned get URL generation failed",
+			zap.String("event", "r2.presigned_get_deterministic.failed"),
+			zap.String("r2_key", key),
+			zap.Error(err),
+		)
+		return "", fmt.Errorf("presign deterministic get %s: %w", key, err)
+	}
+
+	return resp.URL, nil
+}
+
 func (r *r2Storage) GeneratePresignedDownloadURL(ctx context.Context, key, filename string, ttl time.Duration) (string, error) {
 	ctx, span := r.tel.Tracer.Start(ctx, "storage.GeneratePresignedDownloadURL")
 	defer span.End()
@@ -197,16 +265,20 @@ func (r *r2Storage) GetObject(ctx context.Context, key string) (io.ReadCloser, e
 	return resp.Body, nil
 }
 
-func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, contentType string) error {
+func (r *r2Storage) PutObject(ctx context.Context, key string, body io.Reader, contentType, cacheControl string) error {
 	ctx, span := r.tel.Tracer.Start(ctx, "storage.PutObject")
 	defer span.End()
 
-	_, err := r.client.PutObject(ctx, &s3.PutObjectInput{
+	input := &s3.PutObjectInput{
 		Bucket:      aws.String(r.bucket),
 		Key:         aws.String(key),
 		Body:        body,
 		ContentType: aws.String(contentType),
-	})
+	}
+	if cacheControl != "" {
+		input.CacheControl = aws.String(cacheControl)
+	}
+	_, err := r.client.PutObject(ctx, input)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
@@ -240,4 +312,3 @@ func (r *r2Storage) Ping(ctx context.Context) error {
 	}
 	return nil
 }
-

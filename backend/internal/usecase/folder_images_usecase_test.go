@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/devi/bookleaf/internal/domain"
 	"github.com/google/uuid"
@@ -38,7 +37,7 @@ type stubFolderImagesStorage struct {
 	err error
 }
 
-func (s *stubFolderImagesStorage) GeneratePresignedGetURL(_ context.Context, key string, _ time.Duration) (string, error) {
+func (s *stubFolderImagesStorage) GenerateDeterministicPresignedGetURL(_ context.Context, key string) (string, error) {
 	if s.err != nil {
 		return "", s.err
 	}

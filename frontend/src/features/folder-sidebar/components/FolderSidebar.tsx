@@ -43,7 +43,7 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
     queryFn: () => getMe(getToken),
     staleTime: Infinity,
   })
-  const iconsEnabled = me?.folder_icons_enabled ?? true
+  const iconsEnabled = me?.folder_icons_enabled ?? false
 
   const { folders, isFoldersPending, folderFilter, setFolderFilter, subtreeIds, visibleTree } =
     useFolderTree(activeDragFolderId)

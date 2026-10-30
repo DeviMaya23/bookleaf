@@ -10,8 +10,9 @@ type StorageService interface {
 	GeneratePresignedPutURL(ctx context.Context, key, contentType string, contentLength int64, ttl time.Duration) (string, error)
 	GeneratePresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
 	GeneratePresignedDownloadURL(ctx context.Context, key, filename string, ttl time.Duration) (string, error)
+	GenerateDeterministicPresignedGetURL(ctx context.Context, key string) (string, error)
 	GetObject(ctx context.Context, key string) (io.ReadCloser, error)
-PutObject(ctx context.Context, key string, body io.Reader, contentType string) error
+	PutObject(ctx context.Context, key string, body io.Reader, contentType, cacheControl string) error
 	DeleteObject(ctx context.Context, key string) error
 	Ping(ctx context.Context) error
 }

@@ -67,7 +67,7 @@ func (u *folderImagesUsecase) ListFolderImages(ctx context.Context, userID uuid.
 		if img.ThumbnailPath == nil {
 			continue
 		}
-		url, err := u.store.GeneratePresignedGetURL(ctx, *img.ThumbnailPath, presignedGetTTL)
+		url, err := u.store.GenerateDeterministicPresignedGetURL(ctx, *img.ThumbnailPath)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
