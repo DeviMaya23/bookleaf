@@ -199,6 +199,16 @@ describe('ImageGrid', () => {
     })
   })
 
+  it('shows error state when the query fails', async () => {
+    vi.mocked(getImages).mockRejectedValue(new Error('network error'))
+
+    renderImageGrid()
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load images. Please try again.')).toBeInTheDocument()
+    })
+  })
+
   it('calls onImageSelect when a card is clicked', async () => {
     const image = makeImage()
     const onImageSelect = vi.fn()

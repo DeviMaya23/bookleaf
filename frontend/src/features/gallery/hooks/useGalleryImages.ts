@@ -77,7 +77,7 @@ export function useGalleryImages({
 
   const queryParams: GalleryQueryParams = { view, debouncedSearch: debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels }
 
-  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+  const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: queryKeyFor(queryParams),
     queryFn: fetcherFor({ ...queryParams, getToken }),
     initialPageParam: undefined as string | undefined,
@@ -97,5 +97,5 @@ export function useGalleryImages({
       : fetchedImages
   ), [fetchedImages, isFolderView, trimmedSearch, filterTagIds, filterMimeTypes])
 
-  return { images, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage }
+  return { images, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage }
 }

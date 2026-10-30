@@ -84,6 +84,8 @@ export function useManualReorder(view: AppView, sortBy: SortBy, isFolderView: bo
         },
       }
     )
+  // orderedImagesRef is a ref (intentional stale-closure guard); positionMutation is
+  // stable across renders — neither should re-trigger this effect.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortEndTrigger, view, sortBy])
 

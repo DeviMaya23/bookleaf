@@ -112,6 +112,14 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
     })),
   ]
 
+  const toggleTagFilter = useCallback((id: string) => {
+    setFilterTagIds((prev) => prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id])
+  }, [])
+
+  const toggleFolderFilter = useCallback((id: string) => {
+    setFilterFolderIds((prev) => prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id])
+  }, [])
+
   const clearAllFilters = useCallback(() => {
     setFilterTagIds([])
     setFilterMimeTypes([])
@@ -132,6 +140,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
     filterCount,
     filterTagIds,
     setFilterTagIds,
+    toggleTagFilter,
     filterTagSearch,
     setFilterTagSearch,
     filteredTags,
@@ -139,6 +148,7 @@ export function useGalleryControls(view: AppView, tags: Tag[], folders: Folder[]
     setFilterMimeTypes,
     filterFolderIds,
     setFilterFolderIds,
+    toggleFolderFilter,
     filterFolderSearch,
     setFilterFolderSearch,
     filteredFolders,

@@ -14,7 +14,7 @@ export function useImageLifecycle(isTrash: boolean, removeImage: (id: string) =>
     mutationFn: (id: string) => deleteImage(getToken, id),
     onSuccess: (_, id) => {
       removeImage(id)
-      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
+      queryClient.invalidateQueries({ queryKey: ['images'] })
       toast.success('Image moved to trash')
       onImageDeleted?.(id)
     },
@@ -24,7 +24,7 @@ export function useImageLifecycle(isTrash: boolean, removeImage: (id: string) =>
   const restoreMutation = useMutation({
     mutationFn: (id: string) => restoreImage(getToken, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['images', 'trash'] })
+      queryClient.invalidateQueries({ queryKey: ['images'] })
       toast.success('Image restored')
     },
     onError: () => toast.error('Failed to restore image'),

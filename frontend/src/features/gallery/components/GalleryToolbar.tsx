@@ -61,14 +61,14 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
     filterSections,
     filterCount,
     filterTagIds,
-    setFilterTagIds,
+    toggleTagFilter,
     filterTagSearch,
     setFilterTagSearch,
     filteredTags,
     filterMimeTypes,
     setFilterMimeTypes,
     filterFolderIds,
-    setFilterFolderIds,
+    toggleFolderFilter,
     filterFolderSearch,
     setFilterFolderSearch,
     filteredFolders,
@@ -193,9 +193,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
                         <DropdownMenuCheckboxItem
                           key={tag.id}
                           checked={filterTagIds.includes(tag.id)}
-                          onCheckedChange={(checked) =>
-                            setFilterTagIds((prev) => checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id))
-                          }
+                          onCheckedChange={() => toggleTagFilter(tag.id)}
                         >
                           {tag.name}
                         </DropdownMenuCheckboxItem>
@@ -221,9 +219,7 @@ export default function GalleryToolbar({ view, controls, focusToggle, uploadActi
                         <DropdownMenuCheckboxItem
                           key={folder.id}
                           checked={filterFolderIds.includes(folder.id)}
-                          onCheckedChange={(checked) =>
-                            setFilterFolderIds((prev) => checked ? [...prev, folder.id] : prev.filter((id) => id !== folder.id))
-                          }
+                          onCheckedChange={() => toggleFolderFilter(folder.id)}
                         >
                           {folder.name}
                         </DropdownMenuCheckboxItem>
