@@ -16,7 +16,7 @@ vi.mock('@/lib/images', async (importOriginal) => ({
 }))
 
 vi.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ open, onOpenChange, children }: { open?: boolean; onOpenChange?: (v: boolean) => void; children: React.ReactNode }) =>
+  Dialog: ({ open, children }: { open?: boolean; children: React.ReactNode }) =>
     open ? React.createElement(React.Fragment, null, children) : null,
   DialogPortal: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),

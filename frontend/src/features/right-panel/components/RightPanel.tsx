@@ -128,7 +128,6 @@ function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
 
   useEffect(() => {
     setTags(image.tags ?? [])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.id, image.tags])
 
   const saveMutation = useMutation({
