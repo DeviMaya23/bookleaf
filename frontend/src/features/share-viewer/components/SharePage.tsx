@@ -57,6 +57,9 @@ export default function SharePage() {
 
   const { folder, images } = data
   const adaptedImages = images.map((img, i) => toGalleryImage(img, i))
+  const galleryMeta = new Map(
+    adaptedImages.map((adapted, i) => [adapted.id, { original: images[i], index: i }]),
+  )
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
@@ -81,14 +84,14 @@ export default function SharePage() {
               containerWidth={containerWidth}
               dropIndicatorId={null}
               renderCard={(image, imgHeight) => {
-                const index = Number(image.id)
+                const meta = galleryMeta.get(image.id)!
                 return (
                   <SharedImageCard
                     key={image.id}
                     image={image}
                     imgHeight={imgHeight}
-                    downloadUrl={images[index].download_url}
-                    onDoubleClick={() => setLightboxIndex(index)}
+                    downloadUrl={meta.original.download_url}
+                    onDoubleClick={() => setLightboxIndex(meta.index)}
                   />
                 )
               }}

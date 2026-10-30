@@ -59,16 +59,17 @@ describe('Lightbox', () => {
     const onClose = vi.fn()
     render(<Lightbox images={makeImages()} index={0} onClose={onClose} onNavigate={vi.fn()} />)
 
-    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
 
     expect(onClose).toHaveBeenCalled()
   })
 
   it('calls onClose when the backdrop is clicked', () => {
     const onClose = vi.fn()
-    const { container } = render(<Lightbox images={makeImages()} index={0} onClose={onClose} onNavigate={vi.fn()} />)
+    render(<Lightbox images={makeImages()} index={0} onClose={onClose} onNavigate={vi.fn()} />)
 
-    fireEvent.click(container.firstChild as Element)
+    const backdrop = document.querySelector('[data-slot="dialog-overlay"]')
+    fireEvent.click(backdrop as Element)
 
     expect(onClose).toHaveBeenCalled()
   })

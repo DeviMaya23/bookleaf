@@ -44,7 +44,7 @@ export default function AppSection() {
     },
   })
 
-  const folderIconsEnabled = me?.folder_icons_enabled ?? true
+  const folderIconsEnabled = me?.folder_icons_enabled ?? false
 
   return (
     <div>

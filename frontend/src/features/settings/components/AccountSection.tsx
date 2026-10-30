@@ -45,7 +45,7 @@ export default function AccountSection() {
           <div className="flex flex-1 flex-col gap-1.5">
             <div className="font-medium">{profile ? getFullName(profile) : '…'}</div>
             <div className="rounded-md border bg-input px-2.5 py-1.5 text-sm text-muted-foreground">
-              {profile?.email}
+              {profile?.email ?? '…'}
             </div>
           </div>
         </div>

@@ -1,18 +1,25 @@
 import { ImageIcon } from 'lucide-react'
-import type { Image } from '@/lib/images'
 import { computeMasonryLayout, GAP } from '../lib/masonry'
 
+export interface MasonryImage {
+  id: string
+  title: string
+  width: number | null
+  height: number | null
+  thumbnail_url: string | null
+}
+
 interface MasonryLayoutProps {
-  images: Image[]
+  images: MasonryImage[]
   containerWidth: number
   dropIndicatorId?: string | null
-  renderCard: (image: Image, imgHeight: number, isDropTarget: boolean) => React.ReactNode
+  renderCard: (image: MasonryImage, imgHeight: number, isDropTarget: boolean) => React.ReactNode
 }
 
 export default function MasonryLayout({ images, containerWidth, dropIndicatorId, renderCard }: MasonryLayoutProps) {
   const { numCols, colWidth } = computeMasonryLayout(containerWidth)
 
-  const columns: Image[][] = Array.from({ length: numCols }, () => [])
+  const columns: MasonryImage[][] = Array.from({ length: numCols }, () => [])
   images.forEach((img, i) => {
     columns[i % numCols].push(img)
   })
@@ -33,7 +40,7 @@ export default function MasonryLayout({ images, containerWidth, dropIndicatorId,
 }
 
 interface MasonryCardContentProps {
-  image: Image
+  image: MasonryImage
   imgHeight: number
 }
 
