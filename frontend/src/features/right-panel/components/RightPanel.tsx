@@ -41,39 +41,45 @@ export default function RightPanel({ panelContent, focusMode, mobileOpen = false
   if (focusMode && !isSelection) return null
 
   if (isCoarsePointer) {
-    if (!mobileOpen) return null
     const handleClose = () => {
       if (panelContent.mode === 'selection') panelContent.onExitSelectMode()
       onMobileClose?.()
     }
-    return <MobileDrawerShell onClose={handleClose}>{deriveContent(panelContent)}</MobileDrawerShell>
+    return <MobileDrawerShell open={mobileOpen} onClose={handleClose}>{deriveContent(panelContent)}</MobileDrawerShell>
   }
-
-  const chevron = (
-    <button
-      onClick={() => setCollapsed(!collapsed)}
-      className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
-      aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
-    >
-      {collapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-    </button>
-  )
 
   return (
     <aside className="hidden sm:flex flex-shrink-0 border-l h-screen flex-col bg-background overflow-hidden transition-all duration-150 relative" style={{ width: collapsed ? '2rem' : '20rem' }}>
       {collapsed ? (
         <div className="flex flex-col flex-1 items-center pt-2">
-          {chevron}
+          <CollapseChevron collapsed={collapsed} onClick={() => setCollapsed(!collapsed)} />
         </div>
       ) : (
         <>
           <div className="absolute top-2 right-2 z-10">
-            {chevron}
+            <CollapseChevron collapsed={collapsed} onClick={() => setCollapsed(!collapsed)} />
           </div>
           {deriveContent(panelContent)}
         </>
       )}
     </aside>
+  )
+}
+
+interface CollapseChevronProps {
+  collapsed: boolean
+  onClick: () => void
+}
+
+function CollapseChevron({ collapsed, onClick }: CollapseChevronProps) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-7 h-7 flex items-center justify-center rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
+      aria-label={collapsed ? 'Expand panel' : 'Collapse panel'}
+    >
+      {collapsed ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+    </button>
   )
 }
 
@@ -119,6 +125,11 @@ function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
     useImageDetailsData(image)
 
   const [tags, setTags] = useState<Tag[]>(image.tags ?? [])
+
+  useEffect(() => {
+    setTags(image.tags ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image.id, image.tags])
 
   const saveMutation = useMutation({
     mutationFn: (params: Parameters<typeof updateImage>[2]) =>
@@ -208,6 +219,7 @@ function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
             value={titleField.value}
             onChange={(e) => titleField.onChange(e.target.value)}
             onBlur={titleField.onBlur}
+            aria-label="Title"
             className="w-full text-base font-semibold bg-transparent border-b border-transparent focus:border-border focus:bg-muted/40 outline-none px-0 py-0.5 transition-colors"
           />
         </div>
@@ -220,6 +232,7 @@ function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
             onChange={(e) => descriptionField.onChange(e.target.value)}
             onBlur={descriptionField.onBlur}
             placeholder="Add a note…"
+            aria-label="Notes"
             rows={3}
             className="w-full resize-none text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-2 outline-none focus:border-border transition-colors"
           />
@@ -234,6 +247,7 @@ function ImagePanelBody({ image, autoFocusTitle }: ImagePanelBodyProps) {
               onChange={(e) => sourceUrlField.onChange(e.target.value)}
               onBlur={sourceUrlField.onBlur}
               placeholder="https://…"
+              aria-label="Source URL"
               className="flex-1 text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-1.5 outline-none focus:border-border transition-colors min-w-0"
             />
             <a

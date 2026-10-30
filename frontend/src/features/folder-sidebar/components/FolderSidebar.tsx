@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
@@ -6,8 +5,6 @@ import { useDndContext } from '@dnd-kit/core'
 import { Button } from '@/components/ui/button'
 import { PlusIcon, TagIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getFolders } from '@/lib/folders'
-import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 import { getMe } from '@/features/auth/lib/me'
 import FolderNameDialog from './FolderNameDialog'
@@ -17,18 +14,12 @@ import UnsortedEntry from './UnsortedEntry'
 import TrashEntry from './TrashEntry'
 import RootDropZone from './RootDropZone'
 import ProfileMenu from '@/features/auth/components/ProfileMenu'
-import { buildFolderTree, filterFolderTree, type FolderNode } from '../lib/folderTree'
-import { useFolderMutations } from '../hooks/useFolderMutations'
+import { useFolderTree } from '../hooks/useFolderTree'
+import { useFolderSidebarDialogs } from '../hooks/useFolderSidebarDialogs'
 import { isImageDragData, isFolderDragData } from '@/app-shell/lib/dragHandlers'
 import { FOLDER_ICONS, SYSTEM_ICON_KEYS } from '../lib/folderIcons'
 
 const AllIcon = FOLDER_ICONS[SYSTEM_ICON_KEYS.all]
-
-type NameDialogState =
-  | { mode: 'create-root' }
-  | { mode: 'create-sub'; parent: Folder }
-  | { mode: 'rename'; target: Folder }
-  | null
 
 interface FolderSidebarProps {
   view: AppView
@@ -47,11 +38,6 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
   const activeDragType = isImageDragData(dragData) ? 'image' : isFolderDragData(dragData) ? 'folder' : null
   const activeDragFolderId = isFolderDragData(dragData) ? dragData.folderId : null
 
-  const { data: folders = [] } = useQuery({
-    queryKey: ['folders'],
-    queryFn: () => getFolders(getToken),
-  })
-
   const { data: me } = useQuery({
     queryKey: ['me'],
     queryFn: () => getMe(getToken),
@@ -59,60 +45,22 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
   })
   const iconsEnabled = me?.folder_icons_enabled ?? true
 
-  const { createMutation, renameMutation, deleteMutation, changeIconMutation } = useFolderMutations()
+  const { folders, isFoldersPending, folderFilter, setFolderFilter, subtreeIds, visibleTree } =
+    useFolderTree(activeDragFolderId)
 
-  const [folderFilter, setFolderFilter] = useState('')
-  const [nameDialog, setNameDialog] = useState<NameDialogState>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Folder | null>(null)
-
-  function handleDelete() {
-    if (!deleteTarget) return
-    const targetId = deleteTarget.id
-    const isViewingTarget = view.type === 'folder' && view.id === targetId
-    deleteMutation.mutate(targetId, {
-      onSuccess: () => {
-        if (isViewingTarget) navigate('/app')
-      },
-    })
-    setDeleteTarget(null)
-  }
-
-  function handleFolderSelect(folder: FolderNode) {
-    const isActive = view.type === 'folder' && view.id === folder.id
-    if (!isActive) onFolderSelect?.()
-    navigate(`/app/folders/${folder.id}`)
-    onMobileClose?.()
-  }
-
-  function handleViewDetails(folder: Folder) {
-    const isActive = view.type === 'folder' && view.id === folder.id
-    if (!isActive) navigate(`/app/folders/${folder.id}`)
-    onFolderViewDetails?.()
-    onMobileClose?.()
-  }
-
-  function handleNameDialogSubmit(name: string) {
-    if (!nameDialog) return
-    if (nameDialog.mode === 'create-root') {
-      createMutation.mutate({ name })
-    } else if (nameDialog.mode === 'create-sub') {
-      createMutation.mutate({ name, parentId: nameDialog.parent.id })
-    } else {
-      renameMutation.mutate({ id: nameDialog.target.id, name })
-    }
-  }
-
-  const nameDialogTitle =
-    nameDialog?.mode === 'create-sub'
-      ? 'New subfolder'
-      : nameDialog?.mode === 'rename'
-      ? 'Rename folder'
-      : 'New folder'
-  const nameDialogInitialValue = nameDialog?.mode === 'rename' ? nameDialog.target.name : ''
-
-  const tree = buildFolderTree(folders)
-  const trimmedFolderFilter = folderFilter.trim()
-  const visibleTree = trimmedFolderFilter ? filterFolderTree(tree, trimmedFolderFilter) : tree
+  const {
+    nameDialog,
+    setNameDialog,
+    deleteTarget,
+    setDeleteTarget,
+    handleDelete,
+    handleFolderSelect,
+    handleViewDetails,
+    handleNameDialogSubmit,
+    nameDialogTitle,
+    nameDialogInitialValue,
+    changeIconMutation,
+  } = useFolderSidebarDialogs(view, onMobileClose)
 
   return (
     <aside
@@ -179,16 +127,15 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
             folder={folder}
             depth={0}
             view={view}
-            folders={folders}
+            subtreeIds={subtreeIds}
             activeDragType={activeDragType}
-            activeDragFolderId={activeDragFolderId}
             iconsEnabled={iconsEnabled}
-            onSelect={handleFolderSelect}
+            onSelect={(f) => handleFolderSelect(f, onFolderSelect)}
             onRename={(target) => setNameDialog({ mode: 'rename', target })}
             onDelete={setDeleteTarget}
             onNewSubfolder={(parent) => setNameDialog({ mode: 'create-sub', parent })}
             onChangeIcon={(target, icon) => changeIconMutation.mutate({ id: target.id, icon })}
-            onViewDetails={handleViewDetails}
+            onViewDetails={(f) => handleViewDetails(f, onFolderViewDetails)}
           />
         ))}
 
@@ -196,7 +143,7 @@ export default function FolderSidebar({ view, onFolderSelect, onFolderViewDetail
       </nav>
 
       <div className="p-2 border-t space-y-1">
-        {folders.length === 0 && (
+        {!isFoldersPending && folders.length === 0 && (
           <button
             className="w-full rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground text-left"
             onClick={() => setNameDialog({ mode: 'create-root' })}

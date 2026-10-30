@@ -40,34 +40,7 @@ vi.mock('@/features/auth/lib/me', () => ({
   getMe: vi.fn().mockResolvedValue({ vision_enabled: false, folder_icons_enabled: true, ai_categorisation_enabled: false, ai_categorisation_count_this_month: 0 }),
 }))
 
-vi.mock('@/components/ui/context-menu', async () => {
-  const React = await import('react')
-  return {
-    ContextMenu: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuTrigger: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuContent: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuSeparator: () => React.createElement('hr'),
-    ContextMenuItem: ({
-      children,
-      onClick,
-      className,
-    }: {
-      children: React.ReactNode
-      onClick?: (e: React.MouseEvent) => void
-      className?: string
-    }) =>
-      React.createElement('button', { role: 'menuitem', className, onClick }, children),
-    ContextMenuSub: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuSubTrigger: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuSubContent: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-  }
-})
+vi.mock('@/components/ui/context-menu', () => import('@/test/mocks/contextMenu').then((m) => m.contextMenuMock))
 
 function renderSidebar(props: Partial<{ mobileOpen: boolean; onMobileClose: () => void; onFolderViewDetails: () => void }> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

@@ -13,11 +13,17 @@ export function useFolderMutations() {
     mutationFn: ({ name, parentId }: { name: string; parentId?: string }) =>
       createFolder(getToken, name, parentId),
     onSuccess: invalidate,
+    onError: () => {
+      toast.error('Failed to create folder')
+    },
   })
 
   const renameMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) => updateFolder(getToken, id, { name }),
     onSuccess: invalidate,
+    onError: () => {
+      toast.error('Failed to rename folder')
+    },
   })
 
   const changeIconMutation = useMutation({
