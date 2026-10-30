@@ -237,6 +237,9 @@ func (m *mockStorageService) GeneratePresignedPutURL(_ context.Context, _, _ str
 func (m *mockStorageService) GeneratePresignedGetURL(_ context.Context, _ string, _ time.Duration) (string, error) {
 	return m.getURL, m.err
 }
+func (m *mockStorageService) GenerateDeterministicPresignedGetURL(_ context.Context, _ string) (string, error) {
+	return m.getURL, m.err
+}
 func (m *mockStorageService) GeneratePresignedDownloadURL(_ context.Context, key, filename string, ttl time.Duration) (string, error) {
 	m.lastDownloadKey = key
 	m.lastDownloadFilename = filename
@@ -253,7 +256,7 @@ func (m *mockStorageService) GetObject(_ context.Context, _ string) (io.ReadClos
 	}
 	return io.NopCloser(strings.NewReader("")), nil
 }
-func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _ string) error {
+func (m *mockStorageService) PutObject(_ context.Context, _ string, _ io.Reader, _, _ string) error {
 	m.putCalls++
 	if m.putObjectErr != nil {
 		return m.putObjectErr

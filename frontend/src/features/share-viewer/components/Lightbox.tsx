@@ -30,6 +30,7 @@ export default function Lightbox({ images, index, onClose, onNavigate }: Lightbo
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogPortal>
         <DialogOverlay className="bg-black/90" />
+        {/* DialogContent hardcodes centered small-modal positioning; for fullscreen we need inset-0 */}
         <BaseDialog.Popup className="fixed inset-0 z-50 flex flex-col items-center justify-center outline-none">
           <DialogTitle className="sr-only">{image.title}</DialogTitle>
 

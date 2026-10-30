@@ -56,7 +56,7 @@ jobs:
           flags: --service-account=ci-github@bookleaf-393.iam.gserviceaccount.com
           secrets: |
             DATABASE_PASSWORD=BOOKLEAF_DATABASE_PASSWORD:latest
-            R2_SECRET_ACCESS_KEY=BOOKLEAF_R2_SECRET_ACCESS_KEY:latest
+            R2_SECRET_ACCESS_KEY=BOOKLEAF_R2_SECRET_ACCESSKEY:latest
             GOOGLE_VISION_API_KEY=GOOGLE_VISION_API_KEY:latest
             KINDE_M2M_CLIENT_SECRET=BOOKVERSE_KINDE_M2M_CLIENT_SECRET:latest
             ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest

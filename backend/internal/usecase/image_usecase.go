@@ -67,7 +67,7 @@ func (u *imageUsecase) thumbnailURL(ctx context.Context, path *string) *string {
 	if path == nil {
 		return nil
 	}
-	url, err := u.store.GeneratePresignedGetURL(ctx, *path, presignedGetTTL)
+	url, err := u.store.GenerateDeterministicPresignedGetURL(ctx, *path)
 	if err != nil {
 		return nil
 	}
