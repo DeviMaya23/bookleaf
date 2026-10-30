@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
 import { toast } from 'sonner'
-import { UploadCloud, Loader2, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { Loader2, X, ChevronDown, ChevronRight } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { validateImageFile, fileBaseName, uploadImageFile } from '@/lib/upload'
+import UploadDropZone from './UploadDropZone'
 
 interface UploadModalProps {
   open: boolean
@@ -161,33 +162,22 @@ export default function UploadModal({ open, onOpenChange, folderId, initialFile 
               </button>
             </div>
           ) : (
-            <div
-              role="button"
-              tabIndex={0}
-              className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors ${
-                isDragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/30 hover:border-muted-foreground/60'
-              }`}
+            <UploadDropZone
+              isDragOver={isDragOver}
+              helpText="Drop an image here or click to browse"
+              hint="JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari)"
+              error={typeError}
               onClick={() => inputRef.current?.click()}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
               onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
-            >
-              <UploadCloud className="w-8 h-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Drop an image here or click to browse</p>
-              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari)</p>
-              {typeError && (
-                <p className="text-xs text-destructive">{typeError}</p>
-              )}
-            </div>
+            />
           )}
 
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
+            accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic"
             className="hidden"
             onChange={handlePickerChange}
           />

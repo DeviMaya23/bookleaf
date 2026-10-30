@@ -1,26 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import MasonryLayout from './MasonryLayout'
+import MasonryLayout, { type MasonryImage } from './MasonryLayout'
 import { computeMasonryLayout } from '../lib/masonry'
-import type { Image } from '@/lib/images'
 
-function makeImage(id: string, width: number, height: number): Image {
-  return {
-    id,
-    title: `Image ${id}`,
-    description: null,
-    mime_type: 'image/jpeg',
-    source_url: null,
-    folder_ids: [],
-    thumbnail_url: null,
-    width,
-    height,
-    file_size: null,
-    tags: [],
-    position: null,
-    created_at: '',
-    updated_at: '',
-  }
+function makeImage(id: string, width: number, height: number): MasonryImage {
+  return { id, title: `Image ${id}`, width, height, thumbnail_url: null }
 }
 
 describe('computeMasonryLayout', () => {

@@ -33,6 +33,34 @@ export const MIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
 
 type GetToken = () => Promise<string | undefined>
 
+interface FetchImagesPageOpts {
+  unfiledOnly?: boolean
+  cursor?: string
+  name?: string
+  sort?: 'created_at' | 'title'
+  direction?: 'asc' | 'desc'
+  tagIds?: string[]
+  mimeTypes?: string[]
+  folderIds?: string[]
+  searchLabels?: boolean
+}
+
+async function fetchImagesPage(getToken: GetToken, opts: FetchImagesPageOpts): Promise<ImagesPage> {
+  const params = new URLSearchParams()
+  if (opts.unfiledOnly) params.set('unfiled', 'true')
+  if (opts.cursor) params.set('cursor', opts.cursor)
+  if (opts.name) params.set('name', opts.name)
+  if (opts.sort) params.set('sort', opts.sort)
+  if (opts.direction) params.set('direction', opts.direction)
+  if (opts.tagIds && opts.tagIds.length > 0) params.set('tag_ids', opts.tagIds.join(','))
+  if (opts.mimeTypes && opts.mimeTypes.length > 0) params.set('mime_types', opts.mimeTypes.join(','))
+  if (opts.folderIds && opts.folderIds.length > 0) params.set('folder_ids', opts.folderIds.join(','))
+  if (opts.searchLabels) params.set('search_labels', 'true')
+  const res = await apiFetch(`/images?${params}`, getToken)
+  if (!res.ok) throw new Error('Failed to fetch images')
+  return res.json()
+}
+
 export async function getImages(
   getToken: GetToken,
   cursor?: string,
@@ -44,19 +72,7 @@ export async function getImages(
   folderIds?: string[],
   searchLabels?: boolean,
 ): Promise<ImagesPage> {
-  const params = new URLSearchParams()
-  params.set('unfiled', 'true')
-  if (cursor) params.set('cursor', cursor)
-  if (name) params.set('name', name)
-  if (sort) params.set('sort', sort)
-  if (direction) params.set('direction', direction)
-  if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
-  if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
-  if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
-  if (searchLabels) params.set('search_labels', 'true')
-  const res = await apiFetch(`/images?${params}`, getToken)
-  if (!res.ok) throw new Error('Failed to fetch images')
-  return res.json()
+  return fetchImagesPage(getToken, { unfiledOnly: true, cursor, name, sort, direction, tagIds, mimeTypes, folderIds, searchLabels })
 }
 
 export async function getFolderImages(
@@ -85,18 +101,7 @@ export async function getAllImages(
   folderIds?: string[],
   searchLabels?: boolean,
 ): Promise<ImagesPage> {
-  const params = new URLSearchParams()
-  if (cursor) params.set('cursor', cursor)
-  if (name) params.set('name', name)
-  if (sort) params.set('sort', sort)
-  if (direction) params.set('direction', direction)
-  if (tagIds && tagIds.length > 0) params.set('tag_ids', tagIds.join(','))
-  if (mimeTypes && mimeTypes.length > 0) params.set('mime_types', mimeTypes.join(','))
-  if (folderIds && folderIds.length > 0) params.set('folder_ids', folderIds.join(','))
-  if (searchLabels) params.set('search_labels', 'true')
-  const res = await apiFetch(`/images?${params}`, getToken)
-  if (!res.ok) throw new Error('Failed to fetch images')
-  return res.json()
+  return fetchImagesPage(getToken, { cursor, name, sort, direction, tagIds, mimeTypes, folderIds, searchLabels })
 }
 
 export async function getTrashedImages(getToken: GetToken, cursor?: string, name?: string, sort?: 'deleted_at' | 'title', direction?: 'asc' | 'desc'): Promise<ImagesPage> {

@@ -162,6 +162,38 @@ describe('BatchUploadModal', () => {
     })
   })
 
+  describe('reopen', () => {
+    it('resets to new files and clears prior state when reopened', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const onOpenChange = vi.fn()
+      const file1 = makeFile('first.jpg')
+      const file2 = makeFile('second.jpg')
+
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <BatchUploadModal open={true} onOpenChange={onOpenChange} folderId={null} initialFiles={[file1]} />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.getByText('first.jpg')).toBeInTheDocument()
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <BatchUploadModal open={false} onOpenChange={onOpenChange} folderId={null} initialFiles={[file1]} />
+        </QueryClientProvider>,
+      )
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <BatchUploadModal open={true} onOpenChange={onOpenChange} folderId={null} initialFiles={[file2]} />
+        </QueryClientProvider>,
+      )
+
+      expect(screen.queryByText('first.jpg')).not.toBeInTheDocument()
+      expect(screen.getByText('second.jpg')).toBeInTheDocument()
+    })
+  })
+
   describe('validation', () => {
     it('rejects all files and shows error when count exceeds 20', async () => {
       const files = Array.from({ length: 21 }, (_, i) => makeFile(`img${i}.jpg`))

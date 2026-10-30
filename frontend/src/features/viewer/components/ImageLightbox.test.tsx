@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
+import React from 'react'
 import ImageLightbox from './ImageLightbox'
 import type { Image } from '@/lib/images'
 
@@ -12,6 +13,23 @@ vi.mock('@kinde-oss/kinde-auth-react', () => ({
 vi.mock('@/lib/images', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/images')>()),
   getImage: vi.fn(),
+}))
+
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ open, children }: { open?: boolean; children: React.ReactNode }) =>
+    open ? React.createElement(React.Fragment, null, children) : null,
+  DialogPortal: ({ children }: { children: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
+  DialogOverlay: () => null,
+  DialogTitle: ({ children, className }: { children: React.ReactNode; className?: string }) =>
+    React.createElement('h2', { className }, children),
+}))
+
+vi.mock('@base-ui/react/dialog', () => ({
+  Dialog: {
+    Popup: ({ children, className }: { children: React.ReactNode; className?: string }) =>
+      React.createElement('div', { role: 'dialog', className }, children),
+  },
 }))
 
 import { getImage } from '@/lib/images'
@@ -89,5 +107,33 @@ describe('ImageLightbox', () => {
     await userEvent.click(screen.getByLabelText('Close'))
 
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('has an accessible dialog title matching the image title', () => {
+    vi.mocked(getImage).mockReturnValue(new Promise(() => {}))
+
+    renderLightbox()
+
+    expect(screen.getByRole('heading', { name: 'Test image' })).toBeInTheDocument()
+  })
+
+  it('shows an error message when the fetch fails', async () => {
+    vi.mocked(getImage).mockRejectedValue(new Error('network error'))
+
+    renderLightbox()
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load image.')).toBeInTheDocument()
+    })
+  })
+
+  it('hides the thumbnail when the fetch fails', async () => {
+    vi.mocked(getImage).mockRejectedValue(new Error('network error'))
+
+    renderLightbox()
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('lightbox-thumbnail')).not.toBeInTheDocument()
+    })
   })
 })

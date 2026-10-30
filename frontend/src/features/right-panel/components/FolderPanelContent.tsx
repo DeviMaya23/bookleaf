@@ -122,6 +122,7 @@ export default function FolderPanelContent({ folder }: FolderPanelContentProps) 
           value={nameField.value}
           onChange={(e) => nameField.onChange(e.target.value)}
           onBlur={nameField.onBlur}
+          aria-label="Folder name"
           className="w-full text-base font-semibold bg-transparent border-b border-transparent focus:border-border focus:bg-muted/40 outline-none px-0 py-0.5 transition-colors"
         />
         {folderDetail && (
@@ -137,6 +138,7 @@ export default function FolderPanelContent({ folder }: FolderPanelContentProps) 
             onChange={(e) => descriptionField.onChange(e.target.value)}
             onBlur={descriptionField.onBlur}
             placeholder="Add a note…"
+            aria-label="Notes"
             rows={3}
             className="w-full resize-none text-sm bg-muted/30 border border-border/50 rounded-lg px-3 py-2 outline-none focus:border-border transition-colors"
           />

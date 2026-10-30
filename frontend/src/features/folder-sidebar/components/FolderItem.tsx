@@ -10,7 +10,6 @@ import {
   ContextMenuSubContent,
   ContextMenuSeparator,
 } from '@/components/ui/context-menu'
-import { getFolderSubtreeIds } from '@/lib/folders'
 import type { Folder } from '@/lib/folders'
 import type { AppView } from '@/lib/view'
 import type { FolderNode } from '../lib/folderTree'
@@ -22,9 +21,8 @@ interface FolderItemProps {
   folder: FolderNode
   depth: number
   view: AppView
-  folders: Folder[]
+  subtreeIds: Set<string>
   activeDragType: string | null
-  activeDragFolderId: string | null
   iconsEnabled: boolean
   onSelect: (folder: FolderNode) => void
   onRename: (folder: Folder) => void
@@ -35,8 +33,8 @@ interface FolderItemProps {
 }
 
 export default function FolderItem({
-  folder, depth, view, folders,
-  activeDragType, activeDragFolderId, iconsEnabled,
+  folder, depth, view, subtreeIds,
+  activeDragType, iconsEnabled,
   onSelect, onRename, onDelete, onNewSubfolder, onChangeIcon, onViewDetails,
 }: FolderItemProps) {
   const isCoarsePointer = useIsCoarsePointer()
@@ -44,9 +42,6 @@ export default function FolderItem({
   const hasChildren = folder.children.length > 0
   const isActive = view.type === 'folder' && view.id === folder.id
 
-  const subtreeIds = activeDragFolderId
-    ? getFolderSubtreeIds(folders, activeDragFolderId)
-    : new Set<string>()
   const isInvalidFolderTarget = activeDragType === 'folder' && subtreeIds.has(folder.id)
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -142,9 +137,8 @@ export default function FolderItem({
               folder={child}
               depth={depth + 1}
               view={view}
-              folders={folders}
+              subtreeIds={subtreeIds}
               activeDragType={activeDragType}
-              activeDragFolderId={activeDragFolderId}
               iconsEnabled={iconsEnabled}
               onSelect={onSelect}
               onRename={onRename}

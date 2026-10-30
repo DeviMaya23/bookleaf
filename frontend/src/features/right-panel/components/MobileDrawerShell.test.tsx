@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import MobileDrawerShell from './MobileDrawerShell'
 
 describe('MobileDrawerShell', () => {
   it('renders its children', () => {
     render(
-      <MobileDrawerShell onClose={vi.fn()}>
+      <MobileDrawerShell open={true} onClose={vi.fn()}>
         <p>Drawer content</p>
       </MobileDrawerShell>,
     )
@@ -13,15 +14,15 @@ describe('MobileDrawerShell', () => {
     expect(screen.getByText('Drawer content')).toBeInTheDocument()
   })
 
-  it('calls onClose when the backdrop is tapped', () => {
+  it('calls onClose when the backdrop is tapped', async () => {
     const onClose = vi.fn()
     render(
-      <MobileDrawerShell onClose={onClose}>
+      <MobileDrawerShell open={true} onClose={onClose}>
         <p>Drawer content</p>
       </MobileDrawerShell>,
     )
 
-    fireEvent.click(screen.getByTestId('mobile-drawer-shell-backdrop'))
+    await userEvent.click(screen.getByTestId('mobile-drawer-shell-backdrop'))
 
     expect(onClose).toHaveBeenCalledTimes(1)
   })

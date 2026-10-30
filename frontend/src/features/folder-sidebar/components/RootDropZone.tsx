@@ -1,8 +1,9 @@
 import { useDroppable, useDndContext } from '@dnd-kit/core'
+import { isFolderDragData } from '@/app-shell/lib/dragHandlers'
 
 export default function RootDropZone() {
   const { active } = useDndContext()
-  const isDraggingFolder = active?.data.current?.type === 'folder'
+  const isDraggingFolder = isFolderDragData(active?.data.current)
 
   const { setNodeRef, isOver } = useDroppable({
     id: 'root-drop',

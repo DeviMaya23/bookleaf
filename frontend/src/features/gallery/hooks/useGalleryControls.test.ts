@@ -97,6 +97,26 @@ describe('useGalleryControls filters', () => {
     expect(result.current.filterTagIds).toEqual([])
   })
 
+  it('toggleTagFilter adds a tag id when not present and removes it when already present', () => {
+    const { result } = render({ type: 'all' })
+
+    act(() => result.current.toggleTagFilter('tag-1'))
+    expect(result.current.filterTagIds).toEqual(['tag-1'])
+
+    act(() => result.current.toggleTagFilter('tag-1'))
+    expect(result.current.filterTagIds).toEqual([])
+  })
+
+  it('toggleFolderFilter adds a folder id when not present and removes it when already present', () => {
+    const { result } = render({ type: 'all' })
+
+    act(() => result.current.toggleFolderFilter('folder-1'))
+    expect(result.current.filterFolderIds).toEqual(['folder-1'])
+
+    act(() => result.current.toggleFolderFilter('folder-1'))
+    expect(result.current.filterFolderIds).toEqual([])
+  })
+
   it('clearAllFilters clears tags, folders, and mime types', () => {
     const { result } = render({ type: 'all' })
 

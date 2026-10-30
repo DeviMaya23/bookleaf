@@ -5,7 +5,7 @@ interface UseImageTransformResult {
   containerRef: RefObject<HTMLDivElement | null>
   transform: string
   zoom: number
-  setZoom: (zoom: number) => void
+  zoomTo: (zoom: number) => void
   dragging: boolean
   dragHandlers: {
     onMouseDown: (e: React.MouseEvent) => void
@@ -136,7 +136,7 @@ export function useImageTransform(image: Image): UseImageTransformResult {
     containerRef,
     transform,
     zoom,
-    setZoom,
+    zoomTo: setZoom,
     dragging,
     dragHandlers,
     toggleFlip,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, ImageIcon } from 'lucide-react'
+import { Loader2, ImageIcon, AlertCircle } from 'lucide-react'
 import { SortableContext, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
@@ -144,6 +144,50 @@ interface ImageGridProps {
   onSelectionChange?: (ids: Set<string>, anchorId: string | null) => void
 }
 
+interface GalleryGridProps {
+  images: Image[]
+  containerWidth: number
+  dragOverId: string | null
+  isTrash: boolean
+  folderId: string | null
+  onAction: (image: Image) => void
+  onDeletePermanent: (image: Image) => void
+  onSelect: (image: Image) => void
+  onDoubleClick?: (image: Image) => void
+  onViewDetails?: (image: Image) => void
+  selectMode: boolean
+  selectedIds?: Set<string>
+  onSelectionClick: (image: Image, shiftKey: boolean) => void
+}
+
+function GalleryGrid({ images, containerWidth, dragOverId, isTrash, folderId, onAction, onDeletePermanent, onSelect, onDoubleClick, onViewDetails, selectMode, selectedIds, onSelectionClick }: GalleryGridProps) {
+  return (
+    <MasonryLayout
+      images={images}
+      containerWidth={containerWidth}
+      dropIndicatorId={dragOverId}
+      renderCard={(image, imgHeight, isDropTarget) => (
+        <ImageCard
+          key={image.id}
+          image={image}
+          imgHeight={imgHeight}
+          isTrash={isTrash}
+          isDropTarget={isDropTarget}
+          currentFolderId={folderId}
+          onAction={onAction}
+          onDeletePermanent={onDeletePermanent}
+          onSelect={onSelect}
+          onDoubleClick={onDoubleClick}
+          onViewDetails={onViewDetails}
+          selectMode={selectMode}
+          isSelected={selectedIds?.has(image.id) ?? false}
+          onSelectionClick={onSelectionClick}
+        />
+      )}
+    />
+  )
+}
+
 export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds = EMPTY_FILTER, filterMimeTypes = EMPTY_FILTER, filterFolderIds = EMPTY_FILTER, searchLabels = false, onImageSelect, onImageDoubleClick, onImageDeleted, onViewDetails, sortEndTrigger, selectMode = false, selectedIds, mainSelectedId = null, onSelectionChange }: ImageGridProps) {
   const isTrash = view.type === 'trash'
   const isFolderView = view.type === 'folder'
@@ -166,7 +210,7 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
     return () => { observer.disconnect(); cancelAnimationFrame(rafId) }
   }, [])
 
-  const { images, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+  const { images, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } =
     useGalleryImages({ view, searchTerm, debouncedSearchTerm, sortBy, sortDir, filterTagIds, filterMimeTypes, filterFolderIds, searchLabels })
 
   const { orderedImages, dragOverId, removeImage, sortableItems } =
@@ -208,37 +252,32 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
     return null
   }
 
-  const grid = (
-    <MasonryLayout
-      images={orderedImages}
-      containerWidth={containerWidth}
-      dropIndicatorId={dragOverId}
-      renderCard={(image, imgHeight, isDropTarget) => (
-        <ImageCard
-          key={image.id}
-          image={image}
-          imgHeight={imgHeight}
-          isTrash={isTrash}
-          isDropTarget={isDropTarget}
-          currentFolderId={folderId}
-          onAction={handleAction}
-          onDeletePermanent={openDeleteConfirm}
-          onSelect={onImageSelect}
-          onDoubleClick={onImageDoubleClick}
-          onViewDetails={onViewDetails}
-          selectMode={selectMode}
-          isSelected={selectedIds?.has(image.id) ?? false}
-          onSelectionClick={handleSelectionClick}
-        />
-      )}
-    />
-  )
+  const gridProps: GalleryGridProps = {
+    images: orderedImages,
+    containerWidth,
+    dragOverId,
+    isTrash,
+    folderId,
+    onAction: handleAction,
+    onDeletePermanent: openDeleteConfirm,
+    onSelect: onImageSelect,
+    onDoubleClick: onImageDoubleClick,
+    onViewDetails,
+    selectMode,
+    selectedIds,
+    onSelectionClick: handleSelectionClick,
+  }
 
   return (
     <div ref={containerRef} className="w-full">
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+          <AlertCircle className="w-10 h-10" />
+          <p className="text-sm">Failed to load images. Please try again.</p>
         </div>
       ) : orderedImages.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
@@ -251,10 +290,10 @@ export default function ImageGrid({ view, layoutMode = 'masonry', searchTerm, de
         </div>
       ) : isFolderView && sortBy === 'manual' ? (
         <SortableContext items={sortableItems} strategy={() => null}>
-          {grid}
+          <GalleryGrid {...gridProps} />
         </SortableContext>
       ) : (
-        grid
+        <GalleryGrid {...gridProps} />
       )}
 
       {hasNextPage && (

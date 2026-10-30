@@ -16,27 +16,7 @@ vi.mock('@/lib/images', async (importOriginal) => ({
   emptyTrash: vi.fn(),
 }))
 
-vi.mock('@/components/ui/context-menu', async () => {
-  const React = await import('react')
-  return {
-    ContextMenu: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuTrigger: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuContent: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    ContextMenuItem: ({
-      children,
-      onClick,
-      className,
-    }: {
-      children: React.ReactNode
-      onClick?: (e: React.MouseEvent) => void
-      className?: string
-    }) =>
-      React.createElement('button', { role: 'menuitem', className, onClick }, children),
-  }
-})
+vi.mock('@/components/ui/context-menu', () => import('@/test/mocks/contextMenu').then((m) => m.contextMenuMock))
 
 function renderTrashEntry(active: boolean, onClick = vi.fn(), iconsEnabled = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

@@ -32,7 +32,7 @@ export default function TagRow({ tag, onClick }: TagRowProps) {
   }, [mode, tag.name])
 
   const rename = useRenameMutation(() => setMode('view'))
-  const del = useDeleteMutation(() => {})
+  const del = useDeleteMutation(() => setMode('view'))
 
   function handleRenameSubmit() {
     const trimmed = renameValue.trim()
@@ -113,7 +113,7 @@ export default function TagRow({ tag, onClick }: TagRowProps) {
       <div className="relative shrink-0 flex items-center justify-end w-6">
         <span className="text-xs text-muted-foreground group-hover:invisible">{tag.image_count}</span>
         <DropdownMenu>
-          <DropdownMenuTrigger className="invisible group-hover:visible absolute inset-0 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent">
+          <DropdownMenuTrigger aria-label="Tag options" className="invisible group-hover:visible absolute inset-0 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent">
             <MoreHorizontal className="w-3.5 h-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

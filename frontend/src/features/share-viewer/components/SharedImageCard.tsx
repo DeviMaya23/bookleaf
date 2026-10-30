@@ -1,23 +1,19 @@
-import { useState } from 'react'
 import { Download, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { Image } from '@/lib/images'
+import type { MasonryImage } from '@/features/gallery/components/MasonryLayout'
 
 interface SharedImageCardProps {
-  image: Image
+  image: MasonryImage
   imgHeight: number
   downloadUrl: string
   onDoubleClick: () => void
 }
 
 export default function SharedImageCard({ image, imgHeight, downloadUrl, onDoubleClick }: SharedImageCardProps) {
-  const [isSelected, setIsSelected] = useState(false)
-
   return (
     <div
-      className={cn('rounded-lg overflow-hidden bg-card cursor-pointer', isSelected && 'ring-1 ring-primary')}
-      onClick={() => setIsSelected((v) => !v)}
+      className={cn('rounded-lg overflow-hidden bg-card cursor-pointer')}
       onDoubleClick={onDoubleClick}
     >
       <div className="group relative bg-muted overflow-hidden rounded-t-lg" style={{ height: imgHeight }}>

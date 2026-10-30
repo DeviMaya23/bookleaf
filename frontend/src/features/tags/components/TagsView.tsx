@@ -22,7 +22,7 @@ export default function TagsView() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
 
-  const { data: tags = [], isLoading } = useQuery({
+  const { data: tags = [], isLoading, isError } = useQuery({
     queryKey: ['tags', 'with-count'],
     queryFn: () => getTagsWithCount(getToken),
     staleTime: 30_000,
@@ -59,8 +59,14 @@ export default function TagsView() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       )}
 
-      {!isLoading && sorted.length === 0 && (
-        <p className="text-sm text-muted-foreground">No tags yet.</p>
+      {isError && (
+        <p className="text-sm text-destructive">Failed to load tags. Please try again.</p>
+      )}
+
+      {!isLoading && !isError && sorted.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          {search.trim() ? `No tags match "${search.trim()}".` : 'No tags yet.'}
+        </p>
       )}
 
       {sortedKeys.map((letter) => {

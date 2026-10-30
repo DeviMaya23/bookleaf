@@ -81,6 +81,8 @@ export default function AdvancedSection() {
                 type="button"
                 onMouseEnter={() => setTooltipOpen(true)}
                 onMouseLeave={() => setTooltipOpen(false)}
+                onFocus={() => setTooltipOpen(true)}
+                onBlur={() => setTooltipOpen(false)}
                 className="flex size-[15px] items-center justify-center rounded-full border border-foreground/20 bg-muted text-[9px] font-bold leading-none text-muted-foreground"
                 aria-label="What does this do?"
               >
@@ -122,6 +124,8 @@ export default function AdvancedSection() {
                 type="button"
                 onMouseEnter={() => setCategorisationTooltipOpen(true)}
                 onMouseLeave={() => setCategorisationTooltipOpen(false)}
+                onFocus={() => setCategorisationTooltipOpen(true)}
+                onBlur={() => setCategorisationTooltipOpen(false)}
                 className="flex size-[15px] items-center justify-center rounded-full border border-foreground/20 bg-muted text-[9px] font-bold leading-none text-muted-foreground"
                 aria-label="What does AI auto-categorisation do?"
               >

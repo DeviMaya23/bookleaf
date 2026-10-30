@@ -102,30 +102,4 @@ describe('SharePage', () => {
     expect(await screen.findByText('1 / 2')).toBeInTheDocument()
   })
 
-  it('toggles a selection outline on the card when clicked', async () => {
-    vi.mocked(getSharedFolder).mockResolvedValue(makeFolderResponse())
-
-    renderSharePage()
-    const title = await screen.findByText('First')
-    const card = title.closest('.cursor-pointer') as HTMLElement
-
-    await userEvent.click(card)
-    expect(card).toHaveClass('ring-1')
-
-    await userEvent.click(card)
-    expect(card).not.toHaveClass('ring-1')
-  })
-
-  it('does not toggle the selection outline when the download button is clicked', async () => {
-    vi.mocked(getSharedFolder).mockResolvedValue(makeFolderResponse())
-
-    renderSharePage()
-    const title = await screen.findByText('First')
-    const card = title.closest('.cursor-pointer') as HTMLElement
-    const downloadLink = screen.getByLabelText('Download First')
-
-    await userEvent.click(downloadLink)
-
-    expect(card).not.toHaveClass('ring-1')
-  })
 })

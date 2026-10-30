@@ -145,6 +145,15 @@ describe('useGalleryImages', () => {
     vi.clearAllMocks()
   })
 
+  it('exposes isError as true when the query fails', async () => {
+    vi.mocked(getImages).mockRejectedValue(new Error('network error'))
+
+    const { result } = renderUseGalleryImages({ type: 'unsorted' })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(result.current.images).toEqual([])
+  })
+
   it('filters folder-view images client-side by tag with no additional fetch', async () => {
     const images = [
       makeImage({ id: '1', title: 'First', tags: [{ id: 'tag-1', name: 'Cats' }] }),

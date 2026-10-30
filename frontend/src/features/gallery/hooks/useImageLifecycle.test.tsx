@@ -83,7 +83,7 @@ describe('useImageLifecycle', () => {
     act(() => result.current.handleAction(makeImage()))
 
     await waitFor(() => expect(removeImage).toHaveBeenCalledWith('1'))
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['images', 'trash'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['images'] })
     expect(toast.success).toHaveBeenCalledWith('Image moved to trash')
     expect(onImageDeleted).toHaveBeenCalledWith('1')
   })
@@ -105,7 +105,7 @@ describe('useImageLifecycle', () => {
     act(() => result.current.handleAction(makeImage()))
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Image restored'))
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['images', 'trash'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['images'] })
     expect(removeImage).not.toHaveBeenCalled()
   })
 
