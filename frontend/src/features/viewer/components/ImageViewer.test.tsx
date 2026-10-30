@@ -231,3 +231,29 @@ describe('ImageViewer — zoom slider', () => {
     expect(screen.getByText('200%')).toBeInTheDocument()
   })
 })
+
+describe('ImageViewer — fetch error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows an error message when the fetch fails', async () => {
+    vi.mocked(getImage).mockRejectedValue(new Error('network error'))
+
+    renderViewer(makeImage())
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load image.')).toBeInTheDocument()
+    })
+  })
+
+  it('hides the thumbnail and spinner when the fetch fails', async () => {
+    vi.mocked(getImage).mockRejectedValue(new Error('network error'))
+
+    renderViewer(makeImage())
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('viewer-img')).not.toBeInTheDocument()
+    })
+  })
+})

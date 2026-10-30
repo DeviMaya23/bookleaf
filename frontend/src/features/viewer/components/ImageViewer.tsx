@@ -17,12 +17,12 @@ interface ImageViewerProps {
 export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMode }: ImageViewerProps) {
   const { getToken } = useKindeAuth()
 
-  const { data: imageDetail } = useQuery({
+  const { data: imageDetail, isError } = useQuery({
     queryKey: ['image', image.id],
     queryFn: () => getImage(getToken, image.id),
   })
 
-  const { containerRef, transform, zoom, setZoom, dragging, dragHandlers, toggleFlip, rotate, resetTo1to1 } = useImageTransform(image)
+  const { containerRef, transform, zoom, zoomTo, dragging, dragHandlers, toggleFlip, rotate, resetTo1to1 } = useImageTransform(image)
 
   // Esc to close
   useEffect(() => {
@@ -62,7 +62,7 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
           min={5}
           max={800}
           value={Math.round(zoom * 100)}
-          onChange={(e) => setZoom(Number(e.target.value) / 100)}
+          onChange={(e) => zoomTo(Number(e.target.value) / 100)}
           className="w-32"
         />
         <span className="text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
@@ -95,7 +95,7 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
         style={{ cursor: dragging ? 'grabbing' : 'grab' }}
         {...dragHandlers}
       >
-        {image.thumbnail_url && !loaded && (
+        {image.thumbnail_url && !loaded && !isError && (
           <img
             data-testid="viewer-img"
             src={image.thumbnail_url}
@@ -132,7 +132,12 @@ export default function ImageViewer({ image, onClose, focusMode, onToggleFocusMo
             }}
           />
         )}
-        {!loaded && (
+        {isError && (
+          <p className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+            Failed to load image.
+          </p>
+        )}
+        {!loaded && !isError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-white drop-shadow" />
           </div>

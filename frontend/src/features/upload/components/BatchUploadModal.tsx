@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useLayoutEffect, useCallback, useId } from
 import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useKindeAuth } from '@kinde-oss/kinde-auth-react'
-import { UploadCloud, Loader2, CheckCircle2, AlertCircle, Clock, AlertTriangle } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Clock, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -12,10 +12,11 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { validateImageFile, fileBaseName, uploadImageFile } from '@/lib/upload'
+import UploadDropZone from './UploadDropZone'
 
 const MAX_CONCURRENT = 3
 const MAX_FILES = 20
-type FileStatus = 'PENDING' | 'UPLOADING' | 'SUCCESS' | 'FAILED_FINAL' | 'OVERSIZED' | 'UNSUPPORTED'
+type FileStatus = 'PENDING' | 'UPLOADING' | 'SUCCESS' | 'FAILED_FINAL' | 'OVERSIZED' | 'UNSUPPORTED' | 'HEIC_UNSUPPORTED'
 
 interface BatchFile {
   id: string
@@ -40,6 +41,7 @@ function makeBatchFile(file: File): BatchFile {
   const validationError = validateImageFile(file)
   const status: FileStatus =
     validationError === 'oversized' ? 'OVERSIZED' :
+    validationError === 'heic_safari_only' ? 'HEIC_UNSUPPORTED' :
     validationError !== null ? 'UNSUPPORTED' :
     'PENDING'
   return { id: makeId(file), file, status, retryCount: 0 }
@@ -124,6 +126,12 @@ function StatusCell({
       return (
         <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded flex-shrink-0">
           Unsupported type
+        </span>
+      )
+    case 'HEIC_UNSUPPORTED':
+      return (
+        <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded flex-shrink-0">
+          HEIC requires Safari
         </span>
       )
     default:
@@ -278,30 +286,21 @@ export default function BatchUploadModal({
 
         <div className="flex flex-col gap-4 py-2 min-w-0">
           {!isUploading && (
-            <div
-              role="button"
-              tabIndex={0}
-              className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 cursor-pointer transition-colors ${
-                isDragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/30 hover:border-muted-foreground/60'
-              }`}
+            <UploadDropZone
+              isDragOver={isDragOver}
+              helpText="Drop images here or click to browse"
+              hint="JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari) · max 50 MB · up to 20 files"
               onClick={() => inputRef.current?.click()}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click() }}
               onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
-            >
-              <UploadCloud className="w-7 h-7 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Drop images here or click to browse</p>
-              <p className="text-xs text-muted-foreground">JPEG, PNG, GIF, WEBP, AVIF, HEIC (Safari) · max 50 MB · up to 20 files</p>
-            </div>
+            />
           )}
 
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
+            accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic"
             multiple
             className="hidden"
             onChange={handlePickerChange}
