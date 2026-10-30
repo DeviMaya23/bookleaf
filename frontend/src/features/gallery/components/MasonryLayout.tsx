@@ -9,17 +9,17 @@ export interface MasonryImage {
   thumbnail_url: string | null
 }
 
-interface MasonryLayoutProps {
-  images: MasonryImage[]
+interface MasonryLayoutProps<T extends MasonryImage> {
+  images: T[]
   containerWidth: number
   dropIndicatorId?: string | null
-  renderCard: (image: MasonryImage, imgHeight: number, isDropTarget: boolean) => React.ReactNode
+  renderCard: (image: T, imgHeight: number, isDropTarget: boolean) => React.ReactNode
 }
 
-export default function MasonryLayout({ images, containerWidth, dropIndicatorId, renderCard }: MasonryLayoutProps) {
+export default function MasonryLayout<T extends MasonryImage>({ images, containerWidth, dropIndicatorId, renderCard }: MasonryLayoutProps<T>) {
   const { numCols, colWidth } = computeMasonryLayout(containerWidth)
 
-  const columns: MasonryImage[][] = Array.from({ length: numCols }, () => [])
+  const columns: T[][] = Array.from({ length: numCols }, () => [])
   images.forEach((img, i) => {
     columns[i % numCols].push(img)
   })

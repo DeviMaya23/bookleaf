@@ -1,10 +1,10 @@
 import { Download, ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { Image } from '@/lib/images'
+import type { MasonryImage } from '@/features/gallery/components/MasonryLayout'
 
 interface SharedImageCardProps {
-  image: Image
+  image: MasonryImage
   imgHeight: number
   downloadUrl: string
   onDoubleClick: () => void
